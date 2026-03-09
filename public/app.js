@@ -16,7 +16,7 @@ const resultSize = document.getElementById('result-size');
 const resultExpires = document.getElementById('result-expires');
 const newUploadBtn = document.getElementById('new-upload-btn');
 const expiresSelect = document.getElementById('expires-select');
-const qrCanvas = document.getElementById('qr-canvas');
+const qrImg = document.getElementById('qr-img');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -139,12 +139,10 @@ function showResult(data, file) {
     ? 'Expires ' + new Date(data.expiresAt).toLocaleString()
     : 'Never expires';
 
-  // Generate QR code onto canvas
-  QRCode.toCanvas(qrCanvas, data.shortUrl, {
-    width: 200,
-    margin: 1,
-    color: { dark: '#000000', light: '#ffffff' }
-  });
+  // QR code via free API — no library needed
+  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff`;
+  qrImg.src = qrApiUrl;
+  saveQrBtn.href = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff&format=png`;
 
   uploadCard.classList.add('hidden');
   resultCard.classList.remove('hidden');
@@ -160,14 +158,6 @@ copyBtn.addEventListener('click', () => {
       copyBtn.classList.remove('copied');
     }, 2000);
   });
-});
-
-// Save QR as PNG
-saveQrBtn.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.download = 'fileshare-qr.png';
-  link.href = qrCanvas.toDataURL('image/png');
-  link.click();
 });
 
 // New upload
