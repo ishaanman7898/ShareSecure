@@ -1,0 +1,181 @@
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const filePreview = document.getElementById('file-preview');
+const fileName = document.getElementById('file-name');
+const fileSize = document.getElementById('file-size');
+const clearFile = document.getElementById('clear-file');
+const uploadBtn = document.getElementById('upload-btn');
+const progressWrap = document.getElementById('progress-wrap');
+const progressBar = document.getElementById('progress-bar');
+const uploadCard = document.getElementById('upload-card');
+const resultCard = document.getElementById('result-card');
+const shortLink = document.getElementById('short-link');
+const copyBtn = document.getElementById('copy-btn');
+const resultFilename = document.getElementById('result-filename');
+const resultSize = document.getElementById('result-size');
+const resultExpires = document.getElementById('result-expires');
+const newUploadBtn = document.getElementById('new-upload-btn');
+const expiresSelect = document.getElementById('expires-select');
+const qrCanvas = document.getElementById('qr-canvas');
+const saveQrBtn = document.getElementById('save-qr-btn');
+
+const MAX_BYTES = 10 * 1024 * 1024;
+let selectedFile = null;
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function getFileIcon(mime) {
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.startsWith('video/')) return '🎬';
+  if (mime.startsWith('audio/')) return '🎵';
+  if (mime.includes('pdf')) return '📄';
+  if (mime.includes('zip') || mime.includes('archive') || mime.includes('compressed')) return '🗜️';
+  if (mime.includes('text')) return '📝';
+  return '📁';
+}
+
+function setFile(file) {
+  if (file.size > MAX_BYTES) {
+    alert(`File is too large (${formatSize(file.size)}). Max allowed is 10 MB.`);
+    return;
+  }
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = formatSize(file.size);
+  document.getElementById('file-icon').textContent = getFileIcon(file.type);
+  filePreview.classList.remove('hidden');
+  dropZone.classList.add('hidden');
+  uploadBtn.disabled = false;
+}
+
+function clearSelection() {
+  selectedFile = null;
+  fileInput.value = '';
+  filePreview.classList.add('hidden');
+  dropZone.classList.remove('hidden');
+  uploadBtn.disabled = true;
+}
+
+// Drag & drop
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) setFile(file);
+});
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) setFile(fileInput.files[0]);
+});
+
+clearFile.addEventListener('click', clearSelection);
+
+// Upload
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  const expires = expiresSelect.value;
+  if (expires) formData.append('expires_hours', expires);
+
+  uploadBtn.disabled = true;
+  progressWrap.classList.remove('hidden');
+  progressBar.style.width = '0%';
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) {
+        progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+      }
+    });
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        showResult(data, selectedFile);
+      } else {
+        alert('Upload failed. Please try again.');
+        uploadBtn.disabled = false;
+        progressWrap.classList.add('hidden');
+      }
+    };
+
+    xhr.onerror = () => {
+      alert('Network error. Please try again.');
+      uploadBtn.disabled = false;
+      progressWrap.classList.add('hidden');
+    };
+
+    xhr.send(formData);
+  } catch (err) {
+    alert('Upload failed.');
+    uploadBtn.disabled = false;
+    progressWrap.classList.add('hidden');
+  }
+});
+
+function showResult(data, file) {
+  shortLink.textContent = data.shortUrl;
+  resultFilename.textContent = file.name;
+  resultSize.textContent = formatSize(file.size);
+  resultExpires.textContent = data.expiresAt
+    ? 'Expires ' + new Date(data.expiresAt).toLocaleString()
+    : 'Never expires';
+
+  // Generate QR code onto canvas
+  QRCode.toCanvas(qrCanvas, data.shortUrl, {
+    width: 200,
+    margin: 1,
+    color: { dark: '#000000', light: '#ffffff' }
+  });
+
+  uploadCard.classList.add('hidden');
+  resultCard.classList.remove('hidden');
+}
+
+// Copy
+copyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(shortLink.textContent).then(() => {
+    copyBtn.textContent = 'Copied!';
+    copyBtn.classList.add('copied');
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
+    }, 2000);
+  });
+});
+
+// Save QR as PNG
+saveQrBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'fileshare-qr.png';
+  link.href = qrCanvas.toDataURL('image/png');
+  link.click();
+});
+
+// New upload
+newUploadBtn.addEventListener('click', () => {
+  clearSelection();
+  progressWrap.classList.add('hidden');
+  progressBar.style.width = '0%';
+  expiresSelect.value = '';
+  resultCard.classList.add('hidden');
+  uploadCard.classList.remove('hidden');
+});

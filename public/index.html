@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FileShare</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>FileShare</h1>
+      <p>Upload a file, get a link. Simple.</p>
+    </div>
+
+    <div class="card" id="upload-card">
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">&#8679;</div>
+        <p class="drop-label">Drop your file here</p>
+        <p class="drop-sub">or</p>
+        <label class="btn btn-primary" for="file-input">Choose File</label>
+        <input type="file" id="file-input" hidden />
+        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, text, audio, video</p>
+      </div>
+
+      <div class="file-preview hidden" id="file-preview">
+        <div class="file-icon" id="file-icon">&#128196;</div>
+        <div class="file-meta">
+          <span class="file-name" id="file-name"></span>
+          <span class="file-size" id="file-size"></span>
+        </div>
+        <button class="btn-icon" id="clear-file" title="Remove">&#x2715;</button>
+      </div>
+
+      <div class="options">
+        <label class="option-label">
+          Expire link after
+          <select id="expires-select">
+            <option value="">Never</option>
+            <option value="1">1 hour</option>
+            <option value="24">24 hours</option>
+            <option value="168">7 days</option>
+            <option value="720">30 days</option>
+          </select>
+        </label>
+      </div>
+
+      <button class="btn btn-primary btn-full" id="upload-btn" disabled>Upload & Get Link</button>
+
+      <div class="progress-wrap hidden" id="progress-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+    </div>
+
+    <div class="card result hidden" id="result-card">
+      <div class="result-icon">&#10003;</div>
+      <p class="result-label">Your link is ready</p>
+
+      <!-- Short link row -->
+      <div class="link-box">
+        <span id="short-link"></span>
+        <button class="btn btn-copy" id="copy-btn">Copy</button>
+      </div>
+
+      <!-- QR code section -->
+      <div class="qr-section">
+        <p class="qr-label">Scan to open on any device</p>
+        <div class="qr-wrap">
+          <canvas id="qr-canvas"></canvas>
+        </div>
+        <button class="btn btn-ghost" id="save-qr-btn">Save QR Image</button>
+      </div>
+
+      <div class="result-meta">
+        <span id="result-filename"></span>
+        <span id="result-size"></span>
+        <span id="result-expires"></span>
+      </div>
+      <button class="btn btn-secondary" id="new-upload-btn">Upload Another</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
