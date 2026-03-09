@@ -10,7 +10,7 @@ function base64ToBuffer(base64) {
 export async function onRequestGet(context) {
   const { params, env } = context;
 
-  const file = await env.DB.prepare(
+  let file = await env.DB.prepare(
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).bind(params.shortId).first();
 
@@ -20,9 +20,16 @@ export async function onRequestGet(context) {
     return new Response('Expired', { status: 410 });
   }
 
-  const buffer = base64ToBuffer(file.file_data);
+  // If this is a reshared link, load file_data from the root source
+  if (!file.file_data && file.source_short_id) {
+    const source = await env.DB.prepare(
+      'SELECT file_data FROM files WHERE short_id = ? AND is_active = 1'
+    ).bind(file.source_short_id).first();
+    if (!source?.file_data) return new Response('Not found', { status: 404 });
+    file = { ...file, file_data: source.file_data };
+  }
 
-  return new Response(buffer, {
+  return new Response(base64ToBuffer(file.file_data), {
     headers: {
       'Content-Type': file.mime_type,
       'Content-Disposition': `attachment; filename="${file.original_filename}"`,

@@ -29,6 +29,42 @@
         </svg>
         Download
       </button>
+      <div class="divider"></div>
+      <button class="tb-btn tb-btn-share" id="share-btn" title="Get my share link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+        Share
+      </button>
+    </div>
+  </div>
+
+  <!-- Share panel (slide in from right) -->
+  <div class="share-overlay hidden" id="share-overlay"></div>
+  <div class="share-panel hidden" id="share-panel">
+    <div class="share-panel-header">
+      <span>Your unique link</span>
+      <button class="share-close" id="share-close">&#x2715;</button>
+    </div>
+    <div class="share-panel-body">
+      <div id="share-generating" class="share-generating">
+        <div class="spinner-sm"></div>
+        <span>Generating your link...</span>
+      </div>
+      <div id="share-ready" class="hidden">
+        <p class="share-note">This link is <strong>yours only</strong>. No one can trace it back to whoever shared it with you.</p>
+        <div class="share-link-box">
+          <span id="share-link-text"></span>
+          <button class="share-copy-btn" id="share-copy-btn">Copy</button>
+        </div>
+        <div class="share-qr-wrap">
+          <img id="share-qr-img" alt="Your QR code" width="180" height="180" />
+        </div>
+        <a class="share-save-btn" id="share-save-btn" download="my-share-qr.png">Save QR</a>
+        <p class="share-sub">Anyone who scans this can generate <em>their own</em> link too.</p>
+      </div>
     </div>
   </div>
 

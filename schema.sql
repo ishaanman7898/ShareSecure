@@ -8,5 +8,6 @@ CREATE TABLE IF NOT EXISTS files (
   uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   expires_at DATETIME,
   download_count INTEGER DEFAULT 0,
-  is_active INTEGER DEFAULT 1
+  is_active INTEGER DEFAULT 1,
+  source_short_id TEXT
 );

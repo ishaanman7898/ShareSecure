@@ -152,6 +152,46 @@ function showUnsupported() {
   hide('zoom-out-btn'); hide('zoom-in-btn'); hide('zoom-label');
 }
 
+// ── Share panel ───────────────────────────────────────────────────────────────
+
+function openSharePanel() {
+  show('share-overlay');
+  show('share-panel');
+  show('share-generating');
+  hide('share-ready');
+
+  fetch(`/api/reshare/${shortId}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      $('share-link-text').textContent = data.shortUrl;
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff`;
+      $('share-qr-img').src = qrUrl;
+      $('share-save-btn').href = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff&format=png`;
+      hide('share-generating');
+      show('share-ready');
+
+      $('share-copy-btn').onclick = () => {
+        navigator.clipboard.writeText(data.shortUrl).then(() => {
+          $('share-copy-btn').textContent = 'Copied!';
+          $('share-copy-btn').classList.add('copied');
+          setTimeout(() => {
+            $('share-copy-btn').textContent = 'Copy';
+            $('share-copy-btn').classList.remove('copied');
+          }, 2000);
+        });
+      };
+    })
+    .catch(() => {
+      hide('share-generating');
+      $('share-panel-body').innerHTML = '<p style="color:red;font-size:.85rem">Failed to generate link. Try again.</p>';
+    });
+}
+
+function closeSharePanel() {
+  hide('share-overlay');
+  hide('share-panel');
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 (async () => {
@@ -168,6 +208,10 @@ function showUnsupported() {
   $('download-btn').addEventListener('click', () => {
     location.href = `/api/download/${shortId}`;
   });
+
+  $('share-btn').addEventListener('click', openSharePanel);
+  $('share-close').addEventListener('click', closeSharePanel);
+  $('share-overlay').addEventListener('click', closeSharePanel);
 
   if (mimeType === 'application/pdf') {
     await loadPDF(rawUrl);
