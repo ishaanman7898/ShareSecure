@@ -339,4 +339,42 @@ select:focus { border-color: var(--accent); }
 .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-danger.deleted { background: rgba(100, 100, 100, 0.1); color: var(--text-muted); border-color: var(--border); cursor: default; }
 
+/* ── Mobile ── */
+@media (max-width: 560px) {
+  body { padding: 0; align-items: flex-start; min-height: 100vh; }
+
+  .container {
+    max-width: 100%;
+    padding: 20px 16px 40px;
+  }
+
+  .header { margin-bottom: 24px; }
+  .header h1 { font-size: 1.6rem; }
+
+  .card { padding: 20px 16px; border-radius: 10px; gap: 16px; }
+
+  .drop-zone { padding: 32px 16px; }
+
+  .link-box {
+    flex-direction: column;
+    border-radius: 8px;
+  }
+  .link-box span {
+    padding: 12px 14px;
+    border-radius: 8px 8px 0 0;
+    font-size: 0.8rem;
+  }
+  .btn-copy {
+    padding: 11px;
+    border-radius: 0 0 8px 8px;
+    text-align: center;
+  }
+
+  .qr-wrap { padding: 10px; }
+  #qr-canvas canvas, #qr-canvas img { width: 160px !important; height: 160px !important; }
+
+  .result-actions { gap: 8px; }
+  .btn { padding: 12px 16px; font-size: 0.88rem; }
+}
+
 .hidden { display: none !important; }

@@ -259,4 +259,50 @@ html, body {
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
 
+/* ── Delete button in viewer topbar ── */
+.tb-btn-delete {
+  background: rgba(239,68,68,0.1);
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.3);
+}
+.tb-btn-delete:hover { background: rgba(239,68,68,0.2); border-color: #ef4444; }
+
+/* ── Mobile ── */
+@media (max-width: 600px) {
+  /* Topbar: tighter, hide zoom label */
+  .topbar { padding: 0 10px; height: 50px; }
+  .doc-title { font-size: 0.85rem; max-width: 120px; }
+  .doc-meta { font-size: 0.65rem; }
+  .topbar-right { gap: 3px; }
+  .tb-btn { padding: 5px 8px; font-size: 0.78rem; gap: 4px; }
+  .zoom-label { display: none; }
+  #zoom-in-btn, #zoom-out-btn { min-width: 30px; padding: 5px 6px; }
+  .countdown-wrap { padding: 4px 8px; font-size: 0.75rem; }
+  .countdown-icon { display: none; }
+  .divider { display: none; }
+
+  /* Draw toolbar: tighter */
+  .draw-toolbar { padding: 5px 10px; gap: 4px; overflow-x: auto; }
+  .draw-btn { width: 36px; height: 36px; font-size: 1.05rem; flex-shrink: 0; }
+
+  /* Viewer shell: less padding */
+  .viewer-shell { padding: 16px 6px 32px; }
+
+  /* Share panel: full width slide-in */
+  .share-panel {
+    width: 100vw;
+    max-width: 100vw;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.2);
+  }
+
+  /* Share panel body: tighter */
+  .share-panel-body { padding: 20px 16px; }
+  .share-link-box span { font-size: 0.72rem; }
+}
+
+@media (max-width: 400px) {
+  .doc-title { max-width: 80px; }
+  .tb-btn-share span { display: none; } /* hide "Share" text, keep icon */
+}
+
 .hidden { display: none !important; }

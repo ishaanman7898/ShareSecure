@@ -9,6 +9,12 @@ document.addEventListener('keydown', e => {
 });
 window.addEventListener('beforeprint', () => { document.body.innerHTML = '<p style="padding:40px;font-size:1.2rem">Printing is disabled.</p>'; });
 
+// ── Extract delete token from hash BEFORE any URL rewrite ─────────────────────
+// The hash is never sent to the server — safe, untrackable
+const _hashParams = new URLSearchParams(location.hash.slice(1));
+const myDeleteToken = _hashParams.get('del') || null;
+if (myDeleteToken) history.replaceState(null, '', location.pathname + location.search);
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
 const $ = id => document.getElementById(id);
@@ -323,6 +329,34 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);
+
+  // Show delete button only if this viewer has the owner's delete token
+  if (myDeleteToken) {
+    show('delete-file-btn');
+    $('delete-file-btn').addEventListener('click', async () => {
+      if (!confirm('Delete this file for everyone? All links will stop working immediately.')) return;
+      $('delete-file-btn').textContent = '⏳';
+      $('delete-file-btn').disabled = true;
+      try {
+        const res = await fetch(`/api/delete/${rawShortId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteToken: myDeleteToken })
+        });
+        const data = await res.json();
+        if (data.deleted) {
+          document.body.innerHTML = '';
+          location.replace('/expired.html');
+        } else {
+          $('delete-file-btn').textContent = '✗';
+          $('delete-file-btn').disabled = false;
+        }
+      } catch {
+        $('delete-file-btn').textContent = '✗';
+        $('delete-file-btn').disabled = false;
+      }
+    });
+  }
 
   const rawUrl = `/api/raw/${myShortId}`;
 

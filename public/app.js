@@ -172,7 +172,8 @@ function showResult(data, file) {
   deleteBtn.classList.remove('deleted');
 
   shortLink.textContent = data.shortUrl;
-  document.getElementById('view-btn').href = data.shortUrl;
+  // Embed delete token in hash — never sent to server, stripped by viewer immediately
+  document.getElementById('view-btn').href = `${data.shortUrl}#del=${data.deleteToken}`;
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
 
