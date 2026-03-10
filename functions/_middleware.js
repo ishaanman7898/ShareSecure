@@ -32,10 +32,6 @@ export async function onRequest(context) {
   // permissions policy — disable all device apis
   h.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()');
 
-  // cross-origin policies — maximum isolation
-  h.set('Cross-Origin-Opener-Policy', 'same-origin');
-  h.set('Cross-Origin-Resource-Policy', 'same-origin');
-
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
