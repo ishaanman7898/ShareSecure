@@ -1,10 +1,16 @@
-export async function onRequestGet(context) {
-  const { params, env, request } = context;
-  const origin = new URL(request.url).origin;
+import { getClientById } from '../_turso.js';
 
-  const file = await env.DB.prepare(
-    'SELECT short_id, expires_at, is_active FROM files WHERE short_id = ?'
-  ).bind(params.shortId).first();
+export async function onRequestGet(context) {
+  const { params, request, env } = context;
+  const origin = new URL(request.url).origin;
+  const client = await getClientById(params.shortId, env);
+
+  const res = await client.execute({
+    sql: 'SELECT short_id, expires_at, is_active FROM files WHERE short_id = ?',
+    args: [params.shortId]
+  });
+
+  const file = res.rows[0];
 
   if (!file || !file.is_active) {
     return env.ASSETS.fetch(new URL('/404.html', origin));

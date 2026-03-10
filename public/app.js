@@ -171,9 +171,14 @@ function showResult(data, file) {
   deleteBtn.textContent = 'Delete File';
   deleteBtn.classList.remove('deleted');
 
-  shortLink.textContent = data.shortUrl;
-  // Embed delete token in hash — never sent to server, stripped by viewer immediately
-  document.getElementById('view-btn').href = `${data.shortUrl}#del=${data.deleteToken}`;
+  // Show the owner's direct URL — same link they'll view the file at
+  const ownerUrl = data.shortUrl;
+  shortLink.textContent = ownerUrl;
+  document.getElementById('view-btn').href = ownerUrl;
+  // Store delete token so the viewer tab recognizes this browser as the owner
+  if (data.deleteToken) {
+    localStorage.setItem('owner_' + data.shortId, data.deleteToken);
+  }
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
 

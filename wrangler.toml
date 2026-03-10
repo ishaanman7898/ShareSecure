@@ -2,7 +2,8 @@ name = "fileshare"
 compatibility_date = "2024-09-23"
 pages_build_output_dir = "public"
 
-[[d1_databases]]
-binding = "DB"
-database_name = "fileshare-db"
-database_id = "9fd8b376-3d3b-4bc0-a2cd-bf0ad1868541"
+[vars]
+TURSO_ORG = "ishman"
+TURSO_REGION = "aws-us-east-2"
+TURSO_NODES = "3"
+TURSO_API_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJ5SjdjMHh3ZUVmR0F4YUpNbmlteVlnIn0.yEH5UhEotMKV5taeaNPySou_s4zynAQB-6l92vaXR0OQ6lek6moR9MCKqlU4x7HO8rlyU9AkdnbMFuLsS9IOBQ"

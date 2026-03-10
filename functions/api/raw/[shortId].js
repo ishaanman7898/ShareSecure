@@ -1,3 +1,5 @@
+import { getClientById, globalPurgeExpired } from '../../_turso.js';
+
 function base64ToBuffer(base64) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -7,13 +9,19 @@ function base64ToBuffer(base64) {
   return bytes.buffer;
 }
 
+async function verifyIntegrity(buffer, expectedHash) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = new Uint8Array(hashBuffer);
+  const computedHash = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+  return computedHash === expectedHash;
+}
+
 export async function onRequestGet(context) {
   const { params, env, request } = context;
+  const client = await getClientById(params.shortId, env);
 
-  // Background: purge all expired rows
-  context.waitUntil(
-    env.DB.prepare(`DELETE FROM files WHERE expires_at < datetime('now')`).run()
-  );
+  // Background: purge all expired clusters
+  context.waitUntil(globalPurgeExpired(env, context, params.shortId));
 
   // Block direct browser navigation — only allow same-origin fetch (e.g. from PDF.js)
   const fetchMode = request.headers.get('Sec-Fetch-Mode');
@@ -21,9 +29,12 @@ export async function onRequestGet(context) {
     return new Response('Direct access not allowed', { status: 403 });
   }
 
-  let file = await env.DB.prepare(
-    'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
-  ).bind(params.shortId).first();
+  const res = await client.execute({
+    sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
+    args: [params.shortId]
+  });
+
+  const file = res.rows[0];
 
   if (!file) return new Response('Not found', { status: 404 });
 
@@ -31,21 +42,28 @@ export async function onRequestGet(context) {
     return new Response('Expired', { status: 410 });
   }
 
-  // If this is a reshared link, load file_data from the root source
-  if (!file.file_data && file.source_short_id) {
-    const source = await env.DB.prepare(
-      'SELECT file_data FROM files WHERE short_id = ? AND is_active = 1'
-    ).bind(file.source_short_id).first();
-    if (!source?.file_data) return new Response('Not found', { status: 404 });
-    file = { ...file, file_data: source.file_data };
+  if (!file.file_data) {
+    return new Response('File data missing', { status: 404 });
+  }
+
+  const buffer = base64ToBuffer(file.file_data);
+
+  // Verify integrity hash — tamper detection
+  if (file.integrity_hash) {
+    const valid = await verifyIntegrity(buffer, file.integrity_hash);
+    if (!valid) {
+      return new Response('Integrity check failed — file may have been tampered with', { status: 422 });
+    }
   }
 
   context.waitUntil(
-    env.DB.prepare('UPDATE files SET download_count = download_count + 1 WHERE short_id = ?')
-      .bind(params.shortId).run()
+    client.execute({
+      sql: 'UPDATE files SET download_count = download_count + 1 WHERE short_id = ?',
+      args: [params.shortId]
+    })
   );
 
-  return new Response(base64ToBuffer(file.file_data), {
+  return new Response(buffer, {
     headers: {
       'Content-Type': file.mime_type,
       'Content-Disposition': `inline; filename="${file.original_filename}"`,

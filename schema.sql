@@ -11,5 +11,9 @@ CREATE TABLE IF NOT EXISTS files (
   is_active INTEGER DEFAULT 1,
   source_short_id TEXT,
   is_used INTEGER DEFAULT 0,
-  delete_token TEXT
+  delete_token TEXT,
+  integrity_hash TEXT NOT NULL,
+  annotations TEXT DEFAULT '[]',
+  cluster_id TEXT,                     -- Groups all links for one upload
+  parent_short_id TEXT                 -- For branch-level deletion
 );

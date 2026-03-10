@@ -1,14 +1,18 @@
+import { getClientById, globalPurgeExpired } from '../../_turso.js';
+
 export async function onRequestGet(context) {
   const { params, env } = context;
+  const client = await getClientById(params.shortId, env);
 
-  // Background: purge all expired rows on every info request
-  context.waitUntil(
-    env.DB.prepare(`DELETE FROM files WHERE expires_at < datetime('now')`).run()
-  );
+  // Background: purge all expired clusters on every info request
+  context.waitUntil(globalPurgeExpired(env, context, params.shortId));
 
-  const file = await env.DB.prepare(
-    'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
-  ).bind(params.shortId).first();
+  const res = await client.execute({
+    sql: 'SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, integrity_hash, parent_short_id FROM files WHERE short_id = ? AND is_active = 1',
+    args: [params.shortId]
+  });
+
+  const file = res.rows[0];
 
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
 
@@ -22,6 +26,8 @@ export async function onRequestGet(context) {
     mimeType: file.mime_type,
     uploadedAt: file.uploaded_at,
     expiresAt: file.expires_at,
-    views: file.download_count
+    views: file.download_count,
+    integrityHash: file.integrity_hash,
+    isRoot: !file.parent_short_id
   });
 }
