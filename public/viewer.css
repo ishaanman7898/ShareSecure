@@ -288,6 +288,7 @@ body {
 .draw-btn {
   background: none;
   border: 1px solid transparent;
+  color: var(--text);
   width: 34px;
   height: 34px;
   border-radius: 6px;
@@ -296,18 +297,23 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .draw-btn:hover {
   background: var(--bg);
   border-color: var(--border);
+  color: var(--accent);
 }
 
 .draw-btn.active {
   background: #e8f0fe;
   border-color: var(--accent);
   color: var(--accent);
+}
+
+[data-theme="dark"] .draw-btn.active {
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .draw-divider {
@@ -823,4 +829,43 @@ body {
 
 .hidden {
   display: none !important;
+}
+
+/* ── screenshot shield ── */
+#screenshot-shield {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+/* ── text annotation input overlay ── */
+.text-annot-input {
+  position: absolute;
+  background: transparent;
+  border: 1px dashed currentColor;
+  outline: none;
+  resize: none;
+  padding: 2px 4px;
+  font-family: sans-serif;
+  line-height: 1.3;
+  min-width: 80px;
+  min-height: 24px;
+  z-index: 50;
+  overflow: hidden;
+}
+
+.pdf-annot-canvas.text-mode {
+  cursor: text;
+}
+
+@media print {
+  #screenshot-shield {
+    display: block !important;
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 9999;
+  }
 }

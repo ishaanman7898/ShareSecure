@@ -6,8 +6,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(e.key.toLowerCase())) e.preventDefault();
+  if (e.key === 'PrintScreen') {
+    e.preventDefault();
+    flashScreenshotShield();
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText('');
+  }
 });
 window.addEventListener('beforeprint', () => { document.body.innerHTML = '<p style="padding:40px;font-size:1.2rem">Printing is disabled.</p>'; });
+
+// ── screenshot shield ─────────────────────────────────────────────────────────
+function flashScreenshotShield() {
+  const shield = document.getElementById('screenshot-shield');
+  if (!shield) return;
+  shield.classList.remove('hidden');
+  setTimeout(() => shield.classList.add('hidden'), 1500);
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
@@ -42,7 +55,8 @@ function formatSize(b) {
 function updateOwnershipDisplay() {
   myDeleteToken = checkOwnership();
   isOwner = !!myDeleteToken;
-  if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
+  if (isOwner) { show('delete-file-btn'); show('download-btn'); }
+  else { hide('delete-file-btn'); hide('download-btn'); }
 }
 
 // ── theme management ────────────────────────────────────────────────────────
@@ -141,6 +155,55 @@ let allStrokes = []; // Array of { pageIndex, tool, color, points: [{x,y}] }
 let isDrawing = false;
 let currentStroke = null;
 
+function updateAnnotCursors() {
+  annotCanvases.forEach(c => {
+    c.classList.toggle('text-mode', currentTool === 'text');
+    if (currentTool !== 'text') c.style.cursor = 'crosshair';
+  });
+}
+
+function startTextInput(e, canvas, pageIndex) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+  const src = e.touches ? e.touches[0] : e;
+  const screenX = src.clientX - rect.left;
+  const screenY = src.clientY - rect.top;
+  const canvasX = screenX * sx;
+  const canvasY = screenY * sy;
+  const fontSize = Math.max(12, currentPenSize * 7);
+
+  const wrapper = canvas.parentElement;
+
+  const ta = document.createElement('textarea');
+  ta.className = 'text-annot-input';
+  ta.style.left = screenX + 'px';
+  ta.style.top = (screenY - fontSize) + 'px';
+  ta.style.color = currentColor;
+  ta.style.fontSize = fontSize + 'px';
+  ta.style.borderColor = currentColor;
+  wrapper.appendChild(ta);
+  ta.focus();
+
+  let committed = false;
+  function commit() {
+    if (committed) return;
+    committed = true;
+    const text = ta.value.trim();
+    if (wrapper.contains(ta)) wrapper.removeChild(ta);
+    if (text) {
+      allStrokes.push({ pageIndex, tool: 'text', text, x: canvasX, y: canvasY, color: currentColor, size: currentPenSize });
+      redrawAllStrokes();
+      markAnnotationsDirty();
+    }
+  }
+
+  ta.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(); }
+    if (ev.key === 'Escape') { committed = true; if (wrapper.contains(ta)) wrapper.removeChild(ta); }
+  });
+  ta.addEventListener('blur', commit);
+}
+
 function setupDrawing(canvas, pageIndex) {
   const ctx = canvas.getContext('2d');
 
@@ -153,6 +216,7 @@ function setupDrawing(canvas, pageIndex) {
 
   function startDraw(e) {
     e.preventDefault();
+    if (currentTool === 'text') { startTextInput(e, canvas, pageIndex); return; }
     isDrawing = true;
     const [x, y] = getPos(e);
     currentStroke = {
@@ -230,33 +294,42 @@ function redrawAllStrokes() {
     const ctx = canvas.getContext('2d');
 
     ctx.save();
-    if (stroke.tool === 'pen') {
+    if (stroke.tool === 'text') {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = stroke.color;
+      const fontSize = Math.max(12, (stroke.size || 2.5) * 7);
+      ctx.font = `bold ${fontSize}px sans-serif`;
+      const lines = stroke.text.split('\n');
+      lines.forEach((line, i) => ctx.fillText(line, stroke.x, stroke.y + i * fontSize * 1.3));
+    } else if (stroke.tool === 'pen') {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = stroke.color;
       ctx.lineWidth = stroke.size || 2.5;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
     } else if (stroke.tool === 'highlight') {
       ctx.globalAlpha = 0.35;
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = '#FFD600';
       ctx.lineWidth = 22;
       ctx.lineCap = 'square';
+      ctx.beginPath();
+      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
     } else if (stroke.tool === 'eraser') {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'destination-out';
       ctx.lineWidth = 24;
       ctx.lineCap = 'round';
       ctx.strokeStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
     }
-
-    ctx.beginPath();
-    for (let i = 0; i < stroke.points.length; i++) {
-      const pt = stroke.points[i];
-      if (i === 0) ctx.moveTo(pt.x, pt.y);
-      else ctx.lineTo(pt.x, pt.y);
-    }
-    ctx.stroke();
     ctx.restore();
   }
 }
@@ -459,6 +532,7 @@ document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
     document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTool = btn.dataset.tool;
+    updateAnnotCursors();
   });
 });
 
