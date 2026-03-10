@@ -1,6 +1,6 @@
 # ShareSecure
 
-![ShareSecure](./public/ShareSecure.png)
+![ShareSecure](./ShareSecure.png)
 
 A dead-simple way to share files that actually respects your privacy.
 
