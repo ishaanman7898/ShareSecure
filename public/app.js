@@ -228,7 +228,7 @@ function showResult(data, file) {
     const img = qrCanvasEl.querySelector('img') || qrCanvasEl.querySelector('canvas');
     const url = img.tagName === 'CANVAS' ? img.toDataURL('image/png') : img.src;
     const a = document.createElement('a');
-    a.href = url; a.download = 'fileshare-qr.png'; a.click();
+    a.href = url; a.download = 'sharesecure-qr.png'; a.click();
   };
 
   uploadCard.classList.add('hidden');

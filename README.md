@@ -1,6 +1,6 @@
 # ShareSecure
 
-![ShareSecure](./public/SecureShare.png)
+![ShareSecure](./public/ShareSecure.png)
 
 A dead-simple way to share files that actually respects your privacy.
 
@@ -33,7 +33,7 @@ Upload a file, get a link, share it. Everyone who opens it gets their own unique
 ## Architecture
 
 ```
-fileshare/
+sharesecure/
 ├── functions/                 # Cloudflare Pages Functions (serverless API)
 │   ├── _middleware.js         # Security headers (applied to ALL responses)
 │   ├── api/

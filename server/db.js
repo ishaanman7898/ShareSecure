@@ -20,7 +20,7 @@ const userDb = createClient({
 
 // main files client (shard helper)
 const getFileClient = (nodeNum = 1) => {
-  const nodeName = `fileshare-node-${nodeNum}`;
+  const nodeName = `sharesecure-node-${nodeNum}`;
   const hostname = `${nodeName}-ishman.aws-us-east-2.turso.io`;
   return createClient({
     url: `libsql://${hostname}`,

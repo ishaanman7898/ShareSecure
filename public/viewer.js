@@ -603,7 +603,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   if (!fileInfo) return;
 
   const { filename, size, mimeType, expiresAt, integrityHash } = fileInfo;
-  document.title = filename + ' — FileShare';
+  document.title = filename + ' — ShareSecure';
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
