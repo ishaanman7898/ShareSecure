@@ -1,6 +1,65 @@
-import { createClient } from '@libsql/client/web';
+// Lightweight Turso HTTP client — no npm packages, pure fetch.
+// Works natively in Cloudflare Pages Functions.
 
-// files db
+function createClient({ url, authToken }) {
+  // accept both libsql:// and https:// URLs
+  const base = url.replace(/^libsql:\/\//, 'https://');
+
+  return {
+    async execute({ sql, args = [] }) {
+      // convert plain JS values to Turso typed args
+      const typedArgs = args.map(v => {
+        if (v === null || v === undefined) return { type: 'null' };
+        if (typeof v === 'number') {
+          return Number.isInteger(v)
+            ? { type: 'integer', value: String(v) }
+            : { type: 'float', value: String(v) };
+        }
+        return { type: 'text', value: String(v) };
+      });
+
+      const res = await fetch(`${base}/v2/pipeline`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          requests: [
+            { type: 'execute', stmt: { sql, args: typedArgs } },
+            { type: 'close' }
+          ]
+        })
+      });
+
+      if (!res.ok) throw new Error(`Turso error ${res.status}: ${await res.text()}`);
+
+      const data = await res.json();
+      const result = data.results[0];
+      if (result.type === 'error') throw new Error(result.error.message);
+
+      const { cols, rows } = result.response.result;
+
+      // convert to plain row objects keyed by column name
+      const rowObjects = rows.map(row => {
+        const obj = {};
+        cols.forEach((col, i) => {
+          const cell = row[i];
+          if (cell.type === 'null') obj[col.name] = null;
+          else if (cell.type === 'integer') obj[col.name] = parseInt(cell.value, 10);
+          else if (cell.type === 'float') obj[col.name] = parseFloat(cell.value);
+          else obj[col.name] = cell.value;
+        });
+        return obj;
+      });
+
+      return { rows: rowObjects };
+    }
+  };
+}
+
+// ── DB clients ───────────────────────────────────────────────────────────────
+
 export function getFilesClient(env) {
   return createClient({
     url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
@@ -8,7 +67,6 @@ export function getFilesClient(env) {
   });
 }
 
-// auth db
 export function getAuthClient(env) {
   return createClient({
     url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
@@ -22,11 +80,11 @@ export function getShardNode(shortId, nodes = 3) {
   return (shortId.charCodeAt(0) % nodes) + 1;
 }
 
-export async function getTursoClient(nodeNum, env) {
+export async function getTursoClient(_nodeNum, env) {
   return getFilesClient(env);
 }
 
-export async function getClientById(shortId, env) {
+export async function getClientById(_shortId, env) {
   return getFilesClient(env);
 }
 
@@ -34,7 +92,7 @@ export async function getClientById(shortId, env) {
 export async function globalPurgeExpired(env, context) {
   const client = getFilesClient(env);
   context.waitUntil(
-    client.execute("DELETE FROM files WHERE expires_at < datetime('now')").catch(() => {})
+    client.execute({ sql: "DELETE FROM files WHERE expires_at < datetime('now')", args: [] }).catch(() => {})
   );
 }
 
@@ -80,7 +138,7 @@ export async function getEncKey(env) {
   return crypto.subtle.importKey('raw', bytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
 }
 
-// Encrypt a binary buffer → returns 'enc:<base64(iv+ciphertext)>'
+// Encrypt a binary buffer → 'enc:<base64(iv+ciphertext)>'
 // If no key, returns plain base64
 export async function encryptField(buffer, key) {
   if (!key) return bufToB64(buffer);
@@ -93,7 +151,7 @@ export async function encryptField(buffer, key) {
 }
 
 // Decrypt a stored field back to ArrayBuffer
-// Handles both encrypted ('enc:...') and legacy plain base64
+// Handles encrypted ('enc:...') and legacy plain base64
 export async function decryptField(stored, key) {
   if (stored.startsWith('enc:')) {
     if (!key) throw new Error('Data is encrypted but ENCRYPTION_KEY is not set');
@@ -102,11 +160,10 @@ export async function decryptField(stored, key) {
     const ct = bytes.slice(12);
     return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
   }
-  // legacy plain base64
   return Uint8Array.from(atob(stored), c => c.charCodeAt(0)).buffer;
 }
 
-// Encrypt a short string (filename, mime_type, annotations, etc.)
+// Encrypt a short string (filename, mime_type, annotations)
 export async function encryptStr(str, key) {
   if (!key) return str;
   const buf = new TextEncoder().encode(str);
@@ -114,7 +171,6 @@ export async function encryptStr(str, key) {
 }
 
 // Decrypt a short string
-// Handles encrypted ('enc:...') and plain strings
 export async function decryptStr(stored, key) {
   if (!stored || !key || !stored.startsWith('enc:')) return stored ?? '';
   const buf = await decryptField(stored, key);
