@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
-    "deploy": "wrangler pages deploy public --project-name fileshare",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "deploy": "wrangler deploy",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "preview": "wrangler dev"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +25,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "wrangler": "^4.72.0"
   }
 }

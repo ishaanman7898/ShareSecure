@@ -5,3 +5,9 @@ users.db
 .env
 wrangler.toml
 turso_info.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
