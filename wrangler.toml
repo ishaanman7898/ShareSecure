@@ -1,8 +1,0 @@
-name = "fileshare"
-compatibility_date = "2024-09-23"
-pages_build_output_dir = "public"
-
-[vars]
-TURSO_ORG = "ishman"
-TURSO_REGION = "aws-us-east-2"
-TURSO_NODES = "3"
