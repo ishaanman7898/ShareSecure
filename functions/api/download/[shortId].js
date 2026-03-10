@@ -41,6 +41,7 @@ export async function onRequestGet(context) {
 
   const encKey = await getEncKey(env);
 
+  const wasEncrypted = file.file_data.startsWith('enc:');
   let buffer;
   try {
     buffer = await decryptField(file.file_data, encKey);
@@ -54,7 +55,9 @@ export async function onRequestGet(context) {
     }
   }
 
-  if (file.integrity_hash) {
+  // AES-GCM auth tag already verified integrity for encrypted files during decryption.
+  // Only run SHA-256 check for legacy unencrypted files.
+  if (file.integrity_hash && !wasEncrypted) {
     const valid = await verifyIntegrity(buffer, file.integrity_hash);
     if (!valid) return new Response('Integrity check failed — file may have been tampered with', { status: 422 });
   }

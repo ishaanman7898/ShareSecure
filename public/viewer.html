@@ -80,6 +80,15 @@
         </svg>
       </button>
       <div class="divider"></div>
+      <button class="tb-btn tb-btn-download" id="download-btn" title="Download file">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+        <span class="desktop-only">Download</span>
+      </button>
       <button class="tb-btn tb-btn-share" id="share-btn">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -130,6 +139,31 @@
     </button>
     <div class="draw-divider"></div>
     <input type="color" id="color-picker" value="#e74c3c" title="Colour" />
+    <div class="draw-divider"></div>
+    <button class="draw-btn pen-size-btn active" data-size="2.5" title="Thin">
+      <svg width="14" height="14" viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+    <button class="draw-btn pen-size-btn" data-size="5" title="Medium">
+      <svg width="14" height="14" viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+    </button>
+    <button class="draw-btn pen-size-btn" data-size="10" title="Thick">
+      <svg width="14" height="14" viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></svg>
+    </button>
+    <div class="draw-divider"></div>
+    <button class="draw-btn" id="undo-btn" title="Undo last stroke">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7v6h6" />
+        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+      </svg>
+    </button>
+    <button class="draw-btn" id="invert-pdf-btn" title="Invert PDF colors">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 2a10 10 0 0 1 0 20Z" fill="currentColor" />
+      </svg>
+    </button>
     <div class="draw-divider"></div>
     <button class="draw-btn" id="clear-btn" title="Clear all annotations">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"

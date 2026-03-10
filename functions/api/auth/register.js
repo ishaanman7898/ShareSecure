@@ -30,7 +30,6 @@ export async function onRequestPost(context) {
     if (err.message && err.message.includes('UNIQUE constraint failed')) {
       return Response.json({ error: 'Username already exists' }, { status: 400 });
     }
-    console.error('Registration error:', err.message);
     return Response.json({ error: 'Registration failed' }, { status: 500 });
   }
 }

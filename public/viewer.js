@@ -134,6 +134,7 @@ function startStatusPolling() {
 // ── drawing tools ─────────────────────────────────────────────────────────────
 let currentTool = 'pen';
 let currentColor = '#e74c3c';
+let currentPenSize = 2.5;
 const annotCanvases = [];
 // track all drawing strokes for persistence
 let allStrokes = []; // Array of { pageIndex, tool, color, points: [{x,y}] }
@@ -158,6 +159,7 @@ function setupDrawing(canvas, pageIndex) {
       pageIndex,
       tool: currentTool,
       color: currentTool === 'highlight' ? '#FFD600' : currentColor,
+      size: currentPenSize,
       points: [{ x, y }]
     };
   }
@@ -178,7 +180,7 @@ function setupDrawing(canvas, pageIndex) {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = currentStroke.color;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = currentStroke.size || 2.5;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     } else if (currentStroke.tool === 'highlight') {
       ctx.globalAlpha = 0.35;
@@ -232,7 +234,7 @@ function redrawAllStrokes() {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
       ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = stroke.size || 2.5;
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     } else if (stroke.tool === 'highlight') {
       ctx.globalAlpha = 0.35;
@@ -462,6 +464,35 @@ document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
 
 $('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
 
+// pen size buttons
+document.querySelectorAll('.pen-size-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.pen-size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPenSize = parseFloat(btn.dataset.size);
+  });
+});
+
+// undo last stroke
+$('undo-btn')?.addEventListener('click', () => {
+  if (allStrokes.length === 0) return;
+  allStrokes.pop();
+  redrawAllStrokes();
+  if (allStrokes.length === 0) {
+    annotationsDirty = false;
+  } else {
+    markAnnotationsDirty();
+  }
+});
+
+// invert PDF colors toggle
+let pdfInverted = false;
+$('invert-pdf-btn')?.addEventListener('click', () => {
+  pdfInverted = !pdfInverted;
+  $('pdf-container').classList.toggle('pdf-inverted', pdfInverted);
+  $('invert-pdf-btn').classList.toggle('active', pdfInverted);
+});
+
 $('clear-btn')?.addEventListener('click', () => {
   if (!confirm('Clear all drawings on this document?')) return;
   annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
@@ -590,6 +621,30 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);
+
+  $('download-btn')?.addEventListener('click', async () => {
+    const btn = $('download-btn');
+    btn.disabled = true;
+    btn.querySelector('span') && (btn.querySelector('span').textContent = 'Downloading...');
+    try {
+      const res = await fetch(`/api/download/${myShortId}`);
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileInfo?.filename || 'file';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Download failed. Try again.');
+    } finally {
+      btn.disabled = false;
+      btn.querySelector('span') && (btn.querySelector('span').textContent = 'Download');
+    }
+  });
 
   // use the refined delete handler
   $('delete-file-btn').addEventListener('click', async () => {

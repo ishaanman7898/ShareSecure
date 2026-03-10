@@ -211,6 +211,16 @@ body {
   background: #c8e6c9;
 }
 
+[data-theme="dark"] .integrity-badge {
+  background: rgba(46, 125, 50, 0.15);
+  color: #81c784;
+  border-color: rgba(129, 199, 132, 0.3);
+}
+
+[data-theme="dark"] .integrity-badge:hover {
+  background: rgba(46, 125, 50, 0.25);
+}
+
 /* ── countdown ── */
 .countdown-wrap {
   display: flex;
@@ -224,6 +234,10 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   transition: background 0.3s, color 0.3s;
+}
+
+[data-theme="dark"] .countdown-wrap {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .countdown-wrap.warn {
@@ -286,7 +300,7 @@ body {
 }
 
 .draw-btn:hover {
-  background: #f1f3f4;
+  background: var(--bg);
   border-color: var(--border);
 }
 
@@ -743,6 +757,22 @@ body {
   border-color: #ef4444;
 }
 
+.tb-btn-download {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.tb-btn-download:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #059669;
+}
+
+.tb-btn-download:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── mobile ── */
 @media (max-width: 800px) {
   .desktop-only {
@@ -782,9 +812,9 @@ body {
   /* Darker back for PDF gap */
 }
 
-/* Optional: PDF Inversion for dark mode (can be toggled) */
-[data-theme="dark"] .pdf-page-canvas {
-  filter: invert(0.9) hue-rotate(180deg) brightness(1.2) contrast(0.9);
+/* PDF inversion — only when user explicitly toggles it */
+.pdf-inverted .pdf-page-canvas {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 [data-theme="dark"] .img-viewer {

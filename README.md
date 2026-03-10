@@ -153,6 +153,30 @@ The app currently uses a distributed **Turso** cluster (LibSQL). Here are other 
 
 ---
 
+## Self-Hosting
+
+Want to run your own private instance? The whole app is a Cloudflare Pages project — no servers, no Docker, no infrastructure to manage.
+
+### What you need
+- A [Cloudflare](https://cloudflare.com) account (free)
+- A [Turso](https://turso.tech) database (free tier works)
+- That's it
+
+### Steps
+1. Fork this repo to your GitHub
+2. Create a new Cloudflare Pages project → connect your fork
+3. Set build output directory to `public`
+4. Add these environment secrets in Pages → Settings → Environment Variables:
+   - `TURSO_TOKEN` — your Turso database auth token
+   - `ENCRYPTION_KEY` — 64 hex chars: `openssl rand -hex 32`
+   - `BASE_URL` — your Pages URL
+5. Run `schema.sql` on your Turso database to create the tables
+6. Deploy
+
+All file data is AES-256-GCM encrypted before it hits your database. Even if someone gets DB access, they can't read the files without the key.
+
+---
+
 ## API Reference
 
 ### `POST /api/upload`
