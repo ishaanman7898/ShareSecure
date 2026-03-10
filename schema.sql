@@ -10,5 +10,6 @@ CREATE TABLE IF NOT EXISTS files (
   download_count INTEGER DEFAULT 0,
   is_active INTEGER DEFAULT 1,
   source_short_id TEXT,
-  is_used INTEGER DEFAULT 0
+  is_used INTEGER DEFAULT 0,
+  delete_token TEXT
 );

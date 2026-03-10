@@ -15,10 +15,13 @@ const resultFilename = document.getElementById('result-filename');
 const resultSize = document.getElementById('result-size');
 const resultExpires = document.getElementById('result-expires');
 const newUploadBtn = document.getElementById('new-upload-btn');
+const deleteBtn = document.getElementById('delete-btn');
 const expiresSelect = document.getElementById('expires-select');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 let qrInstance = null;
+let currentShortId = null;
+let currentDeleteToken = null;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 let selectedFile = null;
@@ -162,6 +165,12 @@ uploadBtn.addEventListener('click', async () => {
 });
 
 function showResult(data, file) {
+  currentShortId = data.shortId;
+  currentDeleteToken = data.deleteToken;
+  deleteBtn.disabled = false;
+  deleteBtn.textContent = 'Delete File';
+  deleteBtn.classList.remove('deleted');
+
   shortLink.textContent = data.shortUrl;
   document.getElementById('view-btn').href = data.shortUrl;
   resultFilename.textContent = file.name;
@@ -200,6 +209,39 @@ copyBtn.addEventListener('click', () => {
       copyBtn.classList.remove('copied');
     }, 2000);
   });
+});
+
+// Delete file
+deleteBtn.addEventListener('click', async () => {
+  if (!currentShortId || !currentDeleteToken) return;
+  if (!confirm('Permanently delete this file for everyone? This cannot be undone.')) return;
+
+  deleteBtn.disabled = true;
+  deleteBtn.textContent = 'Deleting...';
+
+  try {
+    const res = await fetch(`/api/delete/${currentShortId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteToken: currentDeleteToken })
+    });
+    const data = await res.json();
+    if (data.deleted) {
+      deleteBtn.textContent = 'Deleted';
+      deleteBtn.classList.add('deleted');
+      shortLink.textContent = '(deleted)';
+      document.getElementById('view-btn').removeAttribute('href');
+      if (countdownInterval) clearInterval(countdownInterval);
+      resultExpires.textContent = 'File deleted';
+      resultExpires.style.color = '#ef4444';
+    } else {
+      deleteBtn.textContent = 'Failed';
+      deleteBtn.disabled = false;
+    }
+  } catch {
+    deleteBtn.textContent = 'Error';
+    deleteBtn.disabled = false;
+  }
 });
 
 // New upload

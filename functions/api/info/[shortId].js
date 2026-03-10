@@ -1,6 +1,11 @@
 export async function onRequestGet(context) {
   const { params, env } = context;
 
+  // Background: purge all expired rows on every info request
+  context.waitUntil(
+    env.DB.prepare(`DELETE FROM files WHERE expires_at < datetime('now')`).run()
+  );
+
   const file = await env.DB.prepare(
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).bind(params.shortId).first();

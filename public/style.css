@@ -330,4 +330,13 @@ select:focus { border-color: var(--accent); }
   gap: 10px;
 }
 
+.btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.22); border-color: #ef4444; }
+.btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-danger.deleted { background: rgba(100, 100, 100, 0.1); color: var(--text-muted); border-color: var(--border); cursor: default; }
+
 .hidden { display: none !important; }

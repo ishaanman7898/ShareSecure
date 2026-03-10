@@ -10,6 +10,11 @@ function base64ToBuffer(base64) {
 export async function onRequestGet(context) {
   const { params, env, request } = context;
 
+  // Background: purge all expired rows
+  context.waitUntil(
+    env.DB.prepare(`DELETE FROM files WHERE expires_at < datetime('now')`).run()
+  );
+
   // Block direct browser navigation — only allow same-origin fetch (e.g. from PDF.js)
   const fetchMode = request.headers.get('Sec-Fetch-Mode');
   if (fetchMode === 'navigate') {

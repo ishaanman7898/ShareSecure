@@ -41,15 +41,21 @@ export async function onRequestPost(context) {
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const shortId = generateId(8);
+  const deleteToken = generateId(24);
   const mimeType = file.type || 'application/octet-stream';
 
   const buffer = await file.arrayBuffer();
   const file_data = bufferToBase64(buffer);
 
+  // Purge all expired files on each upload (background cleanup)
+  context.waitUntil(
+    env.DB.prepare(`DELETE FROM files WHERE expires_at < datetime('now')`).run()
+  );
+
   await env.DB.prepare(`
-    INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(shortId, file.name, mimeType, file.size, file_data, expires_at).run();
+    INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(shortId, file.name, mimeType, file.size, file_data, expires_at, deleteToken).run();
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;
 
@@ -58,6 +64,7 @@ export async function onRequestPost(context) {
     shortUrl: `${baseUrl}/r/${shortId}`,
     filename: file.name,
     size: file.size,
-    expiresAt: expires_at
+    expiresAt: expires_at,
+    deleteToken
   });
 }
