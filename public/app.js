@@ -19,9 +19,30 @@ const deleteBtn = document.getElementById('delete-btn');
 const expiresSelect = document.getElementById('expires-select');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
+
+// --- Auth & Dashboard Elements ---
+const showLoginBtn = document.getElementById('show-login');
+const authStatus = document.getElementById('auth-status');
+const authModal = document.getElementById('auth-modal');
+const closeModal = document.getElementById('close-modal');
+const authForm = document.getElementById('auth-form');
+const authUsername = document.getElementById('auth-username');
+const authPassword = document.getElementById('auth-password');
+const authSubmit = document.getElementById('auth-submit');
+const toggleAuth = document.getElementById('toggle-auth');
+const modalTitle = document.getElementById('modal-title');
+const dashboardCard = document.getElementById('dashboard-card');
+const fileList = document.getElementById('file-list');
+const uploadCount = document.getElementById('upload-count');
+
+const landingPage = document.getElementById('landing-page');
+const landingStartBtn = document.getElementById('landing-start');
+
 let qrInstance = null;
 let currentShortId = null;
 let currentDeleteToken = null;
+let userToken = localStorage.getItem('user_token');
+let isLoginMode = true;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 let selectedFile = null;
@@ -132,6 +153,9 @@ uploadBtn.addEventListener('click', async () => {
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
+    if (userToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+    }
 
     xhr.upload.addEventListener('progress', e => {
       if (e.lengthComputable) {
@@ -143,6 +167,11 @@ uploadBtn.addEventListener('click', async () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
+        if (userToken) updateDashboard();
+      } else if (xhr.status === 429) {
+        alert('Upload limit reached (5 files per 24h).');
+        uploadBtn.disabled = false;
+        progressWrap.classList.add('hidden');
       } else {
         alert('Upload failed. Please try again.');
         uploadBtn.disabled = false;
@@ -166,7 +195,7 @@ uploadBtn.addEventListener('click', async () => {
 
 function showResult(data, file) {
   currentShortId = data.shortId;
-  currentDeleteToken = data.deleteToken;
+  currentDeleteToken = data.deleteToken || null;
   deleteBtn.disabled = false;
   deleteBtn.textContent = 'Delete File';
   deleteBtn.classList.remove('deleted');
@@ -219,18 +248,17 @@ copyBtn.addEventListener('click', () => {
 
 // Delete file
 deleteBtn.addEventListener('click', async () => {
-  if (!currentShortId || !currentDeleteToken) return;
+  if (!currentShortId) return;
   if (!confirm('Permanently delete this file for everyone? This cannot be undone.')) return;
 
   deleteBtn.disabled = true;
   deleteBtn.textContent = 'Deleting...';
 
   try {
-    const res = await fetch(`/api/delete/${currentShortId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deleteToken: currentDeleteToken })
-    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
+
+    const res = await fetch(`/api/delete/${currentShortId}`, { method: 'POST', headers });
     const data = await res.json();
     if (data.deleted) {
       deleteBtn.textContent = 'Deleted';
@@ -240,6 +268,7 @@ deleteBtn.addEventListener('click', async () => {
       if (countdownInterval) clearInterval(countdownInterval);
       resultExpires.textContent = 'File deleted';
       resultExpires.style.color = '#ef4444';
+      if (userToken) updateDashboard();
     } else {
       deleteBtn.textContent = 'Failed';
       deleteBtn.disabled = false;
@@ -260,3 +289,203 @@ newUploadBtn.addEventListener('click', () => {
   resultCard.classList.add('hidden');
   uploadCard.classList.remove('hidden');
 });
+
+// --- Auth & Dashboard Logic ---
+
+function initAuth() {
+  if (userToken) {
+    let username = 'User';
+    try {
+      username = atob(userToken).split(':')[0];
+    } catch (e) {
+      logout();
+      return;
+    }
+    authStatus.innerHTML = `
+      <span class="user-name">Hi, ${username}</span>
+      <button class="btn btn-ghost" id="logout-btn">Sign Out</button>
+    `;
+    document.getElementById('logout-btn').addEventListener('click', logout);
+
+    // Auth-only view
+    landingPage.classList.add('hidden');
+    dashboardCard.classList.remove('hidden');
+    uploadCard.classList.remove('hidden');
+    updateDashboard();
+  } else {
+    authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
+    document.getElementById('show-login').addEventListener('click', () => authModal.classList.remove('hidden'));
+
+    // Public/Landing view
+    landingPage.classList.remove('hidden');
+    dashboardCard.classList.add('hidden');
+    uploadCard.classList.add('hidden');
+  }
+}
+
+landingStartBtn.addEventListener('click', () => {
+  authModal.classList.remove('hidden');
+});
+
+async function updateDashboard() {
+  if (!userToken) return;
+  try {
+    const res = await fetch('/api/auth/user/files', {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+
+    if (res.status === 401) {
+      logout();
+      return;
+    }
+
+    if (!res.ok) {
+      console.error('Failed to load dashboard:', res.status);
+      renderFileList([]);
+      return;
+    }
+
+    const data = await res.json();
+
+    if (data.files && Array.isArray(data.files)) {
+      renderFileList(data.files);
+      uploadCount.textContent = `Used ${data.files.length}/5 today`;
+    } else {
+      renderFileList([]);
+      uploadCount.textContent = `Used 0/5 today`;
+    }
+  } catch (err) {
+    console.error('Failed to fetch user files', err);
+    renderFileList([]);
+  }
+}
+
+function renderFileList(files) {
+  if (!files || files.length === 0) {
+    fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
+    return;
+  }
+
+  fileList.innerHTML = files.map(f => `
+    <div class="file-item" data-short-id="${f.short_id}">
+      <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
+      <div class="file-item-info">
+        <span class="file-item-name">${f.original_filename}</span>
+        <span class="file-item-time" data-expires="${f.expires_at}"></span>
+      </div>
+      <div class="file-item-actions">
+        <a href="/r/${f.short_id}" target="_blank" class="btn-icon" title="View">👁️</a>
+        <button class="btn-icon delete-file-btn" data-id="${f.short_id}" title="Delete">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+
+  fileList.querySelectorAll('.delete-file-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Permanently delete this file?')) return;
+      const shortId = btn.dataset.id;
+      btn.textContent = '⏳';
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/delete/${shortId}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${userToken}` }
+        });
+        const data = await res.json();
+        if (data.deleted) {
+          btn.closest('.file-item').remove();
+          const remaining = fileList.querySelectorAll('.file-item').length;
+          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
+          uploadCount.textContent = `Used ${remaining}/5 today`;
+        } else {
+          btn.textContent = '🗑️';
+          btn.disabled = false;
+        }
+      } catch {
+        btn.textContent = '🗑️';
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Start small timers for each item
+  files.forEach(f => {
+    const expiry = new Date(f.expires_at).getTime();
+    const el = fileList.querySelector(`[data-expires="${f.expires_at}"]`);
+
+    function updateItemTick() {
+      const remaining = expiry - Date.now();
+      if (remaining <= 0) {
+        el.textContent = 'Expired';
+        return;
+      }
+      el.textContent = formatCountdown(remaining) + ' left';
+    }
+    updateItemTick();
+    setInterval(updateItemTick, 5000);
+  });
+}
+
+function logout() {
+  userToken = null;
+  localStorage.removeItem('user_token');
+  initAuth();
+}
+
+showLoginBtn.addEventListener('click', () => authModal.classList.remove('hidden'));
+closeModal.addEventListener('click', () => authModal.classList.add('hidden'));
+
+toggleAuth.addEventListener('click', (e) => {
+  e.preventDefault();
+  isLoginMode = !isLoginMode;
+  modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+  authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+  toggleAuth.textContent = isLoginMode ? 'Sign Up' : 'Sign In';
+  document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
+});
+
+authForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = authUsername.value;
+  const access_code = authPassword.value;
+  const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
+
+  authSubmit.disabled = true;
+  authSubmit.textContent = 'Processing...';
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, access_code })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      if (isLoginMode) {
+        userToken = data.token;
+        localStorage.setItem('user_token', userToken);
+        authModal.classList.add('hidden');
+        initAuth();
+      } else {
+        // Clear potential stale sessions on new account
+        localStorage.removeItem('user_token');
+        userToken = null;
+        alert('Account created! You can now sign in.');
+        isLoginMode = true;
+        modalTitle.textContent = 'Sign In';
+        authSubmit.textContent = 'Sign In';
+        toggleAuth.textContent = 'Sign Up';
+      }
+    } else {
+      alert(data.error || 'Operation failed');
+    }
+  } catch (err) {
+    alert('An error occurred');
+  } finally {
+    authSubmit.disabled = false;
+    authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+  }
+});
+
+initAuth();

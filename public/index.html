@@ -13,11 +13,76 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>FileShare</h1>
-      <p>Upload a file, get a link. Simple.</p>
+      <div class="header-top">
+        <h1>FileShare</h1>
+        <div id="auth-status">
+          <button class="btn btn-ghost" id="show-login">Sign In</button>
+        </div>
+      </div>
     </div>
 
-    <div class="card" id="upload-card">
+    <!-- Landing Page -->
+    <div id="landing-page" class="landing">
+      <div class="landing-content card">
+        <h1>Private. Fast. Secure.</h1>
+        <p>FileShare is a zero-knowledge file sharing platform. Upload files and get encrypted, short-lived links. No
+          tracking, no data mining.</p>
+        <div class="landing-features">
+          <div class="feature">
+            <span class="feature-icon">🔒</span>
+            <span>Secure Hashing</span>
+          </div>
+          <div class="feature">
+            <span class="feature-icon">⌛</span>
+            <span>Timed Expiry</span>
+          </div>
+          <div class="feature">
+            <span class="feature-icon">📊</span>
+            <span>Personal Dashboard</span>
+          </div>
+        </div>
+        <div class="landing-actions">
+          <button class="btn btn-primary" id="landing-start">Get Started</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auth Modal -->
+    <div class="modal hidden" id="auth-modal">
+      <div class="modal-content card">
+        <div class="modal-header">
+          <h2 id="modal-title">Sign In</h2>
+          <button class="btn-icon" id="close-modal">&times;</button>
+        </div>
+        <form id="auth-form">
+          <div class="form-group">
+            <label>Username</label>
+            <input type="text" id="auth-username" required placeholder="Pick a username" />
+          </div>
+          <div class="form-group">
+            <label>Access Code</label>
+            <input type="password" id="auth-password" required placeholder="Enter secure code" />
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="auth-submit">Sign In</button>
+          <p class="auth-toggle">
+            <span id="auth-prompt-text">Don't have an account? </span><a href="#" id="toggle-auth">Sign Up</a>
+          </p>
+        </form>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="card hidden" id="dashboard-card">
+      <div class="dashboard-header">
+        <h2>My Shared Documents</h2>
+        <span class="upload-limit" id="upload-count">Used 0/5 today</span>
+      </div>
+      <div id="file-list" class="file-list">
+        <p class="empty-msg">You haven't uploaded any files today.</p>
+      </div>
+    </div>
+
+    <div class="card hidden" id="upload-card">
       <div class="drop-zone" id="drop-zone">
         <div class="drop-icon">&#8679;</div>
         <p class="drop-label">Drop your file here</p>
