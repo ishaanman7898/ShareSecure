@@ -6,7 +6,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const shortId = location.pathname.split('/r/')[1];
-
 const $ = id => document.getElementById(id);
 
 function formatSize(bytes) {
@@ -17,6 +16,50 @@ function formatSize(bytes) {
 
 function show(id) { $(id).classList.remove('hidden'); }
 function hide(id) { $(id).classList.add('hidden'); }
+
+// ── Countdown ─────────────────────────────────────────────────────────────────
+
+function startCountdown(expiresAt) {
+  if (!expiresAt) {
+    $('countdown-wrap').style.display = 'none';
+    return;
+  }
+
+  const expiry = new Date(expiresAt).getTime();
+  const wrap = $('countdown-wrap');
+  const text = $('countdown-text');
+
+  function tick() {
+    const remaining = expiry - Date.now();
+
+    if (remaining <= 0) {
+      text.textContent = 'Expired';
+      wrap.className = 'countdown-wrap critical';
+      show('expired-overlay');
+      return;
+    }
+
+    const s = Math.floor(remaining / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+
+    if (h > 0) {
+      text.textContent = `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
+    } else if (m > 0) {
+      text.textContent = `${m}m ${String(sec).padStart(2,'0')}s`;
+    } else {
+      text.textContent = `${sec}s`;
+    }
+
+    wrap.className = 'countdown-wrap' +
+      (remaining < 60000 ? ' critical' : remaining < 300000 ? ' warn' : '');
+
+    setTimeout(tick, 1000);
+  }
+
+  tick();
+}
 
 // ── Load metadata ─────────────────────────────────────────────────────────────
 
@@ -82,7 +125,6 @@ function loadImage(url) {
   img.onload = () => { hide('loader'); show('img-container'); };
   img.onerror = () => showUnsupported();
 
-  // Zoom for images
   let scale = 1;
   $('zoom-in-btn').addEventListener('click', () => {
     scale = Math.min(scale + 0.15, 4);
@@ -145,9 +187,7 @@ function loadAudio(url, name) {
 function showUnsupported() {
   hide('loader');
   $('unsupported-title').textContent = fileInfo?.filename || 'Unknown file';
-  $('unsupported-download').onclick = () => {
-    location.href = `/api/download/${shortId}`;
-  };
+  $('unsupported-download').onclick = () => { location.href = `/api/download/${shortId}`; };
   show('unsupported');
   hide('zoom-out-btn'); hide('zoom-in-btn'); hide('zoom-label');
 }
@@ -198,10 +238,13 @@ function closeSharePanel() {
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
-  const { filename, size, mimeType } = fileInfo;
+  const { filename, size, mimeType, expiresAt } = fileInfo;
   document.title = filename + ' — FileShare';
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
+
+  // Start countdown — synced across all reshares since they share the same expiresAt
+  startCountdown(expiresAt);
 
   const rawUrl = `/api/raw/${shortId}`;
 
@@ -215,19 +258,14 @@ function closeSharePanel() {
 
   if (mimeType === 'application/pdf') {
     await loadPDF(rawUrl);
-
   } else if (mimeType.startsWith('image/')) {
     loadImage(rawUrl);
-
   } else if (mimeType.startsWith('video/')) {
     loadVideo(rawUrl);
-
   } else if (mimeType.startsWith('audio/')) {
     loadAudio(rawUrl, filename);
-
   } else if (mimeType.startsWith('text/') || mimeType === 'application/json') {
     await loadText(rawUrl);
-
   } else {
     showUnsupported();
   }

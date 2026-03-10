@@ -36,11 +36,15 @@
         <label class="option-label">
           Expire link after
           <select id="expires-select">
-            <option value="">Never</option>
-            <option value="1">1 hour</option>
+            <option value="0.0167">1 minute</option>
+            <option value="0.0833">5 minutes</option>
+            <option value="0.25">15 minutes</option>
+            <option value="0.5">30 minutes</option>
+            <option value="1" selected>1 hour</option>
+            <option value="3">3 hours</option>
+            <option value="6">6 hours</option>
+            <option value="12">12 hours</option>
             <option value="24">24 hours</option>
-            <option value="168">7 days</option>
-            <option value="720">30 days</option>
           </select>
         </label>
       </div>

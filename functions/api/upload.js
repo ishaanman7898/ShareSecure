@@ -35,10 +35,10 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
   }
 
-  const expiresHours = parseInt(formData.get('expires_hours')) || null;
-  const expires_at = expiresHours
-    ? new Date(Date.now() + expiresHours * 3600 * 1000).toISOString()
-    : null;
+  // Clamp to 1 minute minimum, 24 hour maximum — no permanent storage
+  const rawHours = parseFloat(formData.get('expires_hours')) || 1;
+  const expiresHours = Math.min(Math.max(rawHours, 1/60), 24);
+  const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const shortId = generateId(8);
   const mimeType = file.type || 'application/octet-stream';

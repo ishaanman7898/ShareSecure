@@ -17,6 +17,11 @@
       </div>
     </div>
     <div class="topbar-right">
+      <div class="countdown-wrap" id="countdown-wrap">
+        <span class="countdown-icon">&#9201;</span>
+        <span class="countdown-text" id="countdown-text">--:--:--</span>
+      </div>
+      <div class="divider"></div>
       <button class="tb-btn" id="zoom-out-btn" title="Zoom out">&#x2212;</button>
       <span class="zoom-label" id="zoom-label">100%</span>
       <button class="tb-btn" id="zoom-in-btn" title="Zoom in">&#x2b;</button>
@@ -118,6 +123,16 @@
       <p class="unsupported-title" id="unsupported-title"></p>
       <p class="unsupported-sub">This file type can't be previewed.</p>
       <button class="btn btn-primary" id="unsupported-download">Download File</button>
+    </div>
+  </div>
+
+  <!-- Expired overlay -->
+  <div class="expired-overlay hidden" id="expired-overlay">
+    <div class="expired-box">
+      <div class="expired-icon">&#9203;</div>
+      <h2>This file has expired</h2>
+      <p>All links to this file are now dead. Nothing was kept.</p>
+      <a href="/" class="btn btn-primary">Upload a new file</a>
     </div>
   </div>
 

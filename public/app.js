@@ -21,11 +21,45 @@ const saveQrBtn = document.getElementById('save-qr-btn');
 
 const MAX_BYTES = 10 * 1024 * 1024;
 let selectedFile = null;
+let countdownInterval = null;
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function formatCountdown(ms) {
+  if (ms <= 0) return 'Expired';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
+function startResultCountdown(expiresAt) {
+  const el = resultExpires;
+  if (!expiresAt) { el.textContent = 'No expiry set'; return; }
+
+  const expiry = new Date(expiresAt).getTime();
+
+  function tick() {
+    const remaining = expiry - Date.now();
+    if (remaining <= 0) {
+      el.textContent = 'Expired';
+      el.style.color = '#ef4444';
+      clearInterval(countdownInterval);
+      return;
+    }
+    el.textContent = 'Expires in ' + formatCountdown(remaining);
+    el.style.color = remaining < 60000 ? '#ef4444' : remaining < 300000 ? '#f59e0b' : '';
+  }
+
+  tick();
+  countdownInterval = setInterval(tick, 1000);
 }
 
 function getFileIcon(mime) {
@@ -65,22 +99,17 @@ dropZone.addEventListener('dragover', e => {
   e.preventDefault();
   dropZone.classList.add('dragover');
 });
-
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
   if (file) setFile(file);
 });
-
 dropZone.addEventListener('click', () => fileInput.click());
-
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) setFile(fileInput.files[0]);
 });
-
 clearFile.addEventListener('click', clearSelection);
 
 // Upload
@@ -89,8 +118,8 @@ uploadBtn.addEventListener('click', async () => {
 
   const formData = new FormData();
   formData.append('file', selectedFile);
-  const expires = expiresSelect.value;
-  if (expires) formData.append('expires_hours', expires);
+  // Always send expiry — no "never" option
+  formData.append('expires_hours', expiresSelect.value);
 
   uploadBtn.disabled = true;
   progressWrap.classList.remove('hidden');
@@ -135,11 +164,11 @@ function showResult(data, file) {
   shortLink.textContent = data.shortUrl;
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
-  resultExpires.textContent = data.expiresAt
-    ? 'Expires ' + new Date(data.expiresAt).toLocaleString()
-    : 'Never expires';
 
-  // QR code via free API — no library needed
+  // Live countdown
+  if (countdownInterval) clearInterval(countdownInterval);
+  startResultCountdown(data.expiresAt);
+
   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff`;
   qrImg.src = qrApiUrl;
   saveQrBtn.href = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff&format=png`;
@@ -162,10 +191,11 @@ copyBtn.addEventListener('click', () => {
 
 // New upload
 newUploadBtn.addEventListener('click', () => {
+  if (countdownInterval) clearInterval(countdownInterval);
   clearSelection();
   progressWrap.classList.add('hidden');
   progressBar.style.width = '0%';
-  expiresSelect.value = '';
+  expiresSelect.value = '1';
   resultCard.classList.add('hidden');
   uploadCard.classList.remove('hidden');
 });
