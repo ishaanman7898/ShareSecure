@@ -62,21 +62,14 @@ async function initFilesDb() {
     )
   `);
 
-  // Add missing columns (ignore if already exist)
-  const addCols = [
+  // Add any missing columns — safe to run every startup (fails silently if already exists)
+  const migrations = [
     'ALTER TABLE files ADD COLUMN stored_filename TEXT',
     'ALTER TABLE files ADD COLUMN user_id INTEGER',
+    'ALTER TABLE files ADD COLUMN file_data TEXT',
+    'ALTER TABLE files ADD COLUMN delete_token TEXT',
   ];
-  for (const sql of addCols) {
-    await db.execute(sql).catch(() => {});
-  }
-
-  // Drop old NOT NULL columns from previous schema that break inserts (ignore if already gone)
-  const dropCols = [
-    'ALTER TABLE files DROP COLUMN file_data',
-    'ALTER TABLE files DROP COLUMN integrity_hash',
-  ];
-  for (const sql of dropCols) {
+  for (const sql of migrations) {
     await db.execute(sql).catch(() => {});
   }
 

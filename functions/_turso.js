@@ -1,87 +1,65 @@
-import { createClient } from '@libsql/client';
+import { createClient } from '@libsql/client/web';
 
-export const getTursoConfig = (env) => ({
-    org: env.TURSO_ORG || 'ishman',
-    region: env.TURSO_REGION || 'aws-us-east-2',
-    nodes: parseInt(env.TURSO_NODES || '3'),
-    apiToken: env.TURSO_API_TOKEN
-});
+// Files DB — uses TURSO_TOKEN directly (no API token needed)
+export function getFilesClient(env) {
+  return createClient({
+    url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
+    authToken: env.TURSO_TOKEN
+  });
+}
 
-// Shard based on the shortId
+// Auth DB — users table
+export function getAuthClient(env) {
+  return createClient({
+    url: env.TURSO_AUTH_URL,
+    authToken: env.TURSO_AUTH_TOKEN
+  });
+}
+
+// Backward-compat aliases used by existing functions
 export function getShardNode(shortId, nodes = 3) {
-    if (!shortId) return 1;
-    const charCode = shortId.charCodeAt(0);
-    return (charCode % nodes) + 1;
+  if (!shortId) return 1;
+  return (shortId.charCodeAt(0) % nodes) + 1;
 }
 
-// Fetch a node-specific auth token using the API token
-async function fetchNodeToken(config, nodeName) {
-    const url = `https://api.turso.tech/v1/organizations/${config.org}/databases/${nodeName}/auth/tokens`;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${config.apiToken}`,
-            'Content-Type': 'application/json'
-        }
-    });
-    const data = await res.json();
-    return data.jwt;
-}
-
-const tokenCache = new Map();
-
-export async function getTursoClient(nodeNumber, env) {
-    const config = getTursoConfig(env);
-    const nodeName = `fileshare-node-${nodeNumber}`;
-    const hostname = `${nodeName}-${config.org}.${config.region}.turso.io`;
-    const url = `libsql://${hostname}`;
-
-    let authToken = tokenCache.get(nodeName);
-    if (!authToken) {
-        authToken = await fetchNodeToken(config, nodeName);
-        tokenCache.set(nodeName, authToken);
-    }
-
-    return createClient({ url, authToken });
+export async function getTursoClient(nodeNum, env) {
+  return getFilesClient(env);
 }
 
 export async function getClientById(shortId, env) {
-    const config = getTursoConfig(env);
-    const nodeNum = getShardNode(shortId, config.nodes);
-    return await getTursoClient(nodeNum, env);
+  return getFilesClient(env);
 }
 
-// ── Background Global Purge ──────────────────────────────────────────────────
 export async function globalPurgeExpired(env, context, originShortId = null) {
-    const config = getTursoConfig(env);
+  const client = getFilesClient(env);
+  context.waitUntil(
+    client.execute(
+      "UPDATE files SET is_active = 0 WHERE expires_at < datetime('now') AND is_active = 1"
+    ).catch(() => {})
+  );
+}
 
-    // Pick a node to check for expired clusters
-    const checkNode = originShortId ? getShardNode(originShortId, config.nodes) : 1;
-    const client = await getTursoClient(checkNode, env);
+// SHA-256 using Web Crypto API (no Node.js crypto needed)
+export async function sha256(text) {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-    // 1. Find clusters that have just expired on this node
-    const res = await client.execute({
-        sql: "SELECT DISTINCT cluster_id FROM files WHERE expires_at < datetime('now') AND cluster_id IS NOT NULL",
-        args: []
-    });
-
-    const expiredClusters = res.rows.map(r => r.cluster_id);
-    if (expiredClusters.length === 0) {
-        // Fallback: simple local cleanup if no clusters found
-        context.waitUntil(client.execute("DELETE FROM files WHERE expires_at < datetime('now')"));
-        return;
-    }
-
-    // 2. Multi-node broadcast: Scrub these clusters everywhere
-    for (const clusterId of expiredClusters) {
-        for (let i = 1; i <= config.nodes; i++) {
-            const shardClient = await getTursoClient(i, env);
-            context.waitUntil(
-                shardClient.execute({
-                    sql: 'DELETE FROM files WHERE cluster_id = ?',
-                    args: [clusterId]
-                })
-            );
-        }
-    }
+// Decode auth bearer token → { username, userId } or null
+export function decodeToken(authHeader) {
+  if (!authHeader) return null;
+  try {
+    const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+    const decoded = atob(tokenPart);
+    const parts = decoded.split(':');
+    if (parts.length < 2) return null;
+    const userId = parseInt(parts[parts.length - 1], 10);
+    if (isNaN(userId)) return null;
+    const username = parts.slice(0, -1).join(':');
+    return { username, userId };
+  } catch {
+    return null;
+  }
 }

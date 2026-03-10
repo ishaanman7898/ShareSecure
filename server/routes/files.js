@@ -58,7 +58,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 
   const short_id = nanoid(8);
-  const expiresHours = parseInt(req.body.expires_hours) || null;
+  const expiresHours = parseFloat(req.body.expires_hours) || null;
   const expires_at = expiresHours
     ? new Date(Date.now() + expiresHours * 3600 * 1000).toISOString()
     : null;
