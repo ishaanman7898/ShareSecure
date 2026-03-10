@@ -1,4 +1,4 @@
-import { getAuthClient, sha256 } from '../../../_turso.js';
+import { getAuthClient, sha256 } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;

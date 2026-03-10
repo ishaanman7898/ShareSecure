@@ -1,4 +1,4 @@
-import { getFilesClient, decodeToken } from '../../../../_turso.js';
+import { getFilesClient, decodeToken } from '../../../_turso.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
