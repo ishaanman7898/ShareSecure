@@ -162,6 +162,7 @@ uploadBtn.addEventListener('click', async () => {
 
 function showResult(data, file) {
   shortLink.textContent = data.shortUrl;
+  document.getElementById('view-btn').href = data.shortUrl;
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
 

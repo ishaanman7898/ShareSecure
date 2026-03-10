@@ -324,4 +324,10 @@ select:focus { border-color: var(--accent); }
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
 
+.result-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .hidden { display: none !important; }

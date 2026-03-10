@@ -35,7 +35,12 @@ function startCountdown(expiresAt) {
     if (remaining <= 0) {
       text.textContent = 'Expired';
       wrap.className = 'countdown-wrap critical';
-      show('expired-overlay');
+      // Wipe the document content immediately
+      document.body.innerHTML = '';
+      // Try to close the tab — works if opened via JS; browsers block it otherwise
+      window.close();
+      // Fallback: navigate away so content is gone regardless
+      setTimeout(() => location.replace('/expired.html'), 300);
       return;
     }
 
