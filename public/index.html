@@ -72,9 +72,9 @@
       <div class="qr-section">
         <p class="qr-label">Scan to open on any device</p>
         <div class="qr-wrap">
-          <img id="qr-img" alt="QR code" width="200" height="200" />
+          <div id="qr-canvas"></div>
         </div>
-        <a class="btn btn-ghost" id="save-qr-btn" download="fileshare-qr.png">Save QR Image</a>
+        <button class="btn btn-ghost" id="save-qr-btn">Save QR Image</button>
       </div>
 
       <div class="result-meta">
@@ -89,6 +89,7 @@
     </div>
   </div>
 
+  <script src="/qrcode.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

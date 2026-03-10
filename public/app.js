@@ -16,8 +16,9 @@ const resultSize = document.getElementById('result-size');
 const resultExpires = document.getElementById('result-expires');
 const newUploadBtn = document.getElementById('new-upload-btn');
 const expiresSelect = document.getElementById('expires-select');
-const qrImg = document.getElementById('qr-img');
+const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
+let qrInstance = null;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 let selectedFile = null;
@@ -170,9 +171,20 @@ function showResult(data, file) {
   if (countdownInterval) clearInterval(countdownInterval);
   startResultCountdown(data.expiresAt);
 
-  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff`;
-  qrImg.src = qrApiUrl;
-  saveQrBtn.href = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff&format=png`;
+  // Generate QR entirely client-side — no third party ever sees the URL
+  qrCanvasEl.innerHTML = '';
+  qrInstance = new QRCode(qrCanvasEl, {
+    text: data.shortUrl, width: 200, height: 200,
+    colorDark: '#000000', colorLight: '#ffffff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+
+  saveQrBtn.onclick = () => {
+    const img = qrCanvasEl.querySelector('img') || qrCanvasEl.querySelector('canvas');
+    const url = img.tagName === 'CANVAS' ? img.toDataURL('image/png') : img.src;
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fileshare-qr.png'; a.click();
+  };
 
   uploadCard.classList.add('hidden');
   resultCard.classList.remove('hidden');

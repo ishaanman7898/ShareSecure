@@ -1,245 +1,316 @@
 import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
-
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Block all download vectors ────────────────────────────────────────────────
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && ['s','p','u'].includes(e.key.toLowerCase())) e.preventDefault();
+});
+window.addEventListener('beforeprint', () => { document.body.innerHTML = '<p style="padding:40px;font-size:1.2rem">Printing is disabled.</p>'; });
 
-const shortId = location.pathname.split('/r/')[1];
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
 const $ = id => document.getElementById(id);
-
-function formatSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-}
-
 function show(id) { $(id).classList.remove('hidden'); }
 function hide(id) { $(id).classList.add('hidden'); }
+function formatSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+// ── Auto-assign a fresh personal ID on every view ────────────────────────────
+// This updates the URL bar silently so each viewer has a unique link
+let myShortId = rawShortId;
+
+async function assignFreshId() {
+  try {
+    const res = await fetch(`/api/reshare/${rawShortId}`, { method: 'POST' });
+    const data = await res.json();
+    if (data.shortId) {
+      myShortId = data.shortId;
+      history.replaceState(null, '', `/r/${myShortId}`);
+    }
+  } catch (_) { /* fall back to original id */ }
+}
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
-
 function startCountdown(expiresAt) {
-  if (!expiresAt) {
-    $('countdown-wrap').style.display = 'none';
-    return;
-  }
-
+  if (!expiresAt) { $('countdown-wrap').style.display = 'none'; return; }
   const expiry = new Date(expiresAt).getTime();
   const wrap = $('countdown-wrap');
   const text = $('countdown-text');
 
   function tick() {
-    const remaining = expiry - Date.now();
-
-    if (remaining <= 0) {
-      text.textContent = 'Expired';
-      wrap.className = 'countdown-wrap critical';
-      // Wipe the document content immediately
+    const rem = expiry - Date.now();
+    if (rem <= 0) {
       document.body.innerHTML = '';
-      // Try to close the tab — works if opened via JS; browsers block it otherwise
       window.close();
-      // Fallback: navigate away so content is gone regardless
       setTimeout(() => location.replace('/expired.html'), 300);
       return;
     }
-
-    const s = Math.floor(remaining / 1000);
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = s % 60;
-
-    if (h > 0) {
-      text.textContent = `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
-    } else if (m > 0) {
-      text.textContent = `${m}m ${String(sec).padStart(2,'0')}s`;
-    } else {
-      text.textContent = `${sec}s`;
-    }
-
-    wrap.className = 'countdown-wrap' +
-      (remaining < 60000 ? ' critical' : remaining < 300000 ? ' warn' : '');
-
+    const s = Math.floor(rem / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    text.textContent = h > 0
+      ? `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`
+      : m > 0 ? `${m}m ${String(sec).padStart(2,'0')}s` : `${sec}s`;
+    wrap.className = 'countdown-wrap' + (rem < 60000 ? ' critical' : rem < 300000 ? ' warn' : '');
     setTimeout(tick, 1000);
   }
-
   tick();
 }
 
 // ── Load metadata ─────────────────────────────────────────────────────────────
-
 let fileInfo = null;
-
 async function loadMeta() {
-  const res = await fetch(`/api/info/${shortId}`);
-  if (!res.ok) {
-    $('doc-title').textContent = 'File not found';
-    hide('loader');
-    return null;
-  }
+  const res = await fetch(`/api/info/${rawShortId}`);
+  if (!res.ok) { $('doc-title').textContent = 'File not found'; hide('loader'); return null; }
   return res.json();
 }
 
-// ── PDF Viewer ────────────────────────────────────────────────────────────────
+// ── Drawing tools ─────────────────────────────────────────────────────────────
+let currentTool = 'pen';
+let currentColor = '#e74c3c';
+const annotCanvases = [];
 
-let pdfDoc = null;
-let currentPage = 1;
-let currentScale = 1.4;
+function setupDrawing(canvas) {
+  let drawing = false, lx = 0, ly = 0;
+  const ctx = canvas.getContext('2d');
 
-async function renderPage(num) {
-  const page = await pdfDoc.getPage(num);
-  const viewport = page.getViewport({ scale: currentScale });
-  const canvas = $('pdf-canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  $('page-info').textContent = `Page ${num} of ${pdfDoc.numPages}`;
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+    const src = e.touches ? e.touches[0] : e;
+    return [(src.clientX - rect.left) * sx, (src.clientY - rect.top) * sy];
+  }
+
+  function startDraw(e) {
+    e.preventDefault();
+    drawing = true;
+    [lx, ly] = getPos(e);
+  }
+
+  function moveDraw(e) {
+    e.preventDefault();
+    if (!drawing) return;
+    const [x, y] = getPos(e);
+    ctx.save();
+    if (currentTool === 'pen') {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = currentColor;
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    } else if (currentTool === 'highlight') {
+      ctx.globalAlpha = 0.35;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = '#FFD600';
+      ctx.lineWidth = 22;
+      ctx.lineCap = 'square';
+    } else if (currentTool === 'eraser') {
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = 24;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    }
+    ctx.beginPath();
+    ctx.moveTo(lx, ly); ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.restore();
+    lx = x; ly = y;
+  }
+
+  function endDraw() { drawing = false; }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', moveDraw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove', moveDraw, { passive: false });
+  canvas.addEventListener('touchend', endDraw);
 }
+
+// ── PDF Viewer (scroll mode, all pages) ───────────────────────────────────────
+let pdfDoc = null;
+let zoomScale = 1.4;
 
 async function loadPDF(url) {
-  show('pdf-container');
-  show('page-nav');
-
   pdfDoc = await pdfjsLib.getDocument(url).promise;
-  await renderPage(1);
-  hide('loader');
+  const container = $('pdf-container');
+  container.innerHTML = '';
+  annotCanvases.length = 0;
 
-  $('prev-page').addEventListener('click', async () => {
-    if (currentPage > 1) { currentPage--; await renderPage(currentPage); }
-  });
-  $('next-page').addEventListener('click', async () => {
-    if (currentPage < pdfDoc.numPages) { currentPage++; await renderPage(currentPage); }
-  });
+  for (let n = 1; n <= pdfDoc.numPages; n++) {
+    const page = await pdfDoc.getPage(n);
+    const vp = page.getViewport({ scale: zoomScale });
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'pdf-page-wrapper';
+    wrapper.style.width = vp.width + 'px';
+    wrapper.style.height = vp.height + 'px';
+
+    const pdfCanvas = document.createElement('canvas');
+    pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
+    pdfCanvas.className = 'pdf-page-canvas';
+
+    const annotCanvas = document.createElement('canvas');
+    annotCanvas.width = vp.width; annotCanvas.height = vp.height;
+    annotCanvas.className = 'pdf-annot-canvas';
+    annotCanvases.push(annotCanvas);
+
+    wrapper.appendChild(pdfCanvas);
+    wrapper.appendChild(annotCanvas);
+    container.appendChild(wrapper);
+
+    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+    setupDrawing(annotCanvas);
+  }
+
+  hide('loader');
+  show('pdf-container');
+  show('draw-toolbar');
+
+  // Zoom re-renders all pages
+  async function reRender() {
+    const pages = container.querySelectorAll('.pdf-page-wrapper');
+    for (let n = 1; n <= pdfDoc.numPages; n++) {
+      const page = await pdfDoc.getPage(n);
+      const vp = page.getViewport({ scale: zoomScale });
+      const wrapper = pages[n - 1];
+      const pdfCanvas = wrapper.querySelector('.pdf-page-canvas');
+      const annotCanvas = wrapper.querySelector('.pdf-annot-canvas');
+      wrapper.style.width = vp.width + 'px';
+      wrapper.style.height = vp.height + 'px';
+      pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
+      // Save annotations, resize, restore
+      const savedImg = new Image();
+      savedImg.src = annotCanvas.toDataURL();
+      annotCanvas.width = vp.width; annotCanvas.height = vp.height;
+      savedImg.onload = () => annotCanvas.getContext('2d').drawImage(savedImg, 0, 0, vp.width, vp.height);
+      await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+    }
+  }
+
   $('zoom-in-btn').addEventListener('click', async () => {
-    currentScale = Math.min(currentScale + 0.2, 4);
-    $('zoom-label').textContent = Math.round(currentScale / 1.4 * 100) + '%';
-    await renderPage(currentPage);
+    zoomScale = Math.min(zoomScale + 0.25, 4);
+    $('zoom-label').textContent = Math.round(zoomScale / 1.4 * 100) + '%';
+    await reRender();
   });
   $('zoom-out-btn').addEventListener('click', async () => {
-    currentScale = Math.max(currentScale - 0.2, 0.4);
-    $('zoom-label').textContent = Math.round(currentScale / 1.4 * 100) + '%';
-    await renderPage(currentPage);
+    zoomScale = Math.max(zoomScale - 0.25, 0.5);
+    $('zoom-label').textContent = Math.round(zoomScale / 1.4 * 100) + '%';
+    await reRender();
+  });
+
+  // Drawing toolbar
+  document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTool = btn.dataset.tool;
+    });
+  });
+
+  $('color-picker').addEventListener('input', e => { currentColor = e.target.value; });
+
+  $('clear-btn').addEventListener('click', () => {
+    annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
   });
 }
 
-// ── Image Viewer ──────────────────────────────────────────────────────────────
-
+// ── Image ─────────────────────────────────────────────────────────────────────
 function loadImage(url) {
   const img = $('img-viewer');
   img.src = url;
   img.onload = () => { hide('loader'); show('img-container'); };
   img.onerror = () => showUnsupported();
-
-  let scale = 1;
-  $('zoom-in-btn').addEventListener('click', () => {
-    scale = Math.min(scale + 0.15, 4);
-    img.style.transform = `scale(${scale})`;
-    img.style.transformOrigin = 'top center';
-    $('zoom-label').textContent = Math.round(scale * 100) + '%';
-  });
-  $('zoom-out-btn').addEventListener('click', () => {
-    scale = Math.max(scale - 0.15, 0.2);
-    img.style.transform = `scale(${scale})`;
-    img.style.transformOrigin = 'top center';
-    $('zoom-label').textContent = Math.round(scale * 100) + '%';
-  });
+  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Text Viewer ───────────────────────────────────────────────────────────────
-
+// ── Text ──────────────────────────────────────────────────────────────────────
 async function loadText(url) {
-  const res = await fetch(url);
-  const text = await res.text();
+  const text = await fetch(url).then(r => r.text());
   $('text-doc').textContent = text;
-  hide('loader');
-  show('text-container');
-
-  let size = 11;
-  $('zoom-in-btn').addEventListener('click', () => {
-    size = Math.min(size + 1, 28);
-    $('text-doc').style.fontSize = size + 'pt';
-    $('zoom-label').textContent = Math.round(size / 11 * 100) + '%';
-  });
-  $('zoom-out-btn').addEventListener('click', () => {
-    size = Math.max(size - 1, 6);
-    $('text-doc').style.fontSize = size + 'pt';
-    $('zoom-label').textContent = Math.round(size / 11 * 100) + '%';
-  });
+  hide('loader'); show('text-container');
+  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
 // ── Video ─────────────────────────────────────────────────────────────────────
-
 function loadVideo(url) {
   const v = $('video-player');
   v.src = url;
   v.oncanplay = () => { hide('loader'); show('video-container'); };
   v.onerror = () => showUnsupported();
-  hide('zoom-out-btn'); hide('zoom-in-btn'); hide('zoom-label');
+  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
-
 function loadAudio(url, name) {
   $('audio-player').src = url;
   $('audio-title').textContent = name;
-  hide('loader');
-  show('audio-container');
-  hide('zoom-out-btn'); hide('zoom-in-btn'); hide('zoom-label');
+  hide('loader'); show('audio-container');
+  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
 // ── Unsupported ───────────────────────────────────────────────────────────────
-
 function showUnsupported() {
   hide('loader');
   $('unsupported-title').textContent = fileInfo?.filename || 'Unknown file';
-  $('unsupported-download').onclick = () => { location.href = `/api/download/${shortId}`; };
   show('unsupported');
-  hide('zoom-out-btn'); hide('zoom-in-btn'); hide('zoom-label');
+  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
 // ── Share panel ───────────────────────────────────────────────────────────────
+function makeQR(divEl, url) {
+  divEl.innerHTML = '';
+  new QRCode(divEl, {
+    text: url, width: 180, height: 180,
+    colorDark: '#000', colorLight: '#fff',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
 
 function openSharePanel() {
-  show('share-overlay');
-  show('share-panel');
-  show('share-generating');
-  hide('share-ready');
+  show('share-overlay'); show('share-panel');
+  show('share-generating'); hide('share-ready');
 
-  fetch(`/api/reshare/${shortId}`, { method: 'POST' })
+  fetch(`/api/reshare/${myShortId}`, { method: 'POST' })
     .then(r => r.json())
     .then(data => {
       $('share-link-text').textContent = data.shortUrl;
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff`;
-      $('share-qr-img').src = qrUrl;
-      $('share-save-btn').href = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(data.shortUrl)}&margin=10&bgcolor=ffffff&format=png`;
-      hide('share-generating');
-      show('share-ready');
+      makeQR($('share-qr-div'), data.shortUrl);
+      hide('share-generating'); show('share-ready');
 
       $('share-copy-btn').onclick = () => {
         navigator.clipboard.writeText(data.shortUrl).then(() => {
           $('share-copy-btn').textContent = 'Copied!';
           $('share-copy-btn').classList.add('copied');
-          setTimeout(() => {
-            $('share-copy-btn').textContent = 'Copy';
-            $('share-copy-btn').classList.remove('copied');
-          }, 2000);
+          setTimeout(() => { $('share-copy-btn').textContent = 'Copy'; $('share-copy-btn').classList.remove('copied'); }, 2000);
         });
+      };
+
+      $('share-save-qr').onclick = () => {
+        const img = $('share-qr-div').querySelector('canvas') || $('share-qr-div').querySelector('img');
+        const a = document.createElement('a');
+        a.href = img.tagName === 'CANVAS' ? img.toDataURL('image/png') : img.src;
+        a.download = 'share-qr.png'; a.click();
       };
     })
     .catch(() => {
-      hide('share-generating');
-      $('share-panel-body').innerHTML = '<p style="color:red;font-size:.85rem">Failed to generate link. Try again.</p>';
+      $('share-panel-body').innerHTML = '<p style="color:red;padding:20px;font-size:.85rem">Failed to generate link.</p>';
     });
 }
 
-function closeSharePanel() {
-  hide('share-overlay');
-  hide('share-panel');
-}
+function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-
 (async () => {
+  // Silently give this viewer a fresh unique ID before anything loads
+  await assignFreshId();
+
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
@@ -247,31 +318,18 @@ function closeSharePanel() {
   document.title = filename + ' — FileShare';
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
-
-  // Start countdown — synced across all reshares since they share the same expiresAt
   startCountdown(expiresAt);
-
-  const rawUrl = `/api/raw/${shortId}`;
-
-  $('download-btn').addEventListener('click', () => {
-    location.href = `/api/download/${shortId}`;
-  });
 
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);
 
-  if (mimeType === 'application/pdf') {
-    await loadPDF(rawUrl);
-  } else if (mimeType.startsWith('image/')) {
-    loadImage(rawUrl);
-  } else if (mimeType.startsWith('video/')) {
-    loadVideo(rawUrl);
-  } else if (mimeType.startsWith('audio/')) {
-    loadAudio(rawUrl, filename);
-  } else if (mimeType.startsWith('text/') || mimeType === 'application/json') {
-    await loadText(rawUrl);
-  } else {
-    showUnsupported();
-  }
+  const rawUrl = `/api/raw/${myShortId}`;
+
+  if (mimeType === 'application/pdf') { await loadPDF(rawUrl); }
+  else if (mimeType.startsWith('image/')) { loadImage(rawUrl); }
+  else if (mimeType.startsWith('video/')) { loadVideo(rawUrl); }
+  else if (mimeType.startsWith('audio/')) { loadAudio(rawUrl, filename); }
+  else if (mimeType.startsWith('text/') || mimeType === 'application/json') { await loadText(rawUrl); }
+  else { showUnsupported(); }
 })();

@@ -8,7 +8,13 @@ function base64ToBuffer(base64) {
 }
 
 export async function onRequestGet(context) {
-  const { params, env } = context;
+  const { params, env, request } = context;
+
+  // Block direct browser navigation — only allow same-origin fetch (e.g. from PDF.js)
+  const fetchMode = request.headers.get('Sec-Fetch-Mode');
+  if (fetchMode === 'navigate') {
+    return new Response('Direct access not allowed', { status: 403 });
+  }
 
   let file = await env.DB.prepare(
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'

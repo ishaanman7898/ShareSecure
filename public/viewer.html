@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/viewer.css" />
 </head>
 <body>
-  <!-- Top bar (Google Docs style) -->
+  <!-- Top bar -->
   <div class="topbar" id="topbar">
     <div class="topbar-left">
       <div class="logo">&#128196;</div>
@@ -28,17 +28,8 @@
       <span class="zoom-label" id="zoom-label">100%</span>
       <button class="tb-btn" id="zoom-in-btn" title="Zoom in">&#x2b;</button>
       <div class="divider"></div>
-      <button class="tb-btn" id="download-btn" title="Download">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        Download
-      </button>
-      <div class="divider"></div>
-      <button class="tb-btn tb-btn-share" id="share-btn" title="Get my share link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <button class="tb-btn tb-btn-share" id="share-btn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
           <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
           <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
@@ -48,66 +39,40 @@
     </div>
   </div>
 
-  <!-- Share panel (slide in from right) -->
-  <div class="share-overlay hidden" id="share-overlay"></div>
-  <div class="share-panel hidden" id="share-panel">
-    <div class="share-panel-header">
-      <span>Your unique link</span>
-      <button class="share-close" id="share-close">&#x2715;</button>
-    </div>
-    <div class="share-panel-body">
-      <div id="share-generating" class="share-generating">
-        <div class="spinner-sm"></div>
-        <span>Generating your link...</span>
-      </div>
-      <div id="share-ready" class="hidden">
-        <p class="share-note">This link is <strong>yours only</strong>. No one can trace it back to whoever shared it with you.</p>
-        <div class="share-link-box">
-          <span id="share-link-text"></span>
-          <button class="share-copy-btn" id="share-copy-btn">Copy</button>
-        </div>
-        <div class="share-qr-wrap">
-          <img id="share-qr-img" alt="Your QR code" width="180" height="180" />
-        </div>
-        <a class="share-save-btn" id="share-save-btn" download="my-share-qr.png">Save QR</a>
-        <p class="share-sub">Anyone who scans this can generate <em>their own</em> link too.</p>
-      </div>
-    </div>
+  <!-- Drawing toolbar (PDF only) -->
+  <div class="draw-toolbar hidden" id="draw-toolbar">
+    <button class="draw-btn active" data-tool="pen" title="Pen">&#9999;</button>
+    <button class="draw-btn" data-tool="highlight" title="Highlight">&#9642;</button>
+    <button class="draw-btn" data-tool="eraser" title="Eraser">&#9723;</button>
+    <div class="draw-divider"></div>
+    <input type="color" id="color-picker" value="#e74c3c" title="Colour" />
+    <div class="draw-divider"></div>
+    <button class="draw-btn" id="clear-btn" title="Clear all annotations">&#128465;</button>
   </div>
 
-  <!-- Page nav (PDF only) -->
-  <div class="page-nav hidden" id="page-nav">
-    <button class="tb-btn" id="prev-page">&#8592;</button>
-    <span id="page-info">Page 1 of 1</span>
-    <button class="tb-btn" id="next-page">&#8594;</button>
-  </div>
-
-  <!-- Main viewer area -->
+  <!-- Main area -->
   <div class="viewer-shell" id="viewer-shell">
-    <!-- Loading spinner -->
     <div class="loader" id="loader">
       <div class="spinner"></div>
-      <span>Loading document...</span>
+      <span>Loading...</span>
     </div>
 
-    <!-- PDF canvas container -->
-    <div class="pdf-container hidden" id="pdf-container">
-      <canvas id="pdf-canvas"></canvas>
-    </div>
+    <!-- PDF: all pages stacked, each with annotation canvas overlay -->
+    <div class="pdf-scroll-container hidden" id="pdf-container"></div>
 
-    <!-- Image viewer -->
+    <!-- Image -->
     <div class="img-container hidden" id="img-container">
-      <img id="img-viewer" alt="File preview" />
+      <img id="img-viewer" alt="Preview" draggable="false" />
     </div>
 
-    <!-- Text / code viewer -->
+    <!-- Text -->
     <div class="text-container hidden" id="text-container">
       <div class="text-doc" id="text-doc"></div>
     </div>
 
     <!-- Video -->
     <div class="media-container hidden" id="video-container">
-      <video id="video-player" controls></video>
+      <video id="video-player" controls controlslist="nodownload nofullscreen" disablePictureInPicture></video>
     </div>
 
     <!-- Audio -->
@@ -115,7 +80,7 @@
       <div class="audio-card">
         <div class="audio-icon">&#127925;</div>
         <p class="audio-title" id="audio-title"></p>
-        <audio id="audio-player" controls></audio>
+        <audio id="audio-player" controls controlslist="nodownload"></audio>
       </div>
     </div>
 
@@ -123,8 +88,34 @@
     <div class="unsupported hidden" id="unsupported">
       <div class="unsupported-icon">&#128196;</div>
       <p class="unsupported-title" id="unsupported-title"></p>
-      <p class="unsupported-sub">This file type can't be previewed.</p>
-      <button class="btn btn-primary" id="unsupported-download">Download File</button>
+      <p class="unsupported-sub">This file type can't be previewed in the browser.</p>
+    </div>
+  </div>
+
+  <!-- Share panel -->
+  <div class="share-overlay hidden" id="share-overlay"></div>
+  <div class="share-panel hidden" id="share-panel">
+    <div class="share-panel-header">
+      <span>Share this file</span>
+      <button class="share-close" id="share-close">&#x2715;</button>
+    </div>
+    <div class="share-panel-body" id="share-panel-body">
+      <div id="share-generating" class="share-generating">
+        <div class="spinner-sm"></div>
+        <span>Generating your link...</span>
+      </div>
+      <div id="share-ready" class="hidden">
+        <p class="share-note">Fresh link — <strong>untraceable</strong> to whoever shared with you.</p>
+        <div class="share-link-box">
+          <span id="share-link-text"></span>
+          <button class="share-copy-btn" id="share-copy-btn">Copy</button>
+        </div>
+        <div class="share-qr-wrap">
+          <div id="share-qr-div"></div>
+        </div>
+        <button class="share-save-btn" id="share-save-qr">Save QR</button>
+        <p class="share-sub">Anyone who scans this gets <em>their own</em> unique link too.</p>
+      </div>
     </div>
   </div>
 
@@ -132,13 +123,13 @@
   <div class="expired-overlay hidden" id="expired-overlay">
     <div class="expired-box">
       <div class="expired-icon">&#9203;</div>
-      <h2>This file has expired</h2>
-      <p>All links to this file are now dead. Nothing was kept.</p>
+      <h2>File expired</h2>
+      <p>All links to this file are now dead.</p>
       <a href="/" class="btn btn-primary">Upload a new file</a>
     </div>
   </div>
 
-  <!-- PDF.js from CDN -->
+  <script src="/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs" type="module"></script>
   <script type="module" src="/viewer.js"></script>
 </body>
