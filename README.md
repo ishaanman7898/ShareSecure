@@ -1,52 +1,30 @@
-# FileShare
+# ShareSecure
 
-**Untraceable, ephemeral file sharing with blockchain-level integrity verification.**
+A dead-simple way to share files that actually respects your privacy.
 
-Upload a file -> Get a link -> Share it -> Every recipient gets their own unique, untraceable link. When the timer hits zero, everything is gone. No accounts. No tracking. No logs.
+Upload a file, get a link, share it. Everyone who opens it gets their own unique link — there's no trail connecting them. When the expiry hits zero, it's gone for good. No accounts to manage, no tracking, no bullshit.
 
 ---
 
-## Features
+## What You Get
 
-### Untraceability by Design
+**Privacy First**
+- Every link is completely unique. Share with Alice, she gets her own link. If she shares it with Bob, Bob gets a different link. There's no chain, no way to trace who got it from who.
+- The database is basically useless to hackers — every row looks identical. They can't tell who uploaded, who viewed, or who reshared.
+- No IP logging, no cookies, no user accounts. Your activity is invisible.
 
-- **Every link is unique** -- When someone opens your shared link, they automatically receive their own fresh URL. If they reshare, the next person gets yet another new URL. There is **no chain** connecting any two links.
-- **Database uniformity** -- Every single row in the database looks structurally identical. All rows contain their own copy of `file_data`, `delete_token`, and `integrity_hash`. If the database is fully compromised, there is **no way** to identify who uploaded the file vs. who received it vs. who reshared it.
-- **No metadata leaks** -- No IP addresses, no user agents, no timestamps of access, no cookies, no accounts. The only timestamp stored is the upload time (which is jittered across copies).
-- **Zero referrer/fingerprinting** -- All responses strip `Server`, `X-Powered-By`, `CF-Ray`, and other fingerprinting headers. `Referrer-Policy: no-referrer` prevents link source tracking.
+**It Actually Works**
+- Every file is verified with SHA-256. If someone tries to mess with it, you'll know immediately.
+- Each person who accesses a file gets their own delete token. You're in control of what you can remove.
+- Files automatically expire (1 minute to 24 hours). When time's up, they're gone forever.
 
-### Blockchain-Level Security
+**Annotations (PDFs)**
+- Mark up PDFs with pen, highlighter, or eraser. Your annotations stay with your link only.
+- Save them, don't save them — it's up to you. Browser will warn you if you're about to lose unsaved work.
 
-- **SHA-256 integrity hashing** -- Every uploaded file is hashed with SHA-256 at upload time. The hash is stored alongside the file and **verified on every single access**. If even one byte is tampered with in the database, the file will NOT be served.
-- **Tamper-evident responses** -- When integrity verification fails, the server returns HTTP 422 with a clear message: "Integrity check failed -- file may have been tampered with."
-- **Hash verification badge** -- The viewer shows a green `SHA-256: a1b2c3d4...` badge in the toolbar so users can visually confirm integrity.
-- **Delete token authentication** -- Each file holder gets a unique cryptographic delete token (24 random characters). Only the token holder can delete their copy.
-- **Zero-Knowledge Clusters** -- Database rows are grouped by a cryptographic hash derived from the owner's secret token. An attacker cannot group related links; only the owner can trigger a global wipe.
-
-### Ephemeral by Default
-
-- All files **must** expire -- minimum 1 minute, maximum 24 hours
-- No permanent storage option exists
-- Expired files are automatically purged from the database on every API request
-- When expiry hits zero, the viewer destroys itself and redirects to an expired page
-
-### Persistent Annotations (PDF)
-
-- **Pen, Highlighter, Eraser** tools with color picker
-- **Save button** persists annotations to the database per-link
-- Each link holder gets **their own** annotations -- resharing doesn't carry annotations
-- Unsaved changes show a visual warning
-- Browser warns before closing with unsaved annotations
-
-### Anti-Download Protection
-
-- Right-click disabled
-- Ctrl+S / Ctrl+P / Ctrl+U blocked
-- Print blocked (page content replaced)
-- Direct URL navigation to raw files returns 403
-- Images and text have `pointer-events: none`
-- Video controls hide download/PiP buttons
-- All content served with `no-store` cache headers
+**Built-In Protection**
+- Can't right-click, can't print, can't save. We block Ctrl+S, Ctrl+P, the whole thing.
+- No caching, ever. Devices won't keep copies hanging around.
 
 ---
 
@@ -108,54 +86,37 @@ CREATE TABLE IF NOT EXISTS files (
 
 ---
 
-## Security Headers (Applied to ALL Responses)
+## Security (The Boring But Important Stuff)
 
-| Header | Value | Purpose |
-|--------|-------|---------|
-| `Cache-Control` | `no-store, no-cache, must-revalidate, private` | No browser caching |
-| `Pragma` | `no-cache` | Legacy cache prevention |
-| `Referrer-Policy` | `no-referrer` | No referrer leaks |
-| `X-Robots-Tag` | `noindex, nofollow, noarchive, nosnippet` | No search engine indexing |
-| `X-Frame-Options` | `DENY` | No iframe embedding |
-| `Content-Security-Policy` | `frame-ancestors 'none'` | CSP iframe block |
-| `X-Content-Type-Options` | `nosniff` | Prevent MIME sniffing |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` | Force HTTPS |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), interest-cohort=()` | Block device APIs + FLoC |
-| `Cross-Origin-Opener-Policy` | `same-origin` | Isolate browsing context |
-| `Cross-Origin-Resource-Policy` | `same-origin` | Block cross-origin reads |
-
-Stripped headers: `Server`, `X-Powered-By`, `CF-Cache-Status`, `CF-Ray`, `cf-request-id`
+We strip all identifying headers, block caching everywhere, force HTTPS, prevent search engine indexing, and block browser APIs you don't need. No referrer leaks, no fingerprinting, no iframe embedding. The file is verified on every single access. If something's wrong, you'll know.
 
 ---
 
-## How Untraceability Works
+## How It Actually Works
 
 ```
- Uploader                  Viewer A                 Viewer B
-    |                         |                        |
-    |  uploads file           |                        |
-    |  gets link: /r/ABC123   |                        |
-    |  (kept as owner link)   |                        |
-    |                         |                        |
-    |  shares /r/ABC123 --->  |                        |
-    |                         |  opens /r/ABC123       |
-    |                         |  auto-assigned /r/XYZ  |
-    |                         |  (DB row: independent) |
-    |                         |                        |
-    |                         |  shares /r/XYZ ---->  |
-    |                         |                        |  opens /r/XYZ
-    |                         |                        |  auto-assigned /r/QRS
-    |                         |                        |  (DB row: independent)
-    |                         |                        |
-    V                         V                        V
-  DB Row: ABC123            DB Row: XYZ              DB Row: QRS
-  file_data: [YES]          file_data: [YES]         file_data: [YES]
-  delete_token: [YES]       delete_token: [YES]      delete_token: [YES]
-  integrity_hash: [YES]     integrity_hash: [YES]    integrity_hash: [YES]
-  root_hash: [GROUPED]      root_hash: [GROUPED]     root_hash: [GROUPED]
-  
-  ALL THREE ROWS ARE STRUCTURALLY IDENTICAL.
-  No way to determine who uploaded, who viewed, who reshared.
+ You                      Friend A                  Friend B
+   |                         |                         |
+   |  upload document        |                         |
+   |  get link: /r/ABC123    |                         |
+   |  (keep it)              |                         |
+   |                         |                         |
+   |  send /r/ABC123 ------> |                         |
+   |                         |  they open it           |
+   |                         |  get new link: /r/XYZ   |
+   |                         |  (completely separate)  |
+   |                         |                         |
+   |                         |  share /r/XYZ -------> |
+   |                         |                         |  they open it
+   |                         |                         |  get link: /r/QRS
+   |                         |                         |  (totally independent)
+   |                         |                         |
+   V                         V                         V
+  DB Row ABC123            DB Row XYZ                DB Row QRS
+  [identical structure]    [identical structure]    [identical structure]
+
+  Even if the database leaks, nobody can figure out
+  who shared with who. All the rows look the same.
 ```
 
 ---
@@ -223,16 +184,25 @@ Delete a file (requires the delete token). Root deletion triggers global wipe.
 
 ---
 
-## Security Model
+## What If...
 
-- **Database Compromise**: Every row is structurally identical. Zero-Knowledge cluster management prevents link grouping.
-- **File Tampering**: SHA-256 integrity hash verification on every read.
-- **Link Chain Analysis**: No referential chains. Reshares are completely independent rows.
-- **Traffic Analysis**: Security headers strip all identifying fingerprinting.
-- **Browser Forensics**: No-store cache headers prevent persistence.
+**Someone hacks the database?**
+Every row is identical. They won't know who uploaded, who viewed, or who reshared.
+
+**They modify a file?**
+SHA-256 verification catches it. The viewer shows you a tamper alert.
+
+**They try to trace who shared with who?**
+Can't. Each share generates a new, independent link.
+
+**They sniff your traffic?**
+You're on HTTPS. Even if they see the request, there's no referrer data or identifying headers.
+
+**Your browser caches it?**
+Nope. We tell it not to.
 
 ---
 
 ## License
 
-ISC
+MIT
