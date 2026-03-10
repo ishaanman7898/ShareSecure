@@ -1,21 +1,11 @@
-import { getFilesClient, globalPurgeExpired, decodeToken } from '../_turso.js';
+import { getFilesClient, globalPurgeExpired, decodeToken, getEncKey, encryptField, encryptStr } from '../_turso.js';
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10mb
+const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 function generateId(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const bytes = crypto.getRandomValues(new Uint8Array(length));
   return Array.from(bytes).map(b => chars[b % chars.length]).join('');
-}
-
-function bufferToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let str = '';
-  const chunk = 8192;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    str += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return btoa(str);
 }
 
 async function sha256hex(buffer) {
@@ -83,16 +73,25 @@ export async function onRequestPost(context) {
   const mimeType = file.type || 'application/octet-stream';
 
   const buffer = await file.arrayBuffer();
-  const integrity_hash = await sha256hex(buffer);
-  const compressed = await compress(buffer);
-  const file_data = bufferToBase64(compressed);
 
-  context.waitUntil(globalPurgeExpired(env, context, shortId));
+  // hash the raw bytes BEFORE compress/encrypt so we can verify after decrypt
+  const integrity_hash = await sha256hex(buffer);
+
+  // compress then encrypt
+  const compressed = await compress(buffer);
+  const encKey = await getEncKey(env);
+  const file_data = await encryptField(compressed, encKey);
+
+  // encrypt metadata strings
+  const enc_filename = await encryptStr(file.name, encKey);
+  const enc_mime = await encryptStr(mimeType, encKey);
+
+  context.waitUntil(globalPurgeExpired(env, context));
 
   await client.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, integrity_hash, compressed)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    args: [shortId, file.name, mimeType, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null, integrity_hash]
+    args: [shortId, enc_filename, enc_mime, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null, integrity_hash]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;

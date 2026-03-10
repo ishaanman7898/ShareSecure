@@ -1,5 +1,7 @@
 # ShareSecure
 
+![ShareSecure](./public/SecureShare.png)
+
 A dead-simple way to share files that actually respects your privacy.
 
 Upload a file, get a link, share it. Everyone who opens it gets their own unique link — there's no trail connecting them. When the expiry hits zero, it's gone for good. No accounts to manage, no tracking, no bullshit.
@@ -136,15 +138,18 @@ The app currently uses a distributed **Turso** cluster (LibSQL). Here are other 
 
 ## Deployment
 
-### Cloudflare Pages (Production)
+### Cloudflare Pages (via GitHub)
 
-```bash
-# Login to Cloudflare
-npx wrangler login
+1. Push this repo to GitHub
+2. Go to Cloudflare Pages → Create a project → Connect your GitHub repo
+3. Build settings: no build command needed, output directory is `public`
+4. Set these secrets in Cloudflare Pages → Settings → Environment Variables:
+   - `TURSO_TOKEN` — your Turso auth token
+   - `ENCRYPTION_KEY` — 64 hex chars (32 random bytes). Generate with: `openssl rand -hex 32`
+   - `BASE_URL` — your Pages URL (e.g. `https://sharesecure.pages.dev`)
+5. Deploy
 
-# Deploy
-npm run deploy
-```
+> **Important:** Keep your `ENCRYPTION_KEY` backed up somewhere safe. If you lose it, all stored files become unreadable.
 
 ---
 

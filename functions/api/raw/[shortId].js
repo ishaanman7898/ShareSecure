@@ -1,11 +1,4 @@
-import { getClientById, globalPurgeExpired } from '../../_turso.js';
-
-function base64ToBuffer(base64) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
+import { getClientById, globalPurgeExpired, getEncKey, decryptField, decryptStr } from '../../_turso.js';
 
 async function decompress(buffer) {
   const stream = new DecompressionStream('deflate');
@@ -36,7 +29,7 @@ export async function onRequestGet(context) {
   const { params, env, request } = context;
   const client = await getClientById(params.shortId, env);
 
-  context.waitUntil(globalPurgeExpired(env, context, params.shortId));
+  context.waitUntil(globalPurgeExpired(env, context));
 
   // block direct browser navigation — only allow same-origin fetch (e.g. from pdf.js)
   const fetchMode = request.headers.get('Sec-Fetch-Mode');
@@ -54,7 +47,14 @@ export async function onRequestGet(context) {
   if (file.expires_at && new Date(file.expires_at) < new Date()) return new Response('Expired', { status: 410 });
   if (!file.file_data) return new Response('File data missing', { status: 404 });
 
-  let buffer = base64ToBuffer(file.file_data);
+  const encKey = await getEncKey(env);
+
+  let buffer;
+  try {
+    buffer = await decryptField(file.file_data, encKey);
+  } catch {
+    return new Response('Decryption failed', { status: 500 });
+  }
 
   if (file.compressed) {
     try { buffer = await decompress(buffer); } catch {
@@ -67,6 +67,9 @@ export async function onRequestGet(context) {
     if (!valid) return new Response('Integrity check failed — file may have been tampered with', { status: 422 });
   }
 
+  const mimeType = await decryptStr(file.mime_type, encKey);
+  const filename = await decryptStr(file.original_filename, encKey);
+
   context.waitUntil(
     client.execute({
       sql: 'UPDATE files SET download_count = download_count + 1 WHERE short_id = ?',
@@ -76,8 +79,8 @@ export async function onRequestGet(context) {
 
   return new Response(buffer, {
     headers: {
-      'Content-Type': file.mime_type,
-      'Content-Disposition': `inline; filename="${file.original_filename}"`,
+      'Content-Type': mimeType,
+      'Content-Disposition': `inline; filename="${filename}"`,
       'Content-Length': String(file.size_bytes),
       'Cache-Control': 'no-store'
     }
