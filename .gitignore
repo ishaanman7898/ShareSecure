@@ -1,6 +1,7 @@
 node_modules/
 uploads/
 fileshare.db
+users.db
 .env
 wrangler.toml
 turso_info.json

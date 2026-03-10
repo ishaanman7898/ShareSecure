@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,101 +8,217 @@
   <meta name="robots" content="noindex, nofollow, noarchive" />
   <title>FileShare Viewer</title>
   <link rel="stylesheet" href="/viewer.css" />
+  <meta name="theme-color" content="#ffffff" id="theme-meta" />
 </head>
+
 <body>
-  <!-- Top bar -->
+  <!-- top bar -->
   <div class="topbar" id="topbar">
     <div class="topbar-left">
-      <div class="logo">&#128196;</div>
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+          <polyline points="13 2 13 9 20 9" />
+        </svg>
+      </div>
       <div class="doc-info">
         <span class="doc-title" id="doc-title">Loading...</span>
         <span class="doc-meta" id="doc-meta"></span>
       </div>
     </div>
     <div class="topbar-right">
-      <span class="integrity-badge hidden" id="integrity-badge" title="File integrity verified"></span>
-      <div class="countdown-wrap" id="countdown-wrap">
-        <span class="countdown-icon">&#9201;</span>
+      <div class="countdown-wrap desktop-only" id="countdown-wrap">
+        <span class="countdown-icon">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </span>
         <span class="countdown-text" id="countdown-text">--:--:--</span>
       </div>
-      <div class="divider"></div>
-      <button class="tb-btn" id="zoom-out-btn" title="Zoom out">&#x2212;</button>
-      <span class="zoom-label" id="zoom-label">100%</span>
-      <button class="tb-btn" id="zoom-in-btn" title="Zoom in">&#x2b;</button>
+      <div class="divider desktop-only"></div>
+      <div class="page-nav desktop-only hidden" id="page-nav">
+        <button class="tb-btn" id="prev-page" title="Previous page">&larr;</button>
+        <div class="page-input-wrap">
+          <input type="number" id="page-num" value="1" min="1" />
+          <span class="page-sep">/</span>
+          <span id="page-count">-</span>
+        </div>
+        <button class="tb-btn" id="next-page" title="Next page">&rarr;</button>
+      </div>
+      <div class="divider desktop-only"></div>
+      <button class="tb-btn desktop-only" id="zoom-out-btn" title="Zoom out">&#x2212;</button>
+      <span class="zoom-label desktop-only" id="zoom-label">100%</span>
+      <button class="tb-btn desktop-only" id="zoom-in-btn" title="Zoom in">&#x2b;</button>
+      <div class="divider desktop-only"></div>
+      <button class="tb-btn" id="rotate-btn" title="Rotate clockwise">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg>
+      </button>
+      <button class="tb-btn" id="theme-btn" title="Toggle theme">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" class="theme-sun">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" class="theme-moon hidden">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
       <div class="divider"></div>
       <button class="tb-btn tb-btn-share" id="share-btn">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
         </svg>
-        <span>Share</span>
+        <span class="desktop-only">Share</span>
       </button>
-      <button class="tb-btn tb-btn-delete hidden" id="delete-file-btn" title="Delete file for everyone">&#128465;</button>
+      <button class="tb-btn tb-btn-delete hidden" id="delete-file-btn" title="Delete file for everyone">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      </button>
     </div>
   </div>
+  </div>
 
-  <!-- Drawing toolbar (PDF only) -->
+  <!-- drawing toolbar (pdf only) -->
   <div class="draw-toolbar hidden" id="draw-toolbar">
-    <button class="draw-btn active" data-tool="pen" title="Pen">&#9999;</button>
-    <button class="draw-btn" data-tool="highlight" title="Highlight">&#9642;</button>
-    <button class="draw-btn" data-tool="eraser" title="Eraser">&#9723;</button>
+    <button class="draw-btn active" data-tool="pen" title="Pen">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+        <path d="M2 2l5 5" />
+        <path d="M11 11l1 1" />
+      </svg>
+    </button>
+    <button class="draw-btn" data-tool="highlight" title="Highlight">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 11-6 6v3h9l3-3" />
+        <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+      </svg>
+    </button>
+    <button class="draw-btn" data-tool="eraser" title="Eraser">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21Z" />
+        <path d="m22 21H7" />
+        <path d="m5 11 9 9" />
+      </svg>
+    </button>
     <div class="draw-divider"></div>
     <input type="color" id="color-picker" value="#e74c3c" title="Colour" />
     <div class="draw-divider"></div>
-    <button class="draw-btn" id="clear-btn" title="Clear all annotations">&#128465;</button>
+    <button class="draw-btn" id="clear-btn" title="Clear all annotations">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" />
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <line x1="10" y1="11" x2="10" y2="17" />
+        <line x1="14" y1="11" x2="14" y2="17" />
+      </svg>
+    </button>
     <div class="draw-divider"></div>
-    <button class="draw-btn save-btn" id="save-annotations-btn" title="Save annotations">💾 Save</button>
+    <button class="draw-btn save-btn" id="save-annotations-btn" title="Save annotations">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z" />
+        <polyline points="17 21 17 13 7 13 7 21" />
+        <polyline points="7 3 7 8 15 8" />
+      </svg>
+      Save
+    </button>
   </div>
 
-  <!-- Main area -->
+  <!-- main area -->
   <div class="viewer-shell" id="viewer-shell">
     <div class="loader" id="loader">
       <div class="spinner"></div>
       <span>Loading...</span>
     </div>
 
-    <!-- PDF: all pages stacked, each with annotation canvas overlay -->
+    <!-- pdf: all pages stacked, each with annotation canvas overlay -->
     <div class="pdf-scroll-container hidden" id="pdf-container"></div>
 
-    <!-- Image -->
+    <!-- image -->
     <div class="img-container hidden" id="img-container">
       <img id="img-viewer" alt="Preview" draggable="false" />
     </div>
 
-    <!-- Text -->
+    <!-- text -->
     <div class="text-container hidden" id="text-container">
       <div class="text-doc" id="text-doc"></div>
     </div>
 
-    <!-- Video -->
+    <!-- video -->
     <div class="media-container hidden" id="video-container">
       <video id="video-player" controls controlslist="nodownload nofullscreen" disablePictureInPicture></video>
     </div>
 
-    <!-- Audio -->
+    <!-- audio -->
     <div class="media-container hidden" id="audio-container">
       <div class="audio-card">
-        <div class="audio-icon">&#127925;</div>
+        <div class="audio-icon">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 18V5l12-2v13" />
+            <circle cx="6" cy="18" r="3" />
+            <circle cx="18" cy="16" r="3" />
+          </svg>
+        </div>
         <p class="audio-title" id="audio-title"></p>
         <audio id="audio-player" controls controlslist="nodownload"></audio>
       </div>
     </div>
 
-    <!-- Unsupported -->
+    <!-- unsupported -->
     <div class="unsupported hidden" id="unsupported">
-      <div class="unsupported-icon">&#128196;</div>
+      <div class="unsupported-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+          <polyline points="13 2 13 9 20 9" />
+        </svg>
+      </div>
       <p class="unsupported-title" id="unsupported-title"></p>
       <p class="unsupported-sub">This file type can't be previewed in the browser.</p>
     </div>
   </div>
 
-  <!-- Share panel -->
+  <!-- share panel -->
   <div class="share-overlay hidden" id="share-overlay"></div>
   <div class="share-panel hidden" id="share-panel">
     <div class="share-panel-header">
       <span>Share this file</span>
-      <button class="share-close" id="share-close">&#x2715;</button>
+      <button class="share-close" id="share-close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
     </div>
     <div class="share-panel-body" id="share-panel-body">
       <div id="share-generating" class="share-generating">
@@ -123,10 +240,17 @@
     </div>
   </div>
 
-  <!-- Expired overlay -->
+  <!-- expired overlay -->
   <div class="expired-overlay hidden" id="expired-overlay">
     <div class="expired-box">
-      <div class="expired-icon">&#9203;</div>
+      <div class="expired-icon">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+          <path d="M12 16h.01" />
+        </svg>
+      </div>
       <h2>File expired</h2>
       <p>All links to this file are now dead.</p>
       <a href="/" class="btn btn-primary">Upload a new file</a>
@@ -137,4 +261,5 @@
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs" type="module"></script>
   <script type="module" src="/viewer.js"></script>
 </body>
+
 </html>

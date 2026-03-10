@@ -4,7 +4,7 @@ export async function onRequestGet(context) {
   const { params, env } = context;
   const client = await getClientById(params.shortId, env);
 
-  // Background: purge all expired clusters on every info request
+  // background: purge all expired clusters on every info request
   context.waitUntil(globalPurgeExpired(env, context, params.shortId));
 
   const res = await client.execute({

@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client/web';
 
-// Files DB — uses TURSO_TOKEN directly (no API token needed)
+// files db — uses turso_token directly (no api token needed)
 export function getFilesClient(env) {
   return createClient({
     url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
@@ -8,15 +8,15 @@ export function getFilesClient(env) {
   });
 }
 
-// Auth DB — users table
+// auth db — users table lives on node-1, same turso_token
 export function getAuthClient(env) {
   return createClient({
-    url: env.TURSO_AUTH_URL,
-    authToken: env.TURSO_AUTH_TOKEN
+    url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
+    authToken: env.TURSO_TOKEN
   });
 }
 
-// Backward-compat aliases used by existing functions
+// backward-compat aliases used by existing functions
 export function getShardNode(shortId, nodes = 3) {
   if (!shortId) return 1;
   return (shortId.charCodeAt(0) % nodes) + 1;
@@ -39,7 +39,7 @@ export async function globalPurgeExpired(env, context, originShortId = null) {
   );
 }
 
-// SHA-256 using Web Crypto API (no Node.js crypto needed)
+// sha-256 using web crypto api (no node.js crypto needed)
 export async function sha256(text) {
   const data = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -47,7 +47,7 @@ export async function sha256(text) {
   return Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Decode auth bearer token → { username, userId } or null
+// decode auth bearer token → { username, userId } or null
 export function decodeToken(authHeader) {
   if (!authHeader) return null;
   try {

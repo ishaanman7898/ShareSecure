@@ -11,13 +11,13 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 
-// API routes
+// api routes
 const filesRouter = require('./routes/files');
 const authRouter = require('./routes/auth');
 app.use('/api', filesRouter);
 app.use('/api/auth', authRouter);
 
-// Viewer route
+// viewer route
 app.get('/r/:shortId', async (req, res) => {
   try {
     const result = await db.execute({
@@ -40,12 +40,12 @@ app.get('/r/:shortId', async (req, res) => {
   }
 });
 
-// Home
+// home
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Periodic cleanup of expired files
+// periodic cleanup of expired files
 setInterval(async () => {
   console.log('Running expired files cleanup...');
   try {
@@ -68,7 +68,7 @@ setInterval(async () => {
   } catch (err) {
     console.error('Cleanup error:', err);
   }
-}, 60 * 60 * 1000); // Hourly
+}, 60 * 60 * 1000); // hourly
 
 app.listen(PORT, () => {
   console.log(`FileShare running at http://localhost:${PORT}`);

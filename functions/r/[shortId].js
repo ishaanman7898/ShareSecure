@@ -20,6 +20,6 @@ export async function onRequestGet(context) {
     return env.ASSETS.fetch(new URL('/expired.html', origin));
   }
 
-  // Serve the static viewer page — shortId is read from the URL by viewer.js
+  // serve the static viewer page — shortid is read from the url by viewer.js
   return env.ASSETS.fetch(new URL('/viewer.html', origin));
 }

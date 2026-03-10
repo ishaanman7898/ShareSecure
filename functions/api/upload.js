@@ -1,6 +1,6 @@
 import { getFilesClient, globalPurgeExpired, decodeToken } from '../_turso.js';
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_BYTES = 10 * 1024 * 1024; // 10mb
 
 function generateId(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -16,6 +16,30 @@ function bufferToBase64(buffer) {
     str += String.fromCharCode(...bytes.subarray(i, i + chunk));
   }
   return btoa(str);
+}
+
+async function sha256hex(buffer) {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function compress(buffer) {
+  const stream = new CompressionStream('deflate');
+  const writer = stream.writable.getWriter();
+  writer.write(new Uint8Array(buffer));
+  writer.close();
+  const chunks = [];
+  const reader = stream.readable.getReader();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.length; }
+  return out.buffer;
 }
 
 export async function onRequestPost(context) {
@@ -40,7 +64,6 @@ export async function onRequestPost(context) {
   const auth = decodeToken(request.headers.get('Authorization'));
   const client = getFilesClient(env);
 
-  // Check daily upload limit for authenticated users
   if (auth) {
     const recentUploads = await client.execute({
       sql: `SELECT COUNT(*) as count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')`,
@@ -60,14 +83,16 @@ export async function onRequestPost(context) {
   const mimeType = file.type || 'application/octet-stream';
 
   const buffer = await file.arrayBuffer();
-  const file_data = bufferToBase64(buffer);
+  const integrity_hash = await sha256hex(buffer);
+  const compressed = await compress(buffer);
+  const file_data = bufferToBase64(compressed);
 
   context.waitUntil(globalPurgeExpired(env, context, shortId));
 
   await client.execute({
-    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [shortId, file.name, mimeType, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null]
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, integrity_hash, compressed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    args: [shortId, file.name, mimeType, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null, integrity_hash]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;

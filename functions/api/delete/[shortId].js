@@ -13,16 +13,16 @@ export async function onRequestPost(context) {
   const file = res.rows[0];
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
 
-  // Support both auth token (new) and deleteToken (old links)
+  // support both auth token (new) and deletetoken (old links)
   const auth = decodeToken(request.headers.get('Authorization'));
 
   if (auth) {
-    // Auth-based delete — must be the file owner
+    // auth-based delete — must be the file owner
     if (file.user_id && String(file.user_id) !== String(auth.userId)) {
       return Response.json({ error: 'Unauthorized' }, { status: 403 });
     }
   } else {
-    // Fall back to deleteToken
+    // fall back to deletetoken
     let body = {};
     try { body = await request.json(); } catch {}
     if (!body.deleteToken || file.delete_token !== body.deleteToken) {

@@ -18,10 +18,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 } // 10mb
 });
 
-// Helper to get user from auth header
+// helper to get user from auth header
 function getAuthUser(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return null;
@@ -34,7 +34,7 @@ function getAuthUser(req) {
   }
 }
 
-// POST /api/upload
+// post /api/upload
 router.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
@@ -43,7 +43,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
   if (user) {
     userId = user.userId;
-    // Check daily limit (5 files per 24h)
+    // check daily limit (5 files per 24h)
     const recentUploads = await db.execute({
       sql: `SELECT COUNT(*) as count FROM files 
             WHERE user_id = ? 
@@ -93,7 +93,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   }
 });
 
-// GET /api/info/:shortId
+// get /api/info/:shortid
 router.get('/info/:shortId', async (req, res) => {
   const result = await db.execute({
     sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
@@ -117,7 +117,7 @@ router.get('/info/:shortId', async (req, res) => {
   });
 });
 
-// GET /api/raw/:shortId
+// get /api/raw/:shortid
 router.get('/raw/:shortId', async (req, res) => {
   const result = await db.execute({
     sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
@@ -146,7 +146,7 @@ router.get('/raw/:shortId', async (req, res) => {
   res.sendFile(filePath);
 });
 
-// GET /api/download/:shortId
+// get /api/download/:shortid
 router.get('/download/:shortId', async (req, res) => {
   const result = await db.execute({
     sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
@@ -168,7 +168,7 @@ router.get('/download/:shortId', async (req, res) => {
   res.sendFile(filePath);
 });
 
-// POST /api/delete/:shortId
+// post /api/delete/:shortid
 router.post('/delete/:shortId', async (req, res) => {
   const user = getAuthUser(req);
   const short_id = req.params.shortId;

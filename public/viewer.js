@@ -2,20 +2,20 @@ import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
 
-// ── Block all download vectors ────────────────────────────────────────────────
+// ── block all download vectors ────────────────────────────────────────────────
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(e.key.toLowerCase())) e.preventDefault();
 });
 window.addEventListener('beforeprint', () => { document.body.innerHTML = '<p style="padding:40px;font-size:1.2rem">Printing is disabled.</p>'; });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
 
-// ── Current short ID management ──────────────────────────────────────────────
+// ── current short id management ──────────────────────────────────────────────
 let myShortId = rawShortId;
 
-// ── Ownership detection ───────────────────────────────────────────────────────
+// ── ownership detection ───────────────────────────────────────────────────────
 function checkOwnership() {
   try {
     const key = 'owner_' + myShortId;
@@ -28,18 +28,44 @@ let myDeleteToken = checkOwnership();
 let isOwner = !!myDeleteToken;
 
 const $ = id => document.getElementById(id);
-function show(id) { $(id).classList.remove('hidden'); }
-function hide(id) { $(id).classList.add('hidden'); }
+const show = id => $(id)?.classList.remove('hidden');
+const hide = id => $(id)?.classList.add('hidden');
+
 function formatSize(b) {
   if (b < 1024) return b + ' B';
-  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-  return (b / 1048576).toFixed(1) + ' MB';
+  const units = ['KB', 'MB', 'GB'];
+  let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < units.length - 1);
+  return b.toFixed(1) + ' ' + units[i];
 }
+
 function updateOwnershipDisplay() {
   myDeleteToken = checkOwnership();
   isOwner = !!myDeleteToken;
   if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
 }
+
+// ── theme management ────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  setTheme(saved);
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const isDark = theme === 'dark';
+  $('theme-btn').querySelector('.theme-sun').classList.toggle('hidden', isDark);
+  $('theme-btn').querySelector('.theme-moon').classList.toggle('hidden', !isDark);
+  $('theme-meta').content = isDark ? '#141417' : '#ffffff';
+}
+
+$('theme-btn').addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme');
+  setTheme(current === 'dark' ? 'light' : 'dark');
+});
+
+initTheme();
 
 async function assignFreshId() {
   try {
@@ -57,7 +83,7 @@ async function assignFreshId() {
   } catch (_) { /* fall back to original id */ }
 }
 
-// ── Countdown ─────────────────────────────────────────────────────────────────
+// ── countdown ─────────────────────────────────────────────────────────────────
 function startCountdown(expiresAt) {
   if (!expiresAt) { $('countdown-wrap').style.display = 'none'; return; }
   const expiry = new Date(expiresAt).getTime();
@@ -83,7 +109,7 @@ function startCountdown(expiresAt) {
   tick();
 }
 
-// ── Load metadata ─────────────────────────────────────────────────────────────
+// ── load metadata ─────────────────────────────────────────────────────────────
 let fileInfo = null;
 async function loadMeta() {
   const res = await fetch(`/api/info/${myShortId}`);
@@ -91,13 +117,13 @@ async function loadMeta() {
   return res.json();
 }
 
-// ── Status Polling (Kick others out) ─────────────────────────────────────────
+// ── status polling (kick others out) ─────────────────────────────────────────
 function startStatusPolling() {
   setInterval(async () => {
     try {
       const res = await fetch(`/api/info/${myShortId}`);
       if (res.status === 404 || res.status === 410) {
-        // File is gone! Kill the tab.
+        // file is gone! kill the tab.
         document.body.innerHTML = '';
         location.replace('/expired.html');
       }
@@ -105,11 +131,11 @@ function startStatusPolling() {
   }, 5000);
 }
 
-// ── Drawing tools ─────────────────────────────────────────────────────────────
+// ── drawing tools ─────────────────────────────────────────────────────────────
 let currentTool = 'pen';
 let currentColor = '#e74c3c';
 const annotCanvases = [];
-// Track all drawing strokes for persistence
+// track all drawing strokes for persistence
 let allStrokes = []; // Array of { pageIndex, tool, color, points: [{x,y}] }
 let isDrawing = false;
 let currentStroke = null;
@@ -191,9 +217,9 @@ function setupDrawing(canvas, pageIndex) {
   canvas.addEventListener('touchend', endDraw);
 }
 
-// ── Redraw all strokes (for loading saved annotations or after zoom) ──────────
+// ── redraw all strokes (for loading saved annotations or after zoom) ──────────
 function redrawAllStrokes() {
-  // Clear all annotation canvases
+  // clear all annotation canvases
   annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
 
   for (const stroke of allStrokes) {
@@ -233,7 +259,7 @@ function redrawAllStrokes() {
   }
 }
 
-// ── Annotation save state tracking ────────────────────────────────────────────
+// ── annotation save state tracking ────────────────────────────────────────────
 let annotationsDirty = false;
 
 function markAnnotationsDirty() {
@@ -241,14 +267,20 @@ function markAnnotationsDirty() {
   const saveBtn = $('save-annotations-btn');
   if (saveBtn) {
     saveBtn.classList.add('unsaved');
-    saveBtn.textContent = '💾 Save*';
+    saveBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Save*
+    `;
   }
 }
 
 async function saveAnnotations() {
   const saveBtn = $('save-annotations-btn');
   if (saveBtn) {
-    saveBtn.textContent = '💾 Saving...';
+    saveBtn.innerHTML = `
+      <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
+      Saving...
+    `;
     saveBtn.disabled = true;
   }
 
@@ -263,18 +295,32 @@ async function saveAnnotations() {
       annotationsDirty = false;
       if (saveBtn) {
         saveBtn.classList.remove('unsaved');
-        saveBtn.textContent = '💾 Saved!';
+        saveBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Saved!
+        `;
         saveBtn.classList.add('saved');
         setTimeout(() => {
-          saveBtn.textContent = '💾 Save';
+          saveBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save
+          `;
           saveBtn.classList.remove('saved');
         }, 2000);
       }
     }
   } catch (err) {
     if (saveBtn) {
-      saveBtn.textContent = '💾 Error';
-      setTimeout(() => { saveBtn.textContent = '💾 Save'; }, 2000);
+      saveBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Error
+      `;
+      setTimeout(() => {
+        saveBtn.innerHTML = `
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save
+        `;
+      }, 2000);
     }
   } finally {
     if (saveBtn) saveBtn.disabled = false;
@@ -294,24 +340,46 @@ async function loadAnnotations() {
   } catch (_) { /* ignore — annotations are optional */ }
 }
 
-// ── PDF Viewer (scroll mode, all pages) ───────────────────────────────────────
+// ── pdf viewer logic ───────────────────────────────────────────────────────
 let pdfDoc = null;
-let zoomScale = 1.4;
+let zoomScale = 1.3;
+let currentRotation = 0;
+let isRendering = false;
 
 async function loadPDF(url) {
-  pdfDoc = await pdfjsLib.getDocument(url).promise;
+  try {
+    pdfDoc = await pdfjsLib.getDocument(url).promise;
+    $('page-count').textContent = pdfDoc.numPages;
+    show('page-nav');
+
+    await renderAllPages();
+    await loadAnnotations();
+    setupPageTracking();
+  } catch (err) {
+    console.error('PDF Load Error:', err);
+    showUnsupported();
+  }
+}
+
+async function renderAllPages() {
+  if (isRendering) return;
+  isRendering = true;
+  hide('pdf-container');
+  show('loader');
+
   const container = $('pdf-container');
   container.innerHTML = '';
   annotCanvases.length = 0;
 
   for (let n = 1; n <= pdfDoc.numPages; n++) {
     const page = await pdfDoc.getPage(n);
-    const vp = page.getViewport({ scale: zoomScale });
+    const vp = page.getViewport({ scale: zoomScale, rotation: currentRotation });
 
     const wrapper = document.createElement('div');
     wrapper.className = 'pdf-page-wrapper';
-    wrapper.style.width = vp.width + 'px';
-    wrapper.style.height = vp.height + 'px';
+    wrapper.id = `page-wrapper-${n}`;
+    wrapper.style.width = `${vp.width}px`;
+    wrapper.style.height = `${vp.height}px`;
 
     const pdfCanvas = document.createElement('canvas');
     pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
@@ -322,8 +390,7 @@ async function loadPDF(url) {
     annotCanvas.className = 'pdf-annot-canvas';
     annotCanvases.push(annotCanvas);
 
-    wrapper.appendChild(pdfCanvas);
-    wrapper.appendChild(annotCanvas);
+    wrapper.append(pdfCanvas, annotCanvas);
     container.appendChild(wrapper);
 
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
@@ -333,62 +400,78 @@ async function loadPDF(url) {
   hide('loader');
   show('pdf-container');
   show('draw-toolbar');
-
-  // Load saved annotations after canvases are ready
-  await loadAnnotations();
-
-  // Zoom re-renders all pages
-  async function reRender() {
-    const pages = container.querySelectorAll('.pdf-page-wrapper');
-    for (let n = 1; n <= pdfDoc.numPages; n++) {
-      const page = await pdfDoc.getPage(n);
-      const vp = page.getViewport({ scale: zoomScale });
-      const wrapper = pages[n - 1];
-      const pdfCanvas = wrapper.querySelector('.pdf-page-canvas');
-      const annotCanvas = wrapper.querySelector('.pdf-annot-canvas');
-      wrapper.style.width = vp.width + 'px';
-      wrapper.style.height = vp.height + 'px';
-      pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
-      annotCanvas.width = vp.width; annotCanvas.height = vp.height;
-      await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
-    }
-    // Redraw annotations at new scale
-    redrawAllStrokes();
-  }
-
-  $('zoom-in-btn').addEventListener('click', async () => {
-    zoomScale = Math.min(zoomScale + 0.25, 4);
-    $('zoom-label').textContent = Math.round(zoomScale / 1.4 * 100) + '%';
-    await reRender();
-  });
-  $('zoom-out-btn').addEventListener('click', async () => {
-    zoomScale = Math.max(zoomScale - 0.25, 0.5);
-    $('zoom-label').textContent = Math.round(zoomScale / 1.4 * 100) + '%';
-    await reRender();
-  });
-
-  // Drawing toolbar
-  document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentTool = btn.dataset.tool;
-    });
-  });
-
-  $('color-picker').addEventListener('input', e => { currentColor = e.target.value; });
-
-  $('clear-btn').addEventListener('click', () => {
-    annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    allStrokes = [];
-    markAnnotationsDirty();
-  });
-
-  // Save button
-  $('save-annotations-btn').addEventListener('click', saveAnnotations);
+  redrawAllStrokes();
+  isRendering = false;
 }
 
-// ── Image ─────────────────────────────────────────────────────────────────────
+function setupPageTracking() {
+  const container = $('viewer-shell');
+  container.addEventListener('scroll', () => {
+    const pages = document.querySelectorAll('.pdf-page-wrapper');
+    let current = 1;
+    let minDiff = Infinity;
+    pages.forEach((p, i) => {
+      const diff = Math.abs(p.getBoundingClientRect().top - 60);
+      if (diff < minDiff) { minDiff = diff; current = i + 1; }
+    });
+    $('page-num').value = current;
+  });
+}
+
+// UI Event Listeners
+$('prev-page')?.addEventListener('click', () => {
+  const target = Math.max(1, parseInt($('page-num').value) - 1);
+  $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+});
+
+$('next-page')?.addEventListener('click', () => {
+  const target = Math.min(pdfDoc?.numPages || 1, parseInt($('page-num').value) + 1);
+  $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+});
+
+$('page-num')?.addEventListener('change', (e) => {
+  const target = Math.min(pdfDoc?.numPages || 1, Math.max(1, parseInt(e.target.value)));
+  $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+});
+
+$('rotate-btn')?.addEventListener('click', async () => {
+  currentRotation = (currentRotation + 90) % 360;
+  await renderAllPages();
+});
+
+$('zoom-in-btn')?.addEventListener('click', async () => {
+  zoomScale = Math.min(zoomScale + 0.2, 4);
+  if ($('zoom-label')) $('zoom-label').textContent = Math.round(zoomScale / 1.3 * 100) + '%';
+  await renderAllPages();
+});
+
+$('zoom-out-btn')?.addEventListener('click', async () => {
+  zoomScale = Math.max(zoomScale - 0.2, 0.5);
+  if ($('zoom-label')) $('zoom-label').textContent = Math.round(zoomScale / 1.3 * 100) + '%';
+  await renderAllPages();
+});
+
+// drawing toolbar
+document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTool = btn.dataset.tool;
+  });
+});
+
+$('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
+
+$('clear-btn')?.addEventListener('click', () => {
+  if (!confirm('Clear all drawings on this document?')) return;
+  annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
+  allStrokes = [];
+  markAnnotationsDirty();
+});
+
+$('save-annotations-btn')?.addEventListener('click', saveAnnotations);
+
+// ── image ─────────────────────────────────────────────────────────────────────
 function loadImage(url) {
   const img = $('img-viewer');
   img.src = url;
@@ -397,7 +480,7 @@ function loadImage(url) {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Text ──────────────────────────────────────────────────────────────────────
+// ── text ──────────────────────────────────────────────────────────────────────
 async function loadText(url) {
   const text = await fetch(url).then(r => r.text());
   $('text-doc').textContent = text;
@@ -405,7 +488,7 @@ async function loadText(url) {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Video ─────────────────────────────────────────────────────────────────────
+// ── video ─────────────────────────────────────────────────────────────────────
 function loadVideo(url) {
   const v = $('video-player');
   v.src = url;
@@ -414,7 +497,7 @@ function loadVideo(url) {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Audio ─────────────────────────────────────────────────────────────────────
+// ── audio ─────────────────────────────────────────────────────────────────────
 function loadAudio(url, name) {
   $('audio-player').src = url;
   $('audio-title').textContent = name;
@@ -422,7 +505,7 @@ function loadAudio(url, name) {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Unsupported ───────────────────────────────────────────────────────────────
+// ── unsupported ───────────────────────────────────────────────────────────────
 function showUnsupported() {
   hide('loader');
   $('unsupported-title').textContent = fileInfo?.filename || 'Unknown file';
@@ -430,7 +513,7 @@ function showUnsupported() {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
-// ── Share panel ───────────────────────────────────────────────────────────────
+// ── share panel ───────────────────────────────────────────────────────────────
 function makeQR(divEl, url) {
   divEl.innerHTML = '';
   new QRCode(divEl, {
@@ -473,15 +556,15 @@ function openSharePanel() {
 
 function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── main ──────────────────────────────────────────────────────────────────────
 (async () => {
-  // OWNER keeps their original link — no redirect, no reshare.
-  // NON-OWNER (no delete token) gets a fresh unique ID so their link is untraceable.
+  // owner keeps their original link — no redirect, no reshare.
+  // non-owner (no delete token) gets a fresh unique id so their link is untraceable.
   if (!isOwner) {
     await assignFreshId();
   }
 
-  // Ownership and polling initialization
+  // ownership and polling initialization
   updateOwnershipDisplay();
   startStatusPolling();
 
@@ -494,7 +577,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
 
-  // Show integrity hash badge
+  // show integrity hash badge
   if (integrityHash) {
     const badge = $('integrity-badge');
     if (badge) {
@@ -508,7 +591,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);
 
-  // Use the refined delete handler
+  // use the refined delete handler
   $('delete-file-btn').addEventListener('click', async () => {
     const isRoot = fileInfo?.isRoot;
     const msg = isRoot
@@ -531,16 +614,16 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
         document.body.innerHTML = '';
         location.replace('/expired.html');
       } else {
-        $('delete-file-btn').textContent = '✗';
+        $('delete-file-btn').innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
         $('delete-file-btn').disabled = false;
       }
     } catch {
-      $('delete-file-btn').textContent = '✗';
+      $('delete-file-btn').innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
       $('delete-file-btn').disabled = false;
     }
   });
 
-  // Use the OWNER'S short ID for raw access (not the reshared one)
+  // use the owner's short id for raw access (not the reshared one)
   const rawUrl = `/api/raw/${myShortId}`;
 
   if (mimeType === 'application/pdf') { await loadPDF(rawUrl); }
@@ -550,7 +633,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   else if (mimeType.startsWith('text/') || mimeType === 'application/json') { await loadText(rawUrl); }
   else { showUnsupported(); }
 
-  // Warn before leaving with unsaved annotations
+  // warn before leaving with unsaved annotations
   window.addEventListener('beforeunload', (e) => {
     if (annotationsDirty) {
       e.preventDefault();

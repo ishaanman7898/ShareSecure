@@ -9,7 +9,7 @@ function generateId(length) {
 export async function onRequestPost(context) {
   const { params, env, request } = context;
 
-  // Find the original file in its shard node
+  // find the original file in its shard node
   const sourceNode = getShardNode(params.shortId, parseInt(env.TURSO_NODES || '3'));
   const sourceClient = await getTursoClient(sourceNode, env);
 
@@ -26,14 +26,14 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'Link expired' }, { status: 410 });
   }
 
-  // Generate a fresh ID for the reshare
+  // generate a fresh id for the reshare
   const newShortId = generateId(8);
   const newDeleteToken = generateId(24);
   const targetNode = getShardNode(newShortId, parseInt(env.TURSO_NODES || '3'));
   const targetClient = await getTursoClient(targetNode, env);
 
-  // Every reshare row gets its OWN full copy of data, even across nodes.
-  // This makes nodes independent and rows identical.
+  // every reshare row gets its own full copy of data, even across nodes.
+  // this makes nodes independent and rows identical.
   await targetClient.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, source_short_id, delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -49,7 +49,7 @@ export async function onRequestPost(context) {
       file.integrity_hash,
       file.cluster_id,
       params.shortId,
-      new Date().toISOString() // Fresh timestamp (untraceable to original)
+      new Date().toISOString() // fresh timestamp (untraceable to original)
     ]
   });
 

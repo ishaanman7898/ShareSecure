@@ -3,12 +3,12 @@ const router = express.Router();
 const crypto = require('crypto');
 const { userDb, db } = require('../db');
 
-// Helper to hash access code
+// helper to hash access code
 function hashAccessCode(code) {
     return crypto.createHash('sha256').update(code).digest('hex');
 }
 
-// POST /api/register
+// post /api/register
 router.post('/register', async (req, res) => {
     const { username, access_code } = req.body;
 
@@ -37,7 +37,7 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// POST /api/login
+// post /api/login
 router.post('/login', async (req, res) => {
     const { username, access_code } = req.body;
 
@@ -61,7 +61,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid username or access code' });
         }
 
-        // Simple session token (username:id)
+        // simple session token (username:id)
         const sessionId = `${user.username}:${user.id.toString()}`;
         const token = Buffer.from(sessionId).toString('base64');
 
@@ -77,7 +77,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// GET /api/user/files (dashboard)
+// get /api/user/files (dashboard)
 router.get('/user/files', async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });

@@ -20,7 +20,7 @@ const expiresSelect = document.getElementById('expires-select');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
-// --- Auth & Dashboard Elements ---
+// --- auth & dashboard elements ---
 const showLoginBtn = document.getElementById('show-login');
 const authStatus = document.getElementById('auth-status');
 const authModal = document.getElementById('auth-modal');
@@ -88,13 +88,14 @@ function startResultCountdown(expiresAt) {
 }
 
 function getFileIcon(mime) {
-  if (mime.startsWith('image/')) return '🖼️';
-  if (mime.startsWith('video/')) return '🎬';
-  if (mime.startsWith('audio/')) return '🎵';
-  if (mime.includes('pdf')) return '📄';
-  if (mime.includes('zip') || mime.includes('archive') || mime.includes('compressed')) return '🗜️';
-  if (mime.includes('text')) return '📝';
-  return '📁';
+  const iconProps = 'width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  if (mime.startsWith('image/')) return `<svg ${iconProps}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+  if (mime.startsWith('video/')) return `<svg ${iconProps}><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><polyline points="8 21 12 17 16 21"/></svg>`;
+  if (mime.startsWith('audio/')) return `<svg ${iconProps}><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>`;
+  if (mime.includes('pdf')) return `<svg ${iconProps}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
+  if (mime.includes('zip') || mime.includes('archive') || mime.includes('compressed')) return `<svg ${iconProps}><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M10 8V5a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v3"/><path d="M8 15h8"/></svg>`;
+  if (mime.includes('text')) return `<svg ${iconProps}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
+  return `<svg ${iconProps}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 }
 
 function setFile(file) {
@@ -105,7 +106,7 @@ function setFile(file) {
   selectedFile = file;
   fileName.textContent = file.name;
   fileSize.textContent = formatSize(file.size);
-  document.getElementById('file-icon').textContent = getFileIcon(file.type);
+  document.getElementById('file-icon').innerHTML = getFileIcon(file.type);
   filePreview.classList.remove('hidden');
   dropZone.classList.add('hidden');
   uploadBtn.disabled = false;
@@ -119,7 +120,7 @@ function clearSelection() {
   uploadBtn.disabled = true;
 }
 
-// Drag & drop
+// drag & drop
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
   dropZone.classList.add('dragover');
@@ -137,13 +138,13 @@ fileInput.addEventListener('change', () => {
 });
 clearFile.addEventListener('click', clearSelection);
 
-// Upload
+// upload
 uploadBtn.addEventListener('click', async () => {
   if (!selectedFile) return;
 
   const formData = new FormData();
   formData.append('file', selectedFile);
-  // Always send expiry — no "never" option
+  // always send expiry — no "never" option
   formData.append('expires_hours', expiresSelect.value);
 
   uploadBtn.disabled = true;
@@ -200,22 +201,22 @@ function showResult(data, file) {
   deleteBtn.textContent = 'Delete File';
   deleteBtn.classList.remove('deleted');
 
-  // Show the owner's direct URL — same link they'll view the file at
+  // show the owner's direct url — same link they'll view the file at
   const ownerUrl = data.shortUrl;
   shortLink.textContent = ownerUrl;
   document.getElementById('view-btn').href = ownerUrl;
-  // Store delete token so the viewer tab recognizes this browser as the owner
+  // store delete token so the viewer tab recognizes this browser as the owner
   if (data.deleteToken) {
     localStorage.setItem('owner_' + data.shortId, data.deleteToken);
   }
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
 
-  // Live countdown
+  // live countdown
   if (countdownInterval) clearInterval(countdownInterval);
   startResultCountdown(data.expiresAt);
 
-  // Generate QR entirely client-side — no third party ever sees the URL
+  // generate qr entirely client-side — no third party ever sees the url
   qrCanvasEl.innerHTML = '';
   qrInstance = new QRCode(qrCanvasEl, {
     text: data.shortUrl, width: 200, height: 200,
@@ -234,7 +235,7 @@ function showResult(data, file) {
   resultCard.classList.remove('hidden');
 }
 
-// Copy
+// copy
 copyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(shortLink.textContent).then(() => {
     copyBtn.textContent = 'Copied!';
@@ -246,7 +247,7 @@ copyBtn.addEventListener('click', () => {
   });
 });
 
-// Delete file
+// delete file
 deleteBtn.addEventListener('click', async () => {
   if (!currentShortId) return;
   if (!confirm('Permanently delete this file for everyone? This cannot be undone.')) return;
@@ -279,7 +280,7 @@ deleteBtn.addEventListener('click', async () => {
   }
 });
 
-// New upload
+// new upload
 newUploadBtn.addEventListener('click', () => {
   if (countdownInterval) clearInterval(countdownInterval);
   clearSelection();
@@ -290,7 +291,7 @@ newUploadBtn.addEventListener('click', () => {
   uploadCard.classList.remove('hidden');
 });
 
-// --- Auth & Dashboard Logic ---
+// --- auth & dashboard logic ---
 
 function initAuth() {
   if (userToken) {
@@ -307,24 +308,40 @@ function initAuth() {
     `;
     document.getElementById('logout-btn').addEventListener('click', logout);
 
-    // Auth-only view
+    // auth-only view
     landingPage.classList.add('hidden');
     dashboardCard.classList.remove('hidden');
     uploadCard.classList.remove('hidden');
     updateDashboard();
   } else {
     authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
-    document.getElementById('show-login').addEventListener('click', () => authModal.classList.remove('hidden'));
 
-    // Public/Landing view
+    // public/landing view
     landingPage.classList.remove('hidden');
     dashboardCard.classList.add('hidden');
     uploadCard.classList.add('hidden');
   }
 }
 
-landingStartBtn.addEventListener('click', () => {
+function updateAuthUI() {
+  modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+  authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+  toggleAuth.textContent = isLoginMode ? 'Sign Up' : 'Sign In';
+  document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
+
+  // update placeholders/labels if needed
+  authUsername.placeholder = isLoginMode ? "Enter username" : "Pick a username";
+  authPassword.placeholder = isLoginMode ? "Enter secure code" : "Create secure code";
+}
+
+function openAuthModal(loginMode) {
+  isLoginMode = loginMode;
+  updateAuthUI();
   authModal.classList.remove('hidden');
+}
+
+landingStartBtn.addEventListener('click', () => {
+  openAuthModal(false);
 });
 
 async function updateDashboard() {
@@ -374,8 +391,12 @@ function renderFileList(files) {
         <span class="file-item-time" data-expires="${f.expires_at}"></span>
       </div>
       <div class="file-item-actions">
-        <a href="/r/${f.short_id}" target="_blank" class="btn-icon" title="View">👁️</a>
-        <button class="btn-icon delete-file-btn" data-id="${f.short_id}" title="Delete">🗑️</button>
+        <a href="/r/${f.short_id}" target="_blank" class="btn-icon" title="View">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </a>
+        <button class="btn-icon delete-file-btn" data-id="${f.short_id}" title="Delete">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
       </div>
     </div>
   `).join('');
@@ -384,7 +405,7 @@ function renderFileList(files) {
     btn.addEventListener('click', async () => {
       if (!confirm('Permanently delete this file?')) return;
       const shortId = btn.dataset.id;
-      btn.textContent = '⏳';
+      btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`;
       btn.disabled = true;
       try {
         const res = await fetch(`/api/delete/${shortId}`, {
@@ -398,17 +419,17 @@ function renderFileList(files) {
           if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
           uploadCount.textContent = `Used ${remaining}/5 today`;
         } else {
-          btn.textContent = '🗑️';
+          btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
           btn.disabled = false;
         }
       } catch {
-        btn.textContent = '🗑️';
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         btn.disabled = false;
       }
     });
   });
 
-  // Start small timers for each item
+  // start small timers for each item
   files.forEach(f => {
     const expiry = new Date(f.expires_at).getTime();
     const el = fileList.querySelector(`[data-expires="${f.expires_at}"]`);
@@ -432,16 +453,17 @@ function logout() {
   initAuth();
 }
 
-showLoginBtn.addEventListener('click', () => authModal.classList.remove('hidden'));
+document.addEventListener('click', (e) => {
+  if (e.target && e.target.id === 'show-login') {
+    openAuthModal(true);
+  }
+});
 closeModal.addEventListener('click', () => authModal.classList.add('hidden'));
 
 toggleAuth.addEventListener('click', (e) => {
   e.preventDefault();
   isLoginMode = !isLoginMode;
-  modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  toggleAuth.textContent = isLoginMode ? 'Sign Up' : 'Sign In';
-  document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
+  updateAuthUI();
 });
 
 authForm.addEventListener('submit', async (e) => {
@@ -468,7 +490,7 @@ authForm.addEventListener('submit', async (e) => {
         authModal.classList.add('hidden');
         initAuth();
       } else {
-        // Clear potential stale sessions on new account
+        // clear potential stale sessions on new account
         localStorage.removeItem('user_token');
         userToken = null;
         alert('Account created! You can now sign in.');
