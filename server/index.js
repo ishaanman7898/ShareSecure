@@ -65,6 +65,11 @@ app.get('/r/:shortId', (req, res) => {
 // ── home ─────────────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
+// ── terms and conditions ─────────────────────────────────────────────────────
+app.get('/TERMS_AND_CONDITIONS.md', (req, res) => {
+  res.sendFile(path.join(__dirname, '../TERMS_AND_CONDITIONS.md'));
+});
+
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));
 
