@@ -4,7 +4,7 @@
 
 A dead-simple way to share files that actually respects your privacy.
 
-Upload a file, get a link, share it. Everyone who opens it gets their own unique link — there's no trail connecting them. When the expiry hits zero, it's gone for good. No accounts to manage, no tracking, no bullshit.
+Upload a file, get a link, share it. Everyone who opens it gets their own unique link — there's no trail connecting them. When the expiry hits zero, it's gone for good. No accounts to manage, no tracking.
 
 ---
 
@@ -12,8 +12,9 @@ Upload a file, get a link, share it. Everyone who opens it gets their own unique
 
 **Privacy First**
 - Every link is completely unique. Share with Alice, she gets her own link. If she shares it with Bob, Bob gets a different link. There's no chain, no way to trace who got it from who.
-- The database is basically useless to hackers — every row looks identical. They can't tell who uploaded, who viewed, or who reshared.
-- No IP logging, no cookies, no user accounts. Your activity is invisible.
+- The database is designed so every row looks identical — no timestamps linking reshares, no exact file sizes, no content fingerprints. Even a full DB leak tells an attacker almost nothing.
+- No cookies, no user tracking. Anonymous uploads require no account.
+- **IP Address Notice:** Your IP address is inherently visible to the server and any network infrastructure (reverse proxies, CDNs, ISPs) between you and the server. ShareSecure does **not** explicitly log IP addresses in its application code, but the underlying OS, web server, or hosting provider may retain connection logs outside this application's control. If your threat model requires IP anonymity, access this service over **Tor** or a trusted **VPN**.
 
 **It Actually Works**
 - Every file is verified with SHA-256. If someone tries to mess with it, you'll know immediately.
@@ -225,7 +226,7 @@ SHA-256 verification catches it. The viewer shows you a tamper alert.
 Can't. Each share generates a new, independent link.
 
 **They sniff your traffic?**
-You're on HTTPS. Even if they see the request, there's no referrer data or identifying headers.
+HTTPS encrypts the content. There's no referrer data or identifying headers in ShareSecure's responses. However, your IP address is visible at the network layer — use Tor or a VPN if that matters for you.
 
 **Your browser caches it?**
 Nope. We tell it not to.

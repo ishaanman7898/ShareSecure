@@ -411,7 +411,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 32px 24px 48px;
+  padding: 32px 24px 72px; /* extra bottom clearance for fixed footer */
 }
 
 /* ── loader ── */

@@ -78,9 +78,10 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 24px 24px 60px; /* bottom padding clears fixed footer */
 }
 
 .container {

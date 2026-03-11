@@ -147,15 +147,22 @@ function pipeFile(res, file, disposition) {
     catch { return res.status(500).send('Decompression failed'); }
   }
 
-  const filename = decryptString(file.original_filename, encKey);
-  const mimeType = decryptString(file.mime_type, encKey);
-
   // increment view count
   db.prepare('UPDATE files SET download_count = download_count + 1 WHERE short_id = ?')
     .run(file.short_id);
 
-  res.setHeader('Content-Type', mimeType);
-  res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  if (disposition === 'attachment') {
+    // download: reveal original mime + filename (owner-only action)
+    const filename = decryptString(file.original_filename, encKey);
+    const mimeType = decryptString(file.mime_type, encKey);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+  } else {
+    // inline (raw viewer): strip mime type and filename from headers — privacy
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'inline');
+  }
+
   res.setHeader('Content-Length', data.length);
   res.setHeader('Cache-Control', 'no-store');
   res.send(data);
