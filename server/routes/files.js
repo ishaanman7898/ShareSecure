@@ -24,7 +24,18 @@ const upload = multer({
 router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-  // Remove rate-limit: no limit for local edition
+  const auth = decodeToken(req.headers.authorization);
+
+  // rate-limit: 5 uploads per 24h per authenticated user
+  if (auth) {
+    const row = db.prepare(
+      "SELECT COUNT(*) AS count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')"
+    ).get(auth.userId);
+
+    if (row.count >= 5) {
+      return res.status(429).json({ error: 'Upload limit reached (5 files per 24h)' });
+    }
+  }
 
   const rawHours = parseFloat(req.body.expires_hours) || 1;
   const expiresHours = Math.max(rawHours, 1 / 60); // minimum 1 minute
@@ -64,7 +75,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   `).run(
     shortId, encFilename, encMime, req.file.size, storedFilename,
     integrity_hash, isEncrypted, expires_at, deleteToken,
-    null, // no user mapping for local edition
+    auth ? auth.userId : null,
     shortId, // cluster_id = shortId for root uploads
     allow_annotations, allow_download
   );
@@ -174,15 +185,20 @@ router.get('/download/:shortId', (req, res) => {
 
 // ── POST /api/delete/:shortId ─────────────────────────────────────────────────
 router.post('/delete/:shortId', (req, res) => {
+  const auth         = decodeToken(req.headers.authorization);
+  const deleteToken  = req.body && req.body.deleteToken;
+  const short_id     = req.params.shortId;
+
   const file = db.prepare(
-    'SELECT short_id, delete_token, cluster_id FROM files WHERE short_id = ?'
+    'SELECT short_id, user_id, delete_token, cluster_id FROM files WHERE short_id = ?'
   ).get(short_id);
 
   if (!file) return res.status(404).json({ error: 'File not found' });
 
+  const isOwner  = auth && file.user_id && String(file.user_id) === String(auth.userId);
   const hasToken = deleteToken && file.delete_token && file.delete_token === deleteToken;
 
-  if (!hasToken) {
+  if (!isOwner && !hasToken) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -287,27 +303,6 @@ router.post('/annotations/:shortId', (req, res) => {
     .run(encAnnot, req.params.shortId);
 
   res.json({ saved: true });
-});
-
-// ── GET /api/files ────────────────────────────────────────────────────────────
-// Return all files for the local dashboard
-router.get('/files', (req, res) => {
-  const files = db.prepare(`
-    SELECT short_id, original_filename, mime_type, expires_at
-    FROM files 
-    WHERE parent_short_id IS NULL AND is_active = 1
-    ORDER BY uploaded_at DESC
-  `).all();
-
-  const encKey = getEncKey();
-  const decodedFiles = files.map(f => ({
-    short_id: f.short_id,
-    original_filename: decryptString(f.original_filename, encKey),
-    mime_type: decryptString(f.mime_type, encKey),
-    expires_at: f.expires_at
-  }));
-
-  res.json({ files: decodedFiles });
 });
 
 module.exports = router;

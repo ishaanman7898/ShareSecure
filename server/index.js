@@ -10,7 +10,6 @@ if (!fs.existsSync(envPath)) {
   const examplePath = path.join(__dirname, '../.env.example');
   let content = fs.existsSync(examplePath) ? fs.readFileSync(examplePath, 'utf8') : '';
   
-  // Auto-generate secure encryption key
   const key = crypto.randomBytes(32).toString('hex');
   if (content.includes('ENCRYPTION_KEY=')) {
     content = content.replace(/ENCRYPTION_KEY=.*/, `ENCRYPTION_KEY=${key}`);
@@ -18,7 +17,6 @@ if (!fs.existsSync(envPath)) {
     content += `\nENCRYPTION_KEY=${key}\n`;
   }
 
-  // Auto-generate persistent stable subdomain for localtunnel
   const subdomain = 'sharesecure-local-' + crypto.randomBytes(4).toString('hex');
   if (content.includes('TUNNEL_SUBDOMAIN=')) {
     content = content.replace(/#?\s*TUNNEL_SUBDOMAIN=.*/, `TUNNEL_SUBDOMAIN=${subdomain}`);
@@ -46,6 +44,7 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));
 
 // ── api routes ───────────────────────────────────────────────────────────────
+app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/files'));
 
 // ── viewer ───────────────────────────────────────────────────────────────────
@@ -110,16 +109,15 @@ cleanupExpired();
 setInterval(cleanupExpired, 60 * 60 * 1000); // hourly
 
 // ── start ─────────────────────────────────────────────────────────────────────
+// ── start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, async () => {
   const { DATA_DIR, DB_PATH } = require('./db');
   console.log(`\n  ShareSecure  →  http://localhost:${PORT}`);
   
-  // Create a public tunnel so they can share it across devices without port forwarding
   if (process.env.USE_LOCAL_TUNNEL !== 'false') {
     try {
       const localtunnel = require('localtunnel');
       const options = { port: PORT };
-      // User can set their own personal domain in .env (e.g. TUNNEL_SUBDOMAIN=my-super-secret-files)
       if (process.env.TUNNEL_SUBDOMAIN) {
         options.subdomain = process.env.TUNNEL_SUBDOMAIN;
       }
@@ -127,8 +125,6 @@ app.listen(PORT, async () => {
       const tunnel = await localtunnel(options);
       console.log(`  Public Link  →  ${tunnel.url}`);
       console.log(`  (Share this public link with anyone on different devices)`);
-      
-      // Override the base URL so that the generated app links use this public domain!
       process.env.BASE_URL = tunnel.url;
 
       tunnel.on('close', () => {
