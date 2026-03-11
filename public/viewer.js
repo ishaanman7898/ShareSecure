@@ -721,8 +721,8 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
 
-  // show integrity hash badge
-  if (integrityHash) {
+  // show integrity hash badge (only meaningful on the original uploader's link)
+  if (integrityHash && isOwner) {
     const badge = $('integrity-badge');
     if (badge) {
       badge.textContent = '🔒 SHA-256: ' + integrityHash.substring(0, 12) + '…';
@@ -761,12 +761,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
   // use the refined delete handler
   $('delete-file-btn').addEventListener('click', async () => {
-    const isRoot = fileInfo?.isRoot;
-    const msg = isRoot
-      ? 'CAUTION: This will delete the file for EVERYONE on all links. Continue?'
-      : 'Delete your link and all links reshared from it?';
-
-    if (!confirm(msg)) return;
+    if (!confirm('Delete this link?')) return;
 
     $('delete-file-btn').textContent = '⏳';
     $('delete-file-btn').disabled = true;

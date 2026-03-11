@@ -10,6 +10,7 @@ const {
   generateId, sha256hex, compress, decompress,
   getEncKey, encryptBuffer, decryptBuffer,
   encryptString, decryptString, decodeToken,
+  quantizeToHour, padSize, randomHex,
 } = require('../utils');
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -66,17 +67,21 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const encFilename = encryptString(req.file.originalname, encKey);
   const encMime     = encryptString(mimeType, encKey);
 
+  // privacy: quantize upload time to hour boundary; pad size to 100 KB boundary
+  const uploaded_at = quantizeToHour();
+  const paddedSize  = padSize(req.file.size);
+
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
-      integrity_hash, compressed, encrypted, expires_at, delete_token, user_id,
+      integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token, user_id,
       cluster_id, allow_annotations, allow_download
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    shortId, encFilename, encMime, req.file.size, storedFilename,
-    integrity_hash, isEncrypted, expires_at, deleteToken,
+    shortId, encFilename, encMime, paddedSize, storedFilename,
+    integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
     auth ? auth.userId : null,
-    shortId, // cluster_id = shortId for root uploads
+    shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
     allow_annotations, allow_download
   );
 
@@ -85,7 +90,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
     shortId,
     shortUrl: `${baseUrl}/r/${shortId}`,
     filename: req.file.originalname,
-    size: req.file.size,
+    size: paddedSize,
     expiresAt: expires_at,
     deleteToken,
   });
@@ -94,8 +99,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
 // ── GET /api/info/:shortId ────────────────────────────────────────────────────
 router.get('/info/:shortId', (req, res) => {
   const file = db.prepare(`
-    SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at,
-           expires_at, download_count, integrity_hash, parent_short_id,
+    SELECT short_id, original_filename, mime_type, size_bytes,
+           expires_at, download_count, integrity_hash,
            allow_annotations, allow_download
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
@@ -113,11 +118,9 @@ router.get('/info/:shortId', (req, res) => {
     filename,
     size: file.size_bytes,
     mimeType,
-    uploadedAt: file.uploaded_at,
     expiresAt: file.expires_at,
     views: file.download_count,
     integrityHash: file.integrity_hash,
-    isRoot: !file.parent_short_id,
     allowAnnotations: file.allow_annotations ?? 1,
     allowDownload:    file.allow_download    ?? 0,
   });
@@ -237,22 +240,25 @@ router.post('/reshare/:shortId', (req, res) => {
   if (!file) return res.status(404).json({ error: 'File not found' });
   if (file.expires_at && new Date(file.expires_at) < new Date()) return res.status(410).json({ error: 'Expired' });
 
-  const newShortId     = generateId(8);
-  const newDeleteToken = generateId(24);
-  const baseUrl        = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  const newShortId      = generateId(8);
+  const newDeleteToken  = generateId(24);
+  const newClusterId    = generateId(16);   // privacy: independent cluster, no link to original
+  const newIntegrity    = randomHex(32);    // privacy: random hash, breaks content-fingerprint correlation
+  const reshareUploadAt = quantizeToHour(); // privacy: quantize to hour boundary
+  const baseUrl         = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
 
   // reshared rows share the same stored_filename (no file copy needed)
+  // parent_short_id intentionally omitted — each reshare is a standalone, untraceable link
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, expires_at, delete_token,
-      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+      cluster_id, uploaded_at, allow_annotations, allow_download
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newShortId, file.original_filename, file.mime_type, file.size_bytes, file.stored_filename,
-    file.integrity_hash, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
-    file.cluster_id || file.short_id,
-    file.short_id,
+    newIntegrity, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
+    newClusterId, reshareUploadAt,
     file.allow_annotations, file.allow_download
   );
 

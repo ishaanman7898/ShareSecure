@@ -110,6 +110,31 @@ function decodeToken(authHeader) {
   }
 }
 
+/**
+ * Quantize current UTC time to the nearest hour boundary (privacy: reduce temporal fingerprinting).
+ * Returns SQLite-compatible datetime string: "YYYY-MM-DD HH:00:00"
+ */
+function quantizeToHour() {
+  const d = new Date();
+  d.setUTCMinutes(0, 0, 0);
+  return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+}
+
+/**
+ * Pad size to the next 100 KB boundary (privacy: hide exact file size).
+ */
+function padSize(bytes) {
+  const boundary = 100 * 1024;
+  return Math.ceil(Math.max(bytes, 1) / boundary) * boundary;
+}
+
+/**
+ * Cryptographically random hex string of `bytes` bytes (default 32 → 64 hex chars).
+ */
+function randomHex(bytes = 32) {
+  return crypto.randomBytes(bytes).toString('hex');
+}
+
 module.exports = {
   generateId,
   sha256hex,
@@ -121,4 +146,7 @@ module.exports = {
   encryptString,
   decryptString,
   decodeToken,
+  quantizeToHour,
+  padSize,
+  randomHex,
 };
