@@ -542,13 +542,7 @@ document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
 
 $('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
 
-document.querySelectorAll('.hl-color-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.hl-color-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    highlightColor = btn.dataset.color;
-  });
-});
+$('hl-color-picker')?.addEventListener('input', e => { highlightColor = e.target.value; });
 
 // pen size buttons
 document.querySelectorAll('.pen-size-btn').forEach(btn => {
@@ -647,8 +641,23 @@ function openSharePanel() {
   fetch(`/api/reshare/${myShortId}`, { method: 'POST' })
     .then(r => r.json())
     .then(data => {
-      $('share-link-text').textContent = data.shortUrl;
-      makeQR($('share-qr-div'), data.shortUrl);
+      const ownerUrl = data.shortUrl;
+      $('share-link-text').textContent = ownerUrl;
+
+      if (ownerUrl.includes('localhost') || ownerUrl.includes('127.0.0.1')) {
+        let warningText = document.getElementById('viewer-localhost-warn');
+        if (!warningText) {
+          warningText = document.createElement('div');
+          warningText.id = 'viewer-localhost-warn';
+          warningText.style.color = '#f59e0b';
+          warningText.style.fontSize = '0.75rem';
+          warningText.style.marginTop = '0.5rem';
+          warningText.textContent = 'Warning: This link is pointing to your localhost and can only be accessed on this specific computer. Use your local network IP to share across devices on the same network.';
+          $('share-link-text').parentNode.appendChild(warningText);
+        }
+      }
+
+      makeQR($('share-qr-div'), ownerUrl);
       hide('share-generating'); show('share-ready');
 
       $('share-copy-btn').onclick = () => {
@@ -675,6 +684,21 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
 // ── main ──────────────────────────────────────────────────────────────────────
 (async () => {
+  // Check terms
+  if (localStorage.getItem('tc_accepted') !== 'true') {
+    const tcModal = $('tc-modal');
+    if (tcModal) {
+      tcModal.classList.remove('hidden');
+      await new Promise(resolve => {
+        $('accept-tc-btn')?.addEventListener('click', () => {
+          localStorage.setItem('tc_accepted', 'true');
+          tcModal.classList.add('hidden');
+          resolve();
+        });
+      });
+    }
+  }
+
   // owner keeps their original link — no redirect, no reshare.
   // non-owner (no delete token) gets a fresh unique id so their link is untraceable.
   if (!isOwner) {

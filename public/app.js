@@ -23,29 +23,17 @@ const customExpiryErr = document.getElementById('custom-expiry-err');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
-// --- auth & dashboard elements ---
-const showLoginBtn = document.getElementById('show-login');
-const authStatus = document.getElementById('auth-status');
-const authModal = document.getElementById('auth-modal');
-const closeModal = document.getElementById('close-modal');
-const authForm = document.getElementById('auth-form');
-const authUsername = document.getElementById('auth-username');
-const authPassword = document.getElementById('auth-password');
-const authSubmit = document.getElementById('auth-submit');
-const toggleAuth = document.getElementById('toggle-auth');
-const modalTitle = document.getElementById('modal-title');
+// --- local dashboard & TC elements ---
+const tcModal = document.getElementById('tc-modal');
+const acceptTcBtn = document.getElementById('accept-tc-btn');
+
 const dashboardCard = document.getElementById('dashboard-card');
 const fileList = document.getElementById('file-list');
-const uploadCount = document.getElementById('upload-count');
-
 const landingPage = document.getElementById('landing-page');
-const landingStartBtn = document.getElementById('landing-start');
 
 let qrInstance = null;
 let currentShortId = null;
 let currentDeleteToken = null;
-let userToken = localStorage.getItem('user_token');
-let isLoginMode = true;
 let customExpiryHours = null;
 
 function toLocalDatetimeString(date) {
@@ -204,9 +192,6 @@ uploadBtn.addEventListener('click', async () => {
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
-    if (userToken) {
-      xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
-    }
 
     xhr.upload.addEventListener('progress', e => {
       if (e.lengthComputable) {
@@ -218,11 +203,7 @@ uploadBtn.addEventListener('click', async () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
-        if (userToken) updateDashboard();
-      } else if (xhr.status === 429) {
-        alert('Upload limit reached (5 files per 24h).');
-        uploadBtn.disabled = false;
-        progressWrap.classList.add('hidden');
+        updateDashboard();
       } else {
         alert('Upload failed. Please try again.');
         uploadBtn.disabled = false;
@@ -254,6 +235,19 @@ function showResult(data, file) {
   // show the owner's direct url — same link they'll view the file at
   const ownerUrl = data.shortUrl;
   shortLink.textContent = ownerUrl;
+  
+  if (ownerUrl.includes('localhost') || ownerUrl.includes('127.0.0.1')) {
+    const warningText = document.createElement('div');
+    warningText.style.color = '#f59e0b';
+    warningText.style.fontSize = '0.8rem';
+    warningText.style.marginTop = '0.5rem';
+    warningText.textContent = 'Warning: This link is pointing to your localhost. This means it cannot be opened by people on other devices. Use your local network IP (e.g. 192.168.x.x) or use a tunnel to share it remotely.';
+    if (!document.getElementById('localhost-warn')) {
+      warningText.id = 'localhost-warn';
+      shortLink.parentNode.appendChild(warningText);
+    }
+  }
+
   document.getElementById('view-btn').href = ownerUrl;
   // store delete token so the viewer tab recognizes this browser as the owner
   if (data.deleteToken) {
@@ -307,13 +301,16 @@ deleteBtn.addEventListener('click', async () => {
 
   try {
     const headers = { 'Content-Type': 'application/json' };
-    if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
 
-    const res = await fetch(`/api/delete/${currentShortId}`, { method: 'POST', headers });
+    const res = await fetch(`/api/delete/${currentShortId}`, { 
+      method: 'POST', 
+      headers, 
+      body: JSON.stringify({ deleteToken: currentDeleteToken }) 
+    });
     const data = await res.json();
     if (data.deleted) {
       if (countdownInterval) clearInterval(countdownInterval);
-      if (userToken) updateDashboard();
+      updateDashboard();
       resultCard.innerHTML = `
         <div class="result-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -357,85 +354,41 @@ newUploadBtn.addEventListener('click', () => {
   uploadCard.classList.remove('hidden');
 });
 
-// --- auth & dashboard logic ---
+// --- local dashboard logic ---
 
-function initAuth() {
-  if (userToken) {
-    let username = 'User';
-    try {
-      username = atob(userToken).split(':')[0];
-    } catch (e) {
-      logout();
-      return;
-    }
-    authStatus.innerHTML = `
-      <span class="user-name">Hi, ${username}</span>
-      <button class="btn btn-ghost" id="logout-btn">Sign Out</button>
-    `;
-    document.getElementById('logout-btn').addEventListener('click', logout);
-
-    // auth-only view
+function initLocal() {
+  if (localStorage.getItem('tc_accepted') !== 'true') {
+    tcModal.classList.remove('hidden');
+    landingPage.classList.remove('hidden');
+    dashboardCard.classList.add('hidden');
+    uploadCard.classList.add('hidden');
+  } else {
+    tcModal.classList.add('hidden');
     landingPage.classList.add('hidden');
     dashboardCard.classList.remove('hidden');
     uploadCard.classList.remove('hidden');
     updateDashboard();
-  } else {
-    authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
-
-    // public/landing view
-    landingPage.classList.remove('hidden');
-    dashboardCard.classList.add('hidden');
-    uploadCard.classList.add('hidden');
   }
 }
 
-function updateAuthUI() {
-  modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  toggleAuth.textContent = isLoginMode ? 'Sign Up' : 'Sign In';
-  document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
-
-  // update placeholders/labels if needed
-  authUsername.placeholder = isLoginMode ? "Enter username" : "Pick a username";
-  authPassword.placeholder = isLoginMode ? "Enter secure code" : "Create secure code";
-}
-
-function openAuthModal(loginMode) {
-  isLoginMode = loginMode;
-  updateAuthUI();
-  authModal.classList.remove('hidden');
-}
-
-landingStartBtn.addEventListener('click', () => {
-  openAuthModal(false);
+acceptTcBtn.addEventListener('click', () => {
+  localStorage.setItem('tc_accepted', 'true');
+  initLocal();
 });
 
 async function updateDashboard() {
-  if (!userToken) return;
   try {
-    const res = await fetch('/api/auth/user/files', {
-      headers: { 'Authorization': `Bearer ${userToken}` }
-    });
-
-    if (res.status === 401) {
-      logout();
-      return;
-    }
-
+    const res = await fetch('/api/files');
     if (!res.ok) {
       console.error('Failed to load dashboard:', res.status);
       renderFileList([]);
       return;
     }
-
     const data = await res.json();
-
     if (data.files && Array.isArray(data.files)) {
       renderFileList(data.files);
-      uploadCount.textContent = `Used ${data.dailyUploadCount ?? data.files.length}/5 today`;
     } else {
       renderFileList([]);
-      uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
     }
   } catch (err) {
     console.error('Failed to fetch user files', err);
@@ -445,7 +398,7 @@ async function updateDashboard() {
 
 function renderFileList(files) {
   if (!files || files.length === 0) {
-    fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
+    fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files yet.</p>`;
     return;
   }
 
@@ -469,20 +422,22 @@ function renderFileList(files) {
 
   fileList.querySelectorAll('.delete-file-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Permanently delete this file?')) return;
+      if (!confirm('Permanently delete this file for everyone?')) return;
       const shortId = btn.dataset.id;
       btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`;
       btn.disabled = true;
       try {
+        const deleteToken = localStorage.getItem('owner_' + shortId);
         const res = await fetch(`/api/delete/${shortId}`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${userToken}` }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deleteToken })
         });
         const data = await res.json();
         if (data.deleted) {
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
-          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
+          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files yet.</p>`;
           updateDashboard();
         } else {
           btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
@@ -513,67 +468,4 @@ function renderFileList(files) {
   });
 }
 
-function logout() {
-  userToken = null;
-  localStorage.removeItem('user_token');
-  initAuth();
-}
-
-document.addEventListener('click', (e) => {
-  if (e.target && e.target.id === 'show-login') {
-    openAuthModal(true);
-  }
-});
-closeModal.addEventListener('click', () => authModal.classList.add('hidden'));
-
-toggleAuth.addEventListener('click', (e) => {
-  e.preventDefault();
-  isLoginMode = !isLoginMode;
-  updateAuthUI();
-});
-
-authForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = authUsername.value;
-  const access_code = authPassword.value;
-  const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
-
-  authSubmit.disabled = true;
-  authSubmit.textContent = 'Processing...';
-
-  try {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, access_code })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      if (isLoginMode) {
-        userToken = data.token;
-        localStorage.setItem('user_token', userToken);
-        authModal.classList.add('hidden');
-        initAuth();
-      } else {
-        // clear potential stale sessions on new account
-        localStorage.removeItem('user_token');
-        userToken = null;
-        alert('Account created! You can now sign in.');
-        isLoginMode = true;
-        modalTitle.textContent = 'Sign In';
-        authSubmit.textContent = 'Sign In';
-        toggleAuth.textContent = 'Sign Up';
-      }
-    } else {
-      alert(data.error || 'Operation failed');
-    }
-  } catch (err) {
-    alert('An error occurred');
-  } finally {
-    authSubmit.disabled = false;
-    authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  }
-});
-
-initAuth();
+initLocal();

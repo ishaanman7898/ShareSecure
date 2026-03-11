@@ -1,9 +1,40 @@
 'use strict';
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const envPath = path.join(__dirname, '../.env');
+if (!fs.existsSync(envPath)) {
+  console.log('--- FIRST TIME SETUP ---');
+  console.log('Creating .env configuration file...');
+  const examplePath = path.join(__dirname, '../.env.example');
+  let content = fs.existsSync(examplePath) ? fs.readFileSync(examplePath, 'utf8') : '';
+  
+  // Auto-generate secure encryption key
+  const key = crypto.randomBytes(32).toString('hex');
+  if (content.includes('ENCRYPTION_KEY=')) {
+    content = content.replace(/ENCRYPTION_KEY=.*/, `ENCRYPTION_KEY=${key}`);
+  } else {
+    content += `\nENCRYPTION_KEY=${key}\n`;
+  }
+
+  // Auto-generate persistent stable subdomain for localtunnel
+  const subdomain = 'sharesecure-local-' + crypto.randomBytes(4).toString('hex');
+  if (content.includes('TUNNEL_SUBDOMAIN=')) {
+    content = content.replace(/#?\s*TUNNEL_SUBDOMAIN=.*/, `TUNNEL_SUBDOMAIN=${subdomain}`);
+  } else {
+    content += `\nTUNNEL_SUBDOMAIN=${subdomain}\n`;
+  }
+
+  fs.writeFileSync(envPath, content);
+  console.log('✅ Generated secure ENCRYPTION_KEY');
+  console.log(`✅ Assigned stable public subdomain: ${subdomain}`);
+  console.log('Setup complete. Starting server...\n');
+}
+
+require('dotenv').config({ path: envPath });
 
 const express = require('express');
-const path = require('path');
-const fs = require('fs');
 const { db, UPLOADS_DIR } = require('./db');
 
 const app = express();
@@ -15,7 +46,6 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));
 
 // ── api routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/files'));
 
 // ── viewer ───────────────────────────────────────────────────────────────────
@@ -80,16 +110,42 @@ cleanupExpired();
 setInterval(cleanupExpired, 60 * 60 * 1000); // hourly
 
 // ── start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   const { DATA_DIR, DB_PATH } = require('./db');
   console.log(`\n  ShareSecure  →  http://localhost:${PORT}`);
-  console.log(`  Database     →  ${DB_PATH}`);
+  
+  // Create a public tunnel so they can share it across devices without port forwarding
+  if (process.env.USE_LOCAL_TUNNEL !== 'false') {
+    try {
+      const localtunnel = require('localtunnel');
+      const options = { port: PORT };
+      // User can set their own personal domain in .env (e.g. TUNNEL_SUBDOMAIN=my-super-secret-files)
+      if (process.env.TUNNEL_SUBDOMAIN) {
+        options.subdomain = process.env.TUNNEL_SUBDOMAIN;
+      }
+      
+      const tunnel = await localtunnel(options);
+      console.log(`  Public Link  →  ${tunnel.url}`);
+      console.log(`  (Share this public link with anyone on different devices)`);
+      
+      // Override the base URL so that the generated app links use this public domain!
+      process.env.BASE_URL = tunnel.url;
+
+      tunnel.on('close', () => {
+        console.log('  [tunnel] Connection closed.');
+      });
+    } catch (err) {
+      console.warn('  [warn] Could not start public tunnel:', err.message);
+    }
+  }
+
+  console.log(`\n  Database     →  ${DB_PATH}`);
   console.log(`  Uploads      →  ${UPLOADS_DIR}`);
   if (!process.env.ENCRYPTION_KEY) {
     console.warn('\n  [warn] ENCRYPTION_KEY not set — files stored unencrypted on disk.');
     console.warn('         Generate one with: node -e "require(\'crypto\').randomBytes(32).toString(\'hex\') |> console.log"');
     console.warn('         Or run: npm run generate-key\n');
   } else {
-    console.log('  Encryption   →  AES-256-GCM enabled');
+    console.log('  Encryption   →  AES-256-GCM enabled\n');
   }
 });
