@@ -144,8 +144,9 @@ uploadBtn.addEventListener('click', async () => {
 
   const formData = new FormData();
   formData.append('file', selectedFile);
-  // always send expiry — no "never" option
   formData.append('expires_hours', expiresSelect.value);
+  formData.append('allow_annotations', document.getElementById('allow-annotations').checked ? '1' : '0');
+  formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
 
   uploadBtn.disabled = true;
   progressWrap.classList.remove('hidden');

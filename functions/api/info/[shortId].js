@@ -7,7 +7,7 @@ export async function onRequestGet(context) {
   context.waitUntil(globalPurgeExpired(env, context));
 
   const res = await client.execute({
-    sql: 'SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, integrity_hash, parent_short_id FROM files WHERE short_id = ? AND is_active = 1',
+    sql: 'SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, integrity_hash, parent_short_id, allow_annotations, allow_download FROM files WHERE short_id = ? AND is_active = 1',
     args: [params.shortId]
   });
 
@@ -29,6 +29,8 @@ export async function onRequestGet(context) {
     expiresAt: file.expires_at,
     views: file.download_count,
     integrityHash: file.integrity_hash,
-    isRoot: !file.parent_short_id
+    isRoot: !file.parent_short_id,
+    allowAnnotations: file.allow_annotations ?? 1,
+    allowDownload: file.allow_download ?? 0
   });
 }

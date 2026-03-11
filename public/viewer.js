@@ -55,8 +55,8 @@ function formatSize(b) {
 function updateOwnershipDisplay() {
   myDeleteToken = checkOwnership();
   isOwner = !!myDeleteToken;
-  if (isOwner) { show('delete-file-btn'); show('download-btn'); }
-  else { hide('delete-file-btn'); hide('download-btn'); }
+  if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
+  // download visibility is set after fileInfo loads (depends on allowDownload flag)
 }
 
 // ── theme management ────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ function startStatusPolling() {
 }
 
 // ── drawing tools ─────────────────────────────────────────────────────────────
-let currentTool = 'pen';
+let currentTool = 'pointer';
 let currentColor = '#e74c3c';
 let currentPenSize = 2.5;
 const annotCanvases = [];
@@ -158,7 +158,9 @@ let currentStroke = null;
 function updateAnnotCursors() {
   annotCanvases.forEach(c => {
     c.classList.toggle('text-mode', currentTool === 'text');
-    if (currentTool !== 'text') c.style.cursor = 'crosshair';
+    if (currentTool === 'pointer') c.style.cursor = 'default';
+    else if (currentTool === 'text') c.style.cursor = '';
+    else c.style.cursor = 'crosshair';
   });
 }
 
@@ -216,6 +218,7 @@ function setupDrawing(canvas, pageIndex) {
 
   function startDraw(e) {
     e.preventDefault();
+    if (currentTool === 'pointer') return;
     if (currentTool === 'text') { startTextInput(e, canvas, pageIndex); return; }
     isDrawing = true;
     const [x, y] = getPos(e);
@@ -474,7 +477,7 @@ async function renderAllPages() {
 
   hide('loader');
   show('pdf-container');
-  show('draw-toolbar');
+  if (fileInfo?.allowAnnotations !== 0) show('draw-toolbar');
   redrawAllStrokes();
   isRendering = false;
 }
@@ -676,8 +679,11 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
-  const { filename, size, mimeType, expiresAt, integrityHash } = fileInfo;
+  const { filename, size, mimeType, expiresAt, integrityHash, allowAnnotations, allowDownload } = fileInfo;
   document.title = filename + ' — ShareSecure';
+
+  // show download button only for owner AND if uploader allowed it
+  if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);

@@ -54,6 +54,12 @@ export async function onRequestPost(context) {
   const auth = decodeToken(request.headers.get('Authorization'));
   const client = getFilesClient(env);
 
+  // one-time schema migrations — safe to run every request (idempotent)
+  for (const col of [
+    'ALTER TABLE files ADD COLUMN allow_annotations INTEGER DEFAULT 1',
+    'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
+  ]) { try { await client.execute({ sql: col, args: [] }); } catch {} }
+
   if (auth) {
     const recentUploads = await client.execute({
       sql: `SELECT COUNT(*) as count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')`,
@@ -67,6 +73,9 @@ export async function onRequestPost(context) {
   const rawHours = parseFloat(formData.get('expires_hours')) || 1;
   const expiresHours = Math.max(rawHours, 1 / 60);
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
+
+  const allow_annotations = formData.get('allow_annotations') === '1' ? 1 : 0;
+  const allow_download = formData.get('allow_download') === '1' ? 1 : 0;
 
   const shortId = generateId(8);
   const deleteToken = generateId(24);
@@ -89,9 +98,9 @@ export async function onRequestPost(context) {
   context.waitUntil(globalPurgeExpired(env, context));
 
   await client.execute({
-    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, integrity_hash, compressed)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    args: [shortId, enc_filename, enc_mime, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null, integrity_hash]
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, integrity_hash, compressed, cluster_id, allow_annotations, allow_download)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    args: [shortId, enc_filename, enc_mime, file.size, file_data, expires_at, deleteToken, auth ? auth.userId : null, integrity_hash, shortId, allow_annotations, allow_download]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;

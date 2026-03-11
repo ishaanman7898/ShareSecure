@@ -6,7 +6,7 @@ export async function onRequestPost(context) {
   const client = getFilesClient(env);
 
   const res = await client.execute({
-    sql: 'SELECT short_id, user_id, delete_token FROM files WHERE short_id = ?',
+    sql: 'SELECT short_id, user_id, delete_token, cluster_id FROM files WHERE short_id = ?',
     args: [params.shortId]
   });
 
@@ -27,11 +27,18 @@ export async function onRequestPost(context) {
     }
   }
 
-  // hard delete — no tombstone rows left behind
-  await client.execute({
-    sql: 'DELETE FROM files WHERE short_id = ?',
-    args: [params.shortId]
-  });
+  // cascade delete — wipe this file and every reshare in the same cluster
+  if (file.cluster_id) {
+    await client.execute({
+      sql: 'DELETE FROM files WHERE cluster_id = ?',
+      args: [file.cluster_id]
+    });
+  } else {
+    await client.execute({
+      sql: 'DELETE FROM files WHERE short_id = ?',
+      args: [params.shortId]
+    });
+  }
 
   return Response.json({ deleted: true });
 }

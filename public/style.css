@@ -216,6 +216,20 @@ body {
   gap: 12px;
 }
 
+.option-toggle {
+  justify-content: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.option-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 select {
   background: var(--surface2);
   border: 1px solid var(--border);
