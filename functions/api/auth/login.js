@@ -17,6 +17,15 @@ export async function onRequestPost(context) {
 
   try {
     const db = getAuthClient(env);
+    await db.execute({
+      sql: `CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        access_code TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      args: []
+    });
     const result = await db.execute({
       sql: 'SELECT * FROM users WHERE username = ?',
       args: [username]
