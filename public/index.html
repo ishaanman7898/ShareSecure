@@ -160,15 +160,23 @@
             <option value="6">6 hours</option>
             <option value="12">12 hours</option>
             <option value="24">24 hours</option>
+            <option value="custom">Custom...</option>
           </select>
         </label>
+        <div id="custom-expiry-wrap" class="hidden">
+          <label class="option-label custom-expiry-label">
+            Expire at
+            <input type="datetime-local" id="custom-expiry-input" />
+          </label>
+          <span id="custom-expiry-err" class="custom-expiry-err"></span>
+        </div>
         <label class="option-label option-toggle">
           <input type="checkbox" id="allow-annotations" checked />
           Allow viewers to annotate (PDF only)
         </label>
         <label class="option-label option-toggle">
           <input type="checkbox" id="allow-download" />
-          Allow me to download my file later
+          Allow users to download files within share links
         </label>
       </div>
 

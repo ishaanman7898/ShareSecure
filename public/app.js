@@ -17,6 +17,9 @@ const resultExpires = document.getElementById('result-expires');
 const newUploadBtn = document.getElementById('new-upload-btn');
 const deleteBtn = document.getElementById('delete-btn');
 const expiresSelect = document.getElementById('expires-select');
+const customExpiryWrap = document.getElementById('custom-expiry-wrap');
+const customExpiryInput = document.getElementById('custom-expiry-input');
+const customExpiryErr = document.getElementById('custom-expiry-err');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
@@ -43,6 +46,45 @@ let currentShortId = null;
 let currentDeleteToken = null;
 let userToken = localStorage.getItem('user_token');
 let isLoginMode = true;
+let customExpiryHours = null;
+
+function toLocalDatetimeString(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+expiresSelect.addEventListener('change', () => {
+  if (expiresSelect.value === 'custom') {
+    customExpiryWrap.classList.remove('hidden');
+    const now = new Date();
+    const max = new Date(now.getTime() + 24 * 60 * 60 * 1000 - 60 * 1000);
+    customExpiryInput.min = toLocalDatetimeString(now);
+    customExpiryInput.max = toLocalDatetimeString(max);
+    if (!customExpiryInput.value) {
+      customExpiryInput.value = toLocalDatetimeString(new Date(now.getTime() + 60 * 60 * 1000));
+    }
+    customExpiryErr.textContent = '';
+  } else {
+    customExpiryWrap.classList.add('hidden');
+    customExpiryHours = null;
+  }
+});
+
+customExpiryInput.addEventListener('change', () => {
+  const selected = new Date(customExpiryInput.value);
+  const now = new Date();
+  const diffMs = selected - now;
+  customExpiryErr.textContent = '';
+  if (diffMs <= 0) {
+    customExpiryErr.textContent = 'Please select a future time.';
+    customExpiryHours = null;
+  } else if (diffMs >= 24 * 60 * 60 * 1000) {
+    customExpiryErr.textContent = 'Must be less than 24 hours from now.';
+    customExpiryHours = null;
+  } else {
+    customExpiryHours = diffMs / (1000 * 3600);
+  }
+});
 
 const MAX_BYTES = 10 * 1024 * 1024;
 let selectedFile = null;
@@ -142,9 +184,16 @@ clearFile.addEventListener('click', clearSelection);
 uploadBtn.addEventListener('click', async () => {
   if (!selectedFile) return;
 
+  if (expiresSelect.value === 'custom') {
+    if (!customExpiryHours) {
+      alert('Please select a valid custom expiry time (within the next 24 hours).');
+      return;
+    }
+  }
+
   const formData = new FormData();
   formData.append('file', selectedFile);
-  formData.append('expires_hours', expiresSelect.value);
+  formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
   formData.append('allow_annotations', document.getElementById('allow-annotations').checked ? '1' : '0');
   formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
 
@@ -263,14 +312,28 @@ deleteBtn.addEventListener('click', async () => {
     const res = await fetch(`/api/delete/${currentShortId}`, { method: 'POST', headers });
     const data = await res.json();
     if (data.deleted) {
-      deleteBtn.textContent = 'Deleted';
-      deleteBtn.classList.add('deleted');
-      shortLink.textContent = '(deleted)';
-      document.getElementById('view-btn').removeAttribute('href');
       if (countdownInterval) clearInterval(countdownInterval);
-      resultExpires.textContent = 'File deleted';
-      resultExpires.style.color = '#ef4444';
       if (userToken) updateDashboard();
+      resultCard.innerHTML = `
+        <div class="result-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </div>
+        <p class="result-label">File deleted</p>
+        <p style="font-size:0.85rem;color:var(--text-muted);">This file has been permanently removed.</p>
+        <button class="btn btn-primary btn-full" id="post-delete-upload-btn">Upload a New File</button>
+      `;
+      document.getElementById('post-delete-upload-btn').addEventListener('click', () => {
+        clearSelection();
+        progressWrap.classList.add('hidden');
+        progressBar.style.width = '0%';
+        expiresSelect.value = '1';
+        customExpiryWrap.classList.add('hidden');
+        customExpiryHours = null;
+        resultCard.classList.add('hidden');
+        uploadCard.classList.remove('hidden');
+      });
     } else {
       deleteBtn.textContent = 'Failed';
       deleteBtn.disabled = false;
@@ -288,6 +351,8 @@ newUploadBtn.addEventListener('click', () => {
   progressWrap.classList.add('hidden');
   progressBar.style.width = '0%';
   expiresSelect.value = '1';
+  customExpiryWrap.classList.add('hidden');
+  customExpiryHours = null;
   resultCard.classList.add('hidden');
   uploadCard.classList.remove('hidden');
 });
@@ -367,10 +432,10 @@ async function updateDashboard() {
 
     if (data.files && Array.isArray(data.files)) {
       renderFileList(data.files);
-      uploadCount.textContent = `Used ${data.files.length}/5 today`;
+      uploadCount.textContent = `Used ${data.dailyUploadCount ?? data.files.length}/5 today`;
     } else {
       renderFileList([]);
-      uploadCount.textContent = `Used 0/5 today`;
+      uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
     }
   } catch (err) {
     console.error('Failed to fetch user files', err);
@@ -418,7 +483,7 @@ function renderFileList(files) {
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
           if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
-          uploadCount.textContent = `Used ${remaining}/5 today`;
+          updateDashboard();
         } else {
           btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
           btn.disabled = false;

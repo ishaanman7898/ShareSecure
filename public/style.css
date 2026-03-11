@@ -701,4 +701,50 @@ select:focus {
   font-size: 0.85rem;
   color: var(--text-muted);
   padding: 32px 0;
-}@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } .spin { animation: spin 1s linear infinite; } #dashboard-card { margin-bottom: 32px; } #upload-card { margin-bottom: 32px; } .user-name { font-weight: 500; color: var(--text-muted); margin-right: 12px; }
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+#dashboard-card { margin-bottom: 32px; }
+#upload-card { margin-bottom: 32px; }
+
+#auth-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-name {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* custom expiry */
+.custom-expiry-label {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 6px !important;
+}
+
+#custom-expiry-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+  color-scheme: dark;
+}
+
+#custom-expiry-input:focus {
+  border-color: var(--accent);
+}
+
+.custom-expiry-err {
+  font-size: 0.78rem;
+  color: #ef4444;
+  display: block;
+  margin-top: -4px;
+}

@@ -148,6 +148,7 @@ function startStatusPolling() {
 // ── drawing tools ─────────────────────────────────────────────────────────────
 let currentTool = 'pointer';
 let currentColor = '#e74c3c';
+let highlightColor = '#FFD600';
 let currentPenSize = 2.5;
 const annotCanvases = [];
 // track all drawing strokes for persistence
@@ -225,7 +226,7 @@ function setupDrawing(canvas, pageIndex) {
     currentStroke = {
       pageIndex,
       tool: currentTool,
-      color: currentTool === 'highlight' ? '#FFD600' : currentColor,
+      color: currentTool === 'highlight' ? highlightColor : currentColor,
       size: currentPenSize,
       points: [{ x, y }]
     };
@@ -252,7 +253,7 @@ function setupDrawing(canvas, pageIndex) {
     } else if (currentStroke.tool === 'highlight') {
       ctx.globalAlpha = 0.35;
       ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = '#FFD600';
+      ctx.strokeStyle = currentStroke.color;
       ctx.lineWidth = 22;
       ctx.lineCap = 'square';
     } else if (currentStroke.tool === 'eraser') {
@@ -317,7 +318,7 @@ function redrawAllStrokes() {
     } else if (stroke.tool === 'highlight') {
       ctx.globalAlpha = 0.35;
       ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = '#FFD600';
+      ctx.strokeStyle = stroke.color;
       ctx.lineWidth = 22;
       ctx.lineCap = 'square';
       ctx.beginPath();
@@ -540,6 +541,14 @@ document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
 });
 
 $('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
+
+document.querySelectorAll('.hl-color-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.hl-color-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    highlightColor = btn.dataset.color;
+  });
+});
 
 // pen size buttons
 document.querySelectorAll('.pen-size-btn').forEach(btn => {

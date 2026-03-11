@@ -333,6 +333,33 @@ body {
   background: none;
 }
 
+/* ── highlight color swatches ── */
+.hl-colors {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hl-color-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.hl-color-btn:hover {
+  transform: scale(1.2);
+}
+
+.hl-color-btn.active {
+  border-color: var(--text);
+  transform: scale(1.1);
+}
+
 /* ── save annotations button ── */
 .save-btn {
   width: auto !important;
