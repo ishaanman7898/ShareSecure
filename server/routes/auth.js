@@ -1,120 +1,105 @@
+'use strict';
 const express = require('express');
-const router = express.Router();
-const crypto = require('crypto');
-const { userDb, db } = require('../db');
+const router  = express.Router();
+const crypto  = require('crypto');
 
-// helper to hash access code
-function hashAccessCode(code) {
-    return crypto.createHash('sha256').update(code).digest('hex');
+const { db }         = require('../db');
+const { decodeToken } = require('../utils');
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(code).digest('hex');
 }
 
-// post /api/register
-router.post('/register', async (req, res) => {
-    const { username, access_code } = req.body;
+// ── POST /api/auth/register ───────────────────────────────────────────────────
+router.post('/register', (req, res) => {
+  const { username, access_code } = req.body || {};
 
-    if (!username || !access_code) {
-        return res.status(400).json({ error: 'Username and access code required' });
+  if (!username || !access_code) {
+    return res.status(400).json({ error: 'Username and access code required' });
+  }
+  if (username.length < 2 || username.length > 32) {
+    return res.status(400).json({ error: 'Username must be 2–32 characters' });
+  }
+  if (access_code.length < 6) {
+    return res.status(400).json({ error: 'Access code must be at least 6 characters' });
+  }
+
+  const hashed = hashCode(access_code);
+
+  try {
+    const result = db.prepare(
+      'INSERT INTO users (username, access_code) VALUES (?, ?)'
+    ).run(username.trim(), hashed);
+
+    res.json({ success: true, userId: String(result.lastInsertRowid) });
+  } catch (err) {
+    if (err.message && err.message.includes('UNIQUE constraint failed')) {
+      return res.status(400).json({ error: 'Username already taken' });
     }
-
-    if (access_code.length < 6) {
-        return res.status(400).json({ error: 'Access code must be at least 6 characters' });
-    }
-
-    const hashed = hashAccessCode(access_code);
-
-    try {
-        const result = await userDb.execute({
-            sql: 'INSERT INTO users (username, access_code) VALUES (?, ?)',
-            args: [username, hashed]
-        });
-        res.json({ success: true, userId: result.lastInsertRowid?.toString() });
-    } catch (err) {
-        if (err.message && err.message.includes('UNIQUE constraint failed')) {
-            return res.status(400).json({ error: 'Username already exists' });
-        }
-        console.error('Registration error:', err);
-        res.status(500).json({ error: 'Registration failed' });
-    }
+    console.error('[auth] Registration error:', err.message);
+    res.status(500).json({ error: 'Registration failed' });
+  }
 });
 
-// post /api/login
-router.post('/login', async (req, res) => {
-    const { username, access_code } = req.body;
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
+router.post('/login', (req, res) => {
+  const { username, access_code } = req.body || {};
 
-    if (!username || !access_code) {
-        return res.status(400).json({ error: 'Username and access code required' });
-    }
+  if (!username || !access_code) {
+    return res.status(400).json({ error: 'Username and access code required' });
+  }
 
-    try {
-        const result = await userDb.execute({
-            sql: 'SELECT * FROM users WHERE username = ?',
-            args: [username]
-        });
+  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.trim());
 
-        const user = result.rows[0];
-        if (!user) {
-            return res.status(401).json({ error: 'Invalid username or access code' });
-        }
+  if (!user || user.access_code !== hashCode(access_code)) {
+    return res.status(401).json({ error: 'Invalid username or access code' });
+  }
 
-        const hashed = hashAccessCode(access_code);
-        if (user.access_code !== hashed) {
-            return res.status(401).json({ error: 'Invalid username or access code' });
-        }
+  const token = Buffer.from(`${user.username}:${user.id}`).toString('base64');
 
-        // simple session token (username:id)
-        const sessionId = `${user.username}:${user.id.toString()}`;
-        const token = Buffer.from(sessionId).toString('base64');
-
-        res.json({
-            success: true,
-            userId: user.id.toString(),
-            username: user.username,
-            token: token
-        });
-    } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ error: 'Login failed' });
-    }
+  res.json({
+    success:  true,
+    userId:   String(user.id),
+    username: user.username,
+    token,
+  });
 });
 
-// get /api/user/files (dashboard)
-router.get('/user/files', async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) return res.status(401).json({ error: 'Unauthorized' });
+// ── GET /api/auth/user/files ──────────────────────────────────────────────────
+router.get('/user/files', (req, res) => {
+  const auth = decodeToken(req.headers.authorization);
+  if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
-    let userId;
-    try {
-        const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-        const decoded = Buffer.from(tokenPart, 'base64').toString('utf8');
-        const parts = decoded.split(':');
+  try {
+    const encKey = require('../utils').getEncKey();
+    const { decryptString } = require('../utils');
 
-        if (parts.length < 2) {
-            console.error('Malformed token:', decoded);
-            return res.status(401).json({ error: 'Invalid token format' });
-        }
+    const files = db.prepare(`
+      SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count
+      FROM files
+      WHERE user_id = ? AND is_active = 1
+      ORDER BY uploaded_at DESC
+    `).all(auth.userId);
 
-        userId = parseInt(parts[parts.length - 1], 10);
-        if (isNaN(userId)) {
-            return res.status(401).json({ error: 'Invalid token' });
-        }
-    } catch (err) {
-        return res.status(401).json({ error: 'Invalid token' });
-    }
+    const dailyRow = db.prepare(
+      "SELECT COUNT(*) AS count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')"
+    ).get(auth.userId);
 
-    try {
-        const result = await db.execute({
-            sql: `SELECT short_id, original_filename, size_bytes, uploaded_at, expires_at, download_count
-            FROM files
-            WHERE user_id = ? AND is_active = 1
-            ORDER BY uploaded_at DESC`,
-            args: [userId]
-        });
+    // decrypt filenames so the dashboard shows real names
+    const decrypted = files.map(f => ({
+      ...f,
+      original_filename: decryptString(f.original_filename, encKey),
+      mime_type:         decryptString(f.mime_type, encKey),
+    }));
 
-        res.json({ files: result.rows });
-    } catch (err) {
-        console.error('Dashboard DB error:', err.message);
-        res.status(500).json({ error: 'Failed to load files' });
-    }
+    res.json({
+      files: decrypted,
+      dailyUploadCount: Number(dailyRow.count),
+    });
+  } catch (err) {
+    console.error('[auth] Dashboard error:', err.message);
+    res.status(500).json({ error: 'Failed to load files' });
+  }
 });
 
 module.exports = router;

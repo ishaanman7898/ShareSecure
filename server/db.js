@@ -1,81 +1,83 @@
-const { createClient } = require('@libsql/client');
+'use strict';
+const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
-// local sqlite fallback (optional, but keeping createclient for turso)
-// for local dev, we use turso clients with the provided urls
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, '../data');
 
-const TURSO_AUTH_URL = process.env.TURSO_AUTH_URL;
-const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN;
-const TURSO_SECURE_TOKEN = process.env.TURSO_TOKEN;
+const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'sharesecure.db');
 
-if (!TURSO_AUTH_URL || !TURSO_AUTH_TOKEN || !TURSO_SECURE_TOKEN) {
-  console.error('CRITICAL: Missing Turso environment variables!');
-}
+// ensure data + uploads directories exist
+const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-// auth database client
-const userDb = createClient({
-  url: TURSO_AUTH_URL || '',
-  authToken: TURSO_AUTH_TOKEN || ''
-});
+const db = new Database(DB_PATH);
 
-// main files client (shard helper)
-const getFileClient = (nodeNum = 1) => {
-  const nodeName = `sharesecure-node-${nodeNum}`;
-  const hostname = `${nodeName}-ishman.aws-us-east-2.turso.io`;
-  return createClient({
-    url: `libsql://${hostname}`,
-    authToken: TURSO_SECURE_TOKEN
-  });
-};
+// performance & integrity pragmas
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+db.pragma('synchronous = NORMAL');
+db.pragma('cache_size = -8000'); // 8 MB cache
 
-// simple default client for standard queries
-const db = getFileClient(1);
-
-// initialize tables on turso (auth)
-userDb.execute(`
+// ── schema ──────────────────────────────────────────────────────────────────
+db.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    access_code TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`).then(() => console.log('Auth DB connected and initialized.'))
-  .catch(err => {
-    console.error('FAILED TO INITIALIZE USERS TABLE:', err.message);
-  });
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT UNIQUE NOT NULL COLLATE NOCASE,
+    access_code   TEXT NOT NULL,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 
-// initialize tables on turso (files - node 1)
-async function initFilesDb() {
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      short_id TEXT UNIQUE NOT NULL,
-      original_filename TEXT NOT NULL,
-      stored_filename TEXT,
-      mime_type TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      expires_at DATETIME,
-      download_count INTEGER DEFAULT 0,
-      is_active INTEGER DEFAULT 1,
-      user_id INTEGER
-    )
-  `);
+  CREATE TABLE IF NOT EXISTS files (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    short_id         TEXT UNIQUE NOT NULL,
+    original_filename TEXT NOT NULL,
+    mime_type        TEXT NOT NULL,
+    size_bytes       INTEGER NOT NULL,
+    stored_filename  TEXT,
+    integrity_hash   TEXT,
+    compressed       INTEGER DEFAULT 0,
+    encrypted        INTEGER DEFAULT 0,
+    uploaded_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at       DATETIME,
+    download_count   INTEGER DEFAULT 0,
+    is_active        INTEGER DEFAULT 1,
+    user_id          INTEGER,
+    delete_token     TEXT,
+    cluster_id       TEXT,
+    parent_short_id  TEXT,
+    allow_annotations INTEGER DEFAULT 1,
+    allow_download   INTEGER DEFAULT 0,
+    annotations      TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  );
 
-  // add any missing columns — safe to run every startup (fails silently if already exists)
-  const migrations = [
-    'ALTER TABLE files ADD COLUMN stored_filename TEXT',
-    'ALTER TABLE files ADD COLUMN user_id INTEGER',
-    'ALTER TABLE files ADD COLUMN file_data TEXT',
-    'ALTER TABLE files ADD COLUMN delete_token TEXT',
-  ];
-  for (const sql of migrations) {
-    await db.execute(sql).catch(() => {});
-  }
+  CREATE INDEX IF NOT EXISTS idx_files_short_id   ON files(short_id);
+  CREATE INDEX IF NOT EXISTS idx_files_cluster    ON files(cluster_id);
+  CREATE INDEX IF NOT EXISTS idx_files_user       ON files(user_id);
+  CREATE INDEX IF NOT EXISTS idx_files_expires    ON files(expires_at);
+  CREATE INDEX IF NOT EXISTS idx_files_active     ON files(is_active);
+`);
 
-  console.log('Files DB connected and initialized.');
+// ── safe migrations (add columns that may be missing in older DBs) ──────────
+const migrations = [
+  'ALTER TABLE files ADD COLUMN annotations TEXT',
+  'ALTER TABLE files ADD COLUMN allow_annotations INTEGER DEFAULT 1',
+  'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
+  'ALTER TABLE files ADD COLUMN cluster_id TEXT',
+  'ALTER TABLE files ADD COLUMN parent_short_id TEXT',
+  'ALTER TABLE files ADD COLUMN delete_token TEXT',
+  'ALTER TABLE files ADD COLUMN integrity_hash TEXT',
+  'ALTER TABLE files ADD COLUMN compressed INTEGER DEFAULT 0',
+  'ALTER TABLE files ADD COLUMN encrypted INTEGER DEFAULT 0',
+  'ALTER TABLE files ADD COLUMN stored_filename TEXT',
+];
+
+for (const sql of migrations) {
+  try { db.exec(sql); } catch { /* column already exists — ignore */ }
 }
 
-initFilesDb().catch(err => console.error('FAILED TO INITIALIZE FILES TABLE:', err.message));
-
-module.exports = { db, userDb, getFileClient };
+module.exports = { db, DATA_DIR, UPLOADS_DIR, DB_PATH };

@@ -1,0 +1,13 @@
+node_modules
+data
+.env
+.env.*
+!.env.example
+*.log
+.git
+.gitignore
+functions
+schema.sql
+auth_schema.sql
+*.md
+wrangler.toml

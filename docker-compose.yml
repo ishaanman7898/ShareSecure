@@ -1,0 +1,25 @@
+version: '3.9'
+
+services:
+  sharesecure:
+    build: .
+    container_name: sharesecure
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      BASE_URL: "${BASE_URL:-http://localhost:3000}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env — run: openssl rand -hex 32}"
+    volumes:
+      - sharesecure_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  sharesecure_data:
+    driver: local

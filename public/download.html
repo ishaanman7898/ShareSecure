@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Self-Host ShareSecure</title>
+  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #030303;
+      --surface:   #0a0a0c;
+      --surface2:  #121216;
+      --border:    #1f1f23;
+      --accent:    #0066ff;
+      --accent-h:  #0052cc;
+      --text:      #ffffff;
+      --muted:     #94a3b8;
+      --success:   #10b981;
+      --warn:      #f59e0b;
+      --radius:    12px;
+      --shadow:    0 4px 24px rgba(0,0,0,.5);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 0 16px 80px;
+    }
+
+    /* ── nav ── */
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .nav-logo svg { color: var(--accent); }
+    .nav-back {
+      font-size: 0.82rem;
+      color: var(--muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: color .15s;
+    }
+    .nav-back:hover { color: var(--text); }
+
+    /* ── hero ── */
+    .hero {
+      max-width: 860px;
+      margin: 56px auto 0;
+      text-align: center;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,102,255,.1);
+      border: 1px solid rgba(0,102,255,.25);
+      color: #6699ff;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      padding: 5px 14px;
+      border-radius: 99px;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -.03em;
+      line-height: 1.1;
+      margin-bottom: 18px;
+    }
+    .hero p {
+      font-size: 1.05rem;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 520px;
+      margin: 0 auto 40px;
+    }
+
+    /* ── perks row ── */
+    .perks {
+      display: flex;
+      justify-content: center;
+      gap: 28px;
+      flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+    .perk {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .perk svg { color: var(--success); flex-shrink: 0; }
+
+    /* ── method tabs ── */
+    .tabs-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 4px;
+      width: fit-content;
+      margin-bottom: 28px;
+    }
+    .tab-btn {
+      background: none;
+      border: none;
+      color: var(--muted);
+      padding: 8px 20px;
+      border-radius: 7px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ── cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      box-shadow: var(--shadow);
+    }
+    .card + .card { margin-top: 20px; }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card-title .badge {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .badge-rec  { background: rgba(16,185,129,.15); color: var(--success); border: 1px solid rgba(16,185,129,.3); }
+    .badge-easy { background: rgba(0,102,255,.12);  color: #6699ff;        border: 1px solid rgba(0,102,255,.25); }
+    .card-desc {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    /* ── platform selector ── */
+    .platform-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 16px;
+    }
+    .plat-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .plat-btn:hover { border-color: var(--accent); color: var(--text); }
+    .plat-btn.active { background: var(--surface2); border-color: var(--accent); color: var(--text); }
+    .plat-content { display: none; }
+    .plat-content.active { display: block; }
+
+    /* ── code blocks ── */
+    .code-wrap {
+      position: relative;
+      background: #0d0d10;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: #111114;
+      border-bottom: 1px solid var(--border);
+    }
+    .code-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .copy-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 12px;
+      border-radius: 5px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .copy-btn:hover   { border-color: var(--accent); color: var(--text); }
+    .copy-btn.copied  { border-color: var(--success); color: var(--success); }
+    pre {
+      margin: 0;
+      padding: 16px 20px;
+      font-family: 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      color: #e2e8f0;
+      white-space: pre;
+    }
+    .c-dim    { color: #4a5568; }
+    .c-blue   { color: #63b3ed; }
+    .c-green  { color: #68d391; }
+    .c-yellow { color: #f6e05e; }
+    .c-pink   { color: #f687b3; }
+
+    /* ── step list ── */
+    .steps {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 20px;
+    }
+    .steps li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: rgba(0,102,255,.15);
+      border: 1px solid rgba(0,102,255,.3);
+      color: #6699ff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-body { font-size: 0.88rem; line-height: 1.6; }
+    .step-body strong { color: var(--text); }
+    .step-body span   { color: var(--muted); }
+
+    /* ── requirements ── */
+    .req-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .req-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .req-item strong { font-size: 0.88rem; display: block; margin-bottom: 3px; }
+    .req-item span   { font-size: 0.78rem; color: var(--muted); }
+
+    /* ── note box ── */
+    .note {
+      background: rgba(245,158,11,.07);
+      border: 1px solid rgba(245,158,11,.2);
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 0.83rem;
+      color: #fcd34d;
+      line-height: 1.6;
+      margin-top: 18px;
+    }
+    .note strong { color: #fbbf24; }
+
+    /* ── divider ── */
+    hr.divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 28px 0;
+    }
+
+    /* ── section heading ── */
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .card { padding: 20px 18px; }
+      .tabs { overflow-x: auto; }
+      pre   { font-size: 0.78rem; padding: 14px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- nav -->
+<nav class="nav">
+  <a href="/" class="nav-logo">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2"/>
+      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+    ShareSecure
+  </a>
+  <a href="/" class="nav-back">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+    </svg>
+    Back to app
+  </a>
+</nav>
+
+<!-- hero -->
+<section class="hero">
+  <div class="hero-badge">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    Open Source · Self-Hosted
+  </div>
+  <h1>Run ShareSecure<br>on your own server</h1>
+  <p>Your files never leave your machine. Full feature parity with the cloud version — encryption, annotations, QR codes, and dashboards — all running locally.</p>
+
+  <div class="perks">
+    <div class="perk">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      AES-256 encryption at rest
+    </div>
+    <div class="perk">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      SQLite — zero config DB
+    </div>
+    <div class="perk">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      No cloud dependencies
+    </div>
+    <div class="perk">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Docker or bare Node.js
+    </div>
+    <div class="perk">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Works on Linux, Mac &amp; Windows
+    </div>
+  </div>
+</section>
+
+<!-- methods -->
+<div class="tabs-wrap">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="docker">
+      🐳 Docker
+    </button>
+    <button class="tab-btn" data-tab="script">
+      ⚡ One-Line Install
+    </button>
+    <button class="tab-btn" data-tab="manual">
+      🔧 Manual
+    </button>
+  </div>
+
+  <!-- ── DOCKER ── -->
+  <div class="tab-pane active" id="tab-docker">
+    <div class="card">
+      <div class="card-title">
+        Docker Compose
+        <span class="badge badge-rec">Recommended</span>
+      </div>
+      <p class="card-desc">The easiest way to run ShareSecure on a server or VPS. Docker handles all dependencies and keeps your data in a persistent volume.</p>
+
+      <p class="section-title">Prerequisites</p>
+      <div class="req-grid">
+        <div class="req-item">
+          <strong>Docker Engine ≥ 24</strong>
+          <span>Install from <a href="https://docs.docker.com/get-docker/" target="_blank" rel="noopener" style="color:var(--accent)">docs.docker.com</a></span>
+        </div>
+        <div class="req-item">
+          <strong>Docker Compose v2</strong>
+          <span>Included with Docker Desktop or install the plugin</span>
+        </div>
+        <div class="req-item">
+          <strong>Git (optional)</strong>
+          <span>For cloning the repo — or just download the zip</span>
+        </div>
+      </div>
+
+      <hr class="divider">
+      <p class="section-title">Three commands</p>
+
+      <div class="code-wrap" style="margin-bottom:12px;">
+        <div class="code-header">
+          <span class="code-label">Terminal</span>
+          <button class="copy-btn" data-copy="git clone https://github.com/ishaanman7898/ShareSecure
+cd ShareSecure
+echo &quot;ENCRYPTION_KEY=$(openssl rand -hex 32)&quot; > .env
+echo &quot;BASE_URL=http://localhost:3000&quot; >> .env
+docker compose up -d">Copy</button>
+        </div>
+        <pre><span class="c-dim"># 1. clone the repo</span>
+<span class="c-blue">git</span> clone https://github.com/<span class="c-yellow">ishaanman7898</span>/ShareSecure
+<span class="c-blue">cd</span> ShareSecure
+
+<span class="c-dim"># 2. create .env with a random encryption key</span>
+<span class="c-blue">echo</span> <span class="c-green">"ENCRYPTION_KEY=$(openssl rand -hex 32)"</span> &gt; .env
+<span class="c-blue">echo</span> <span class="c-green">"BASE_URL=http://localhost:3000"</span> &gt;&gt; .env
+
+<span class="c-dim"># 3. start</span>
+<span class="c-blue">docker</span> compose up -d</pre>
+      </div>
+
+      <p style="font-size:0.83rem;color:var(--muted);">
+        ShareSecure will be available at <strong style="color:var(--text)">http://localhost:3000</strong>.
+        Data is persisted in a Docker volume named <code style="font-family:monospace;color:var(--accent)">sharesecure_data</code>.
+      </p>
+
+      <hr class="divider">
+      <p class="section-title">Useful commands</p>
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-label">Management</span>
+          <button class="copy-btn" data-copy="docker compose stop        # stop
+docker compose start       # start again
+docker compose logs -f     # live logs
+docker compose down        # remove container (data is kept)
+docker compose down -v     # remove container AND all data">Copy</button>
+        </div>
+        <pre><span class="c-blue">docker</span> compose stop         <span class="c-dim"># stop</span>
+<span class="c-blue">docker</span> compose start        <span class="c-dim"># start again</span>
+<span class="c-blue">docker</span> compose logs -f      <span class="c-dim"># live logs</span>
+<span class="c-blue">docker</span> compose down         <span class="c-dim"># remove container (data kept)</span>
+<span class="c-blue">docker</span> compose down -v      <span class="c-dim"># ⚠ remove container AND all data</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ONE-LINE ── -->
+  <div class="tab-pane" id="tab-script">
+    <div class="card">
+      <div class="card-title">
+        Automated Installer
+        <span class="badge badge-easy">No Docker needed</span>
+      </div>
+      <p class="card-desc">A single command that checks for Node.js, installs it if missing, downloads ShareSecure, generates your encryption key, and starts the server.</p>
+
+      <div class="platform-tabs">
+        <button class="plat-btn active" data-plat="linux">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+          Linux / macOS
+        </button>
+        <button class="plat-btn" data-plat="windows">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="9" height="9"/><rect x="13" y="3" width="9" height="9"/><rect x="2" y="13" width="9" height="9"/><rect x="13" y="13" width="9" height="9"/></svg>
+          Windows
+        </button>
+      </div>
+
+      <div class="plat-content active" id="plat-linux">
+        <div class="code-wrap" style="margin-bottom:14px;">
+          <div class="code-header">
+            <span class="code-label">Bash / Zsh</span>
+            <button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.sh | bash">Copy</button>
+          </div>
+          <pre><span class="c-blue">curl</span> -fsSL https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.sh | bash</pre>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+          Or download and inspect first (recommended):
+        </p>
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-label">Inspect then run</span>
+            <button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.sh -o install.sh
+less install.sh          # inspect
+bash install.sh          # run">Copy</button>
+          </div>
+          <pre><span class="c-blue">curl</span> -fsSL https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.sh -o install.sh
+<span class="c-blue">less</span> install.sh          <span class="c-dim"># inspect first</span>
+<span class="c-blue">bash</span> install.sh          <span class="c-dim"># then run</span></pre>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-top:14px;">
+          The script installs Node.js via <strong style="color:var(--text)">nvm</strong>, <strong style="color:var(--text)">Homebrew</strong>, or your system package manager if it's missing.
+        </p>
+      </div>
+
+      <div class="plat-content" id="plat-windows">
+        <div class="code-wrap" style="margin-bottom:14px;">
+          <div class="code-header">
+            <span class="code-label">PowerShell (run as Administrator)</span>
+            <button class="copy-btn" data-copy="irm https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.ps1 | iex">Copy</button>
+          </div>
+          <pre><span class="c-blue">irm</span> https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.ps1 <span class="c-pink">|</span> <span class="c-blue">iex</span></pre>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">
+          Or download and inspect first:
+        </p>
+        <div class="code-wrap">
+          <div class="code-header">
+            <span class="code-label">Inspect then run</span>
+            <button class="copy-btn" data-copy="Invoke-WebRequest https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.ps1 -OutFile install.ps1
+notepad install.ps1   # inspect
+.\install.ps1         # run">Copy</button>
+          </div>
+          <pre><span class="c-blue">Invoke-WebRequest</span> https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.ps1 -OutFile install.ps1
+<span class="c-blue">notepad</span> install.ps1   <span class="c-dim"># inspect first</span>
+<span class="c-blue">.\</span>install.ps1         <span class="c-dim"># then run</span></pre>
+        </div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-top:14px;">
+          The script installs Node.js via <strong style="color:var(--text)">winget</strong> or downloads the official MSI installer.
+          A desktop shortcut is created after install.
+        </p>
+      </div>
+
+      <div class="note">
+        <strong>What the installer does:</strong>
+        checks for Node.js ≥ 18 (installs if missing) → downloads ShareSecure → runs <code>npm install</code> →
+        generates a random AES-256 encryption key → creates <code>.env</code> → starts the server on port 3000.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MANUAL ── -->
+  <div class="tab-pane" id="tab-manual">
+    <div class="card">
+      <div class="card-title">Manual Setup</div>
+      <p class="card-desc">Full control — install and configure everything yourself. Ideal for production deployments.</p>
+
+      <p class="section-title">Requirements</p>
+      <div class="req-grid" style="margin-bottom:24px;">
+        <div class="req-item">
+          <strong>Node.js ≥ 18</strong>
+          <span><a href="https://nodejs.org" target="_blank" rel="noopener" style="color:var(--accent)">nodejs.org</a> — LTS recommended</span>
+        </div>
+        <div class="req-item">
+          <strong>npm ≥ 9</strong>
+          <span>Bundled with Node.js</span>
+        </div>
+        <div class="req-item">
+          <strong>~50 MB disk space</strong>
+          <span>Plus storage for uploaded files</span>
+        </div>
+      </div>
+
+      <ul class="steps">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Clone or download</strong><br>
+            <span>Clone the repository, or download and unzip it.</span>
+          </div>
+        </li>
+      </ul>
+      <div class="code-wrap" style="margin:12px 0 20px;">
+        <div class="code-header">
+          <span class="code-label">Terminal</span>
+          <button class="copy-btn" data-copy="git clone https://github.com/ishaanman7898/ShareSecure
+cd ShareSecure">Copy</button>
+        </div>
+        <pre><span class="c-blue">git</span> clone https://github.com/<span class="c-yellow">ishaanman7898</span>/ShareSecure
+<span class="c-blue">cd</span> ShareSecure</pre>
+      </div>
+
+      <ul class="steps">
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Install dependencies</strong>
+          </div>
+        </li>
+      </ul>
+      <div class="code-wrap" style="margin:12px 0 20px;">
+        <div class="code-header">
+          <span class="code-label">Terminal</span>
+          <button class="copy-btn" data-copy="npm install">Copy</button>
+        </div>
+        <pre><span class="c-blue">npm</span> install</pre>
+      </div>
+
+      <ul class="steps">
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Create your <code style="font-family:monospace">.env</code> file</strong><br>
+            <span>Copy the example and fill in your values.</span>
+          </div>
+        </li>
+      </ul>
+      <div class="code-wrap" style="margin:12px 0 20px;">
+        <div class="code-header">
+          <span class="code-label">Terminal</span>
+          <button class="copy-btn" data-copy="cp .env.example .env
+npm run generate-key    # prints ENCRYPTION_KEY=... to paste into .env">Copy</button>
+        </div>
+        <pre><span class="c-blue">cp</span> .env.example .env
+<span class="c-blue">npm</span> run generate-key   <span class="c-dim"># prints ENCRYPTION_KEY=...  paste into .env</span></pre>
+      </div>
+
+      <ul class="steps">
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Configure <code style="font-family:monospace">.env</code></strong><br>
+            <span>Open <code style="font-family:monospace">.env</code> and set <code style="font-family:monospace">BASE_URL</code> to your domain or server IP.</span>
+          </div>
+        </li>
+      </ul>
+      <div class="code-wrap" style="margin:12px 0 20px;">
+        <div class="code-header">
+          <span class="code-label">.env</span>
+          <button class="copy-btn" data-copy="PORT=3000
+BASE_URL=https://share.yourdomain.com
+ENCRYPTION_KEY=<your-64-char-hex-key>">Copy</button>
+        </div>
+        <pre><span class="c-pink">PORT</span>=<span class="c-green">3000</span>
+<span class="c-pink">BASE_URL</span>=<span class="c-green">https://share.yourdomain.com</span>
+<span class="c-pink">ENCRYPTION_KEY</span>=<span class="c-yellow">&lt;your-64-char-hex-key&gt;</span></pre>
+      </div>
+
+      <ul class="steps">
+        <li>
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <strong>Start the server</strong>
+          </div>
+        </li>
+      </ul>
+      <div class="code-wrap" style="margin:12px 0 20px;">
+        <div class="code-header">
+          <span class="code-label">Terminal</span>
+          <button class="copy-btn" data-copy="npm start">Copy</button>
+        </div>
+        <pre><span class="c-blue">npm</span> start   <span class="c-dim"># production</span>
+<span class="c-blue">npm</span> run dev  <span class="c-dim"># development (auto-restart on file change)</span></pre>
+      </div>
+
+      <hr class="divider">
+      <p class="section-title">Running in production (optional)</p>
+      <p style="font-size:0.83rem;color:var(--muted);margin-bottom:14px;">Use a process manager like PM2 to keep ShareSecure running as a background service:</p>
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-label">PM2</span>
+          <button class="copy-btn" data-copy="npm install -g pm2
+pm2 start server/index.js --name sharesecure
+pm2 save
+pm2 startup">Copy</button>
+        </div>
+        <pre><span class="c-blue">npm</span> install -g pm2
+<span class="c-blue">pm2</span> start server/index.js --name sharesecure
+<span class="c-blue">pm2</span> save
+<span class="c-blue">pm2</span> startup   <span class="c-dim"># run as system service on reboot</span></pre>
+      </div>
+    </div>
+
+    <!-- data layout card -->
+    <div class="card">
+      <div class="card-title">Data &amp; File Storage</div>
+      <p class="card-desc">Everything ShareSecure needs lives in the <code style="font-family:monospace">data/</code> folder. Back this up to keep your files safe.</p>
+      <div class="code-wrap">
+        <div class="code-header">
+          <span class="code-label">Directory layout</span>
+        </div>
+        <pre>data/
+├── sharesecure.db     <span class="c-dim"># SQLite database (users + file records)</span>
+└── uploads/           <span class="c-dim"># encrypted + compressed file blobs</span>
+    ├── Abc123....bin
+    └── ...</pre>
+      </div>
+      <div class="note">
+        <strong>Encryption:</strong> when <code>ENCRYPTION_KEY</code> is set, every file is compressed with zlib then encrypted with AES-256-GCM before being written to disk. Filenames and MIME types in the database are also encrypted.
+        If you ever change or lose your key, existing files will become unreadable.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── tab switching ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── platform switching ─────────────────────────────────────────────────────
+  document.querySelectorAll('.plat-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const parent = btn.closest('.card');
+      parent.querySelectorAll('.plat-btn').forEach(b => b.classList.remove('active'));
+      parent.querySelectorAll('.plat-content').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('plat-' + btn.dataset.plat).classList.add('active');
+    });
+  });
+
+  // ── copy buttons ──────────────────────────────────────────────────────────
+  document.querySelectorAll('.copy-btn[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    });
+  });
+</script>
+</body>
+</html>

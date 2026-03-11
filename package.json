@@ -1,27 +1,24 @@
 {
   "name": "sharesecure",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "version": "2.0.0",
+  "description": "Private, encrypted file sharing — self-hosted edition",
+  "main": "server/index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server/index.js",
     "dev": "nodemon server/index.js",
-    "deploy": "wrangler pages deploy public --project-name sharesecure",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "generate-key": "node -e \"console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
+    "deploy": "wrangler pages deploy public --project-name sharesecure"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@libsql/client": "^0.17.0",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "multer": "^2.1.1",
-    "nanoid": "^5.1.6",
-    "qrcode": "^1.5.4"
+    "multer": "^2.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
