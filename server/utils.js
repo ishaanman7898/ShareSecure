@@ -157,6 +157,40 @@ function getUserTag(userId) {
   return crypto.createHmac('sha256', _ephemeralTagKey).update(String(userId)).digest('hex');
 }
 
+/**
+ * Encrypt a buffer using a freshly generated per-file key, then wrap that key
+ * with the master key.  Returns { data: Buffer, wrappedKey: string|null }.
+ *
+ * Forward-secrecy improvement: each file gets a unique key so compromising
+ * the master key only exposes future files, not past ones.
+ */
+function encryptWithPerFileKey(buffer, masterKey) {
+  if (!masterKey) {
+    return { data: Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer), wrappedKey: null };
+  }
+  const fileKey = crypto.randomBytes(32);
+  const data = encryptBuffer(buffer, fileKey);
+  // Wrap (encrypt) the file key with the master key.
+  const wrappedKey = encryptBuffer(fileKey, masterKey).toString('base64');
+  return { data, wrappedKey };
+}
+
+/**
+ * Decrypt a buffer that was encrypted with encryptWithPerFileKey.
+ * Falls back to direct master-key decryption for files uploaded before this
+ * scheme was introduced (wrappedKey === null).
+ */
+function decryptWithPerFileKey(buffer, wrappedKeyB64, masterKey) {
+  if (!masterKey) return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!wrappedKeyB64) {
+    // Backward compat: file encrypted directly with master key (old format)
+    return decryptBuffer(buffer, masterKey);
+  }
+  const wrappedKeyBuf = Buffer.from(wrappedKeyB64, 'base64');
+  const fileKey = decryptBuffer(wrappedKeyBuf, masterKey);
+  return decryptBuffer(buffer, fileKey);
+}
+
 module.exports = {
   generateId,
   sha256hex,
@@ -172,4 +206,6 @@ module.exports = {
   padSize,
   randomHex,
   getUserTag,
+  encryptWithPerFileKey,
+  decryptWithPerFileKey,
 };

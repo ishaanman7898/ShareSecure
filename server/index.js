@@ -90,6 +90,11 @@ app.get('/terms', (req, res) => {
 // legacy redirect
 app.get('/TERMS_AND_CONDITIONS.md', (req, res) => res.redirect(301, '/terms'));
 
+// ── security policy ───────────────────────────────────────────────────────────
+app.get('/security', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'security.html'));
+});
+
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));
 

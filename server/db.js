@@ -87,6 +87,8 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN stored_filename TEXT',
   // pseudonymous user tag replaces direct user_id linkage in queries
   'ALTER TABLE files ADD COLUMN user_tag TEXT',
+  // per-file wrapped key for forward secrecy (null = old direct-master-key format)
+  'ALTER TABLE files ADD COLUMN wrapped_key TEXT',
 ];
 
 for (const sql of migrations) {

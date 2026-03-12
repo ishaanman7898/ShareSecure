@@ -66,37 +66,23 @@ router.post('/login', (req, res) => {
 });
 
 // ── GET /api/auth/user/files ──────────────────────────────────────────────────
+// The dashboard is now client-side (localStorage).  This endpoint only returns
+// the authoritative daily upload count so the UI can show "Used X/5 today"
+// even if the user clears localStorage.  No file records are returned from the
+// server — there is no longer a server-side link between files and accounts.
 router.get('/user/files', (req, res) => {
   const auth = decodeToken(req.headers.authorization);
   if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const { getEncKey, decryptString } = require('../utils');
-    const encKey  = getEncKey();
     const userTag = getUserTag(auth.userId);
 
-    // Query active files by pseudonymous tag — no username or user_id in query
-    const files = db.prepare(`
-      SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count
-      FROM files
-      WHERE user_tag = ? AND is_active = 1
-        AND (expires_at IS NULL OR expires_at > datetime('now'))
-      ORDER BY uploaded_at DESC
-    `).all(userTag);
-
-    // Count from upload_log — persists even after files are deleted
     const dailyRow = db.prepare(
       "SELECT COUNT(*) AS count FROM upload_log WHERE user_tag = ? AND uploaded_at > datetime('now', '-1 day')"
     ).get(userTag);
 
-    const decrypted = files.map(f => ({
-      ...f,
-      original_filename: decryptString(f.original_filename, encKey),
-      mime_type:         decryptString(f.mime_type, encKey),
-    }));
-
     res.json({
-      files: decrypted,
+      files: [],                             // always empty — list lives in localStorage
       dailyUploadCount: Number(dailyRow.count),
     });
   } catch (err) {

@@ -48,6 +48,36 @@ let userToken = localStorage.getItem('user_token');
 let isLoginMode = true;
 let customExpiryHours = null;
 
+// ── localStorage upload history (client-side dashboard) ───────────────────────
+const HISTORY_KEY = 'ss_upload_history';
+
+function loadUploadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    if (!raw) return [];
+    const items = JSON.parse(raw);
+    if (!Array.isArray(items)) return [];
+    // Prune expired entries so the list self-cleans
+    const now = Date.now();
+    return items.filter(f => !f.expires_at || new Date(f.expires_at).getTime() > now);
+  } catch { return []; }
+}
+
+function saveUploadToHistory(record) {
+  try {
+    const history = loadUploadHistory();
+    history.unshift(record);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+  } catch {}
+}
+
+function removeFromHistory(shortId) {
+  try {
+    const history = loadUploadHistory().filter(f => f.short_id !== shortId);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {}
+}
+
 function toLocalDatetimeString(date) {
   const pad = n => String(n).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -284,6 +314,18 @@ function showResult(data, file) {
   if (data.deleteToken) {
     localStorage.setItem('owner_' + data.shortId, data.deleteToken);
   }
+
+  // Save full record to client-side dashboard history (no server-side user→file link)
+  saveUploadToHistory({
+    short_id:          data.shortId,
+    original_filename: file.name,
+    mime_type:         file.type || 'application/octet-stream',
+    size_bytes:        file.size,
+    expires_at:        data.expiresAt,
+    uploaded_at:       new Date().toISOString(),
+    delete_token:      data.deleteToken || null,
+  });
+
   resultFilename.textContent = file.name;
   resultSize.textContent = formatSize(file.size);
 
@@ -334,10 +376,15 @@ deleteBtn.addEventListener('click', async () => {
     const headers = { 'Content-Type': 'application/json' };
     if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
 
-    const res = await fetch(`/api/delete/${currentShortId}`, { method: 'POST', headers });
+    const res = await fetch(`/api/delete/${currentShortId}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ deleteToken: currentDeleteToken }),
+    });
     const data = await res.json();
     if (data.deleted) {
       if (countdownInterval) clearInterval(countdownInterval);
+      removeFromHistory(currentShortId);
       if (userToken) updateDashboard();
       resultCard.innerHTML = `
         <div class="result-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
@@ -437,35 +484,24 @@ landingStartBtn.addEventListener('click', () => {
 
 async function updateDashboard() {
   if (!userToken) return;
+
+  // Load file list from client-side localStorage — no server-side user→file link
+  const history = loadUploadHistory();
+  // Persist pruned list back (removes any that expired since last visit)
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch {}
+  renderFileList(history);
+
+  // Fetch authoritative daily count from the server (enforced via upload_log)
   try {
     const res = await fetch('/api/auth/user/files', {
       headers: { 'Authorization': `Bearer ${userToken}` }
     });
-
-    if (res.status === 401) {
-      logout();
-      return;
-    }
-
-    if (!res.ok) {
-      console.error('Failed to load dashboard:', res.status);
-      renderFileList([]);
-      return;
-    }
-
-    const data = await res.json();
-
-    if (data.files && Array.isArray(data.files)) {
-      renderFileList(data.files);
-      uploadCount.textContent = `Used ${data.dailyUploadCount ?? data.files.length}/5 today`;
-    } else {
-      renderFileList([]);
+    if (res.status === 401) { logout(); return; }
+    if (res.ok) {
+      const data = await res.json();
       uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
     }
-  } catch (err) {
-    console.error('Failed to fetch user files', err);
-    renderFileList([]);
-  }
+  } catch { /* ignore network errors — count display is non-critical */ }
 }
 
 function renderFileList(files) {
@@ -496,15 +532,20 @@ function renderFileList(files) {
     btn.addEventListener('click', async () => {
       if (!confirm('Permanently delete this file?')) return;
       const shortId = btn.dataset.id;
+      // Retrieve deleteToken from history record or owner localStorage key
+      const record = files.find(f => f.short_id === shortId);
+      const deleteToken = record?.delete_token || localStorage.getItem('owner_' + shortId);
       btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`;
       btn.disabled = true;
       try {
         const res = await fetch(`/api/delete/${shortId}`, {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${userToken}` }
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+          body: JSON.stringify({ deleteToken }),
         });
         const data = await res.json();
         if (data.deleted) {
+          removeFromHistory(shortId);
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
           if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;

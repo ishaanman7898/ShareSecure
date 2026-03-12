@@ -11,6 +11,7 @@ const {
   getEncKey, encryptBuffer, decryptBuffer,
   encryptString, decryptString, decodeToken,
   quantizeToHour, padSize, randomHex, getUserTag,
+  encryptWithPerFileKey, decryptWithPerFileKey,
 } = require('../utils');
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -18,14 +19,41 @@ const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 // ── magic byte detection ──────────────────────────────────────────────────────
 // Returns { type: 'pdf'|'docx', mime: string } or null if not a permitted type.
 // Validates actual file content, not user-supplied headers.
+
+/**
+ * Scan ZIP local file headers looking for the 'word/document.xml' entry.
+ * A real DOCX must contain this path; a generic ZIP that is not a Word document
+ * will not.  This closes the gap where any valid ZIP passed the magic byte check.
+ */
+function isValidDocxZip(buf) {
+  const LOCAL_HEADER_SIG = 0x504B0304;
+  let offset = 0;
+  while (offset + 30 <= buf.length) {
+    if (buf.readUInt32LE(offset) !== LOCAL_HEADER_SIG) break;
+    const flags          = buf.readUInt16LE(offset + 6);
+    const compressedSize = buf.readUInt32LE(offset + 18);
+    const filenameLen    = buf.readUInt16LE(offset + 26);
+    const extraLen       = buf.readUInt16LE(offset + 28);
+    const nameEnd        = offset + 30 + filenameLen;
+    if (nameEnd > buf.length) break;
+    const name = buf.slice(offset + 30, nameEnd).toString('utf8');
+    if (name === 'word/document.xml') return true;
+    // If the data descriptor bit is set and sizes are zero we cannot safely skip
+    if ((flags & 0x08) && compressedSize === 0) break;
+    offset += 30 + filenameLen + extraLen + compressedSize;
+  }
+  return false;
+}
+
 function detectFileType(buf) {
   if (!buf || buf.length < 4) return null;
   // PDF: %PDF = 0x25 0x50 0x44 0x46
   if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
     return { type: 'pdf', mime: 'application/pdf' };
   }
-  // DOCX: PK ZIP = 0x50 0x4B 0x03 0x04 (Office Open XML is a ZIP container)
+  // DOCX: ZIP magic bytes AND internal word/document.xml entry required
   if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) {
+    if (!isValidDocxZip(buf)) return null; // valid ZIP but not a Word document
     return { type: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
   }
   return null;
@@ -82,11 +110,16 @@ router.post('/upload', upload.single('file'), (req, res) => {
   // integrity hash of original bytes
   const integrity_hash = sha256hex(rawBuffer);
 
-  // compress then optionally encrypt
+  // compress then optionally encrypt with per-file key wrapping
   let processed = compress(rawBuffer);
   const encKey = getEncKey();
   const isEncrypted = encKey ? 1 : 0;
-  if (encKey) processed = encryptBuffer(processed, encKey);
+  let wrappedKey = null;
+  if (encKey) {
+    const result = encryptWithPerFileKey(processed, encKey);
+    processed  = result.data;
+    wrappedKey = result.wrappedKey;
+  }
 
   // write to disk
   const storedFilename = generateId(32) + '.bin';
@@ -100,16 +133,20 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const uploaded_at = quantizeToHour();
   const paddedSize  = padSize(req.file.size);
 
+  // Privacy improvement: user_tag is no longer stored on the files row.
+  // The dashboard is now client-side (localStorage), so there is no server-side
+  // association between an upload and a user account.  Rate-limit counting still
+  // uses upload_log (pseudonymous tag) which is separate from the files table.
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
-      integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token, user_tag,
-      cluster_id, allow_annotations, allow_download
+      integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token,
+      wrapped_key, cluster_id, allow_annotations, allow_download
     ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     shortId, encFilename, encMime, paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
-    userTag, // pseudonymous HMAC tag — not a user ID
+    wrappedKey,
     shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
     allow_annotations, allow_download
   );
@@ -173,7 +210,7 @@ function pipeFile(res, file, disposition) {
 
   if (file.encrypted) {
     if (!encKey) return res.status(500).send('File is encrypted but ENCRYPTION_KEY is not set');
-    try { data = decryptBuffer(data, encKey); }
+    try { data = decryptWithPerFileKey(data, file.wrapped_key || null, encKey); }
     catch { return res.status(500).send('Decryption failed'); }
   }
 
