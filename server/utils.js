@@ -135,6 +135,28 @@ function randomHex(bytes = 32) {
   return crypto.randomBytes(bytes).toString('hex');
 }
 
+// Ephemeral fallback key — used only when ENCRYPTION_KEY is not set.
+// Changes on every server restart, which means tags are non-persistent
+// but the app still won't link uploads to a username in the DB.
+let _ephemeralTagKey = null;
+
+/**
+ * Derive a pseudonymous upload tag for a user.
+ * HMAC-SHA256(userId, derived_key) — irreversible without the key.
+ * DB rows store this tag instead of the raw user ID, so a DB leak
+ * alone cannot link a row to a username.
+ */
+function getUserTag(userId) {
+  const encKey = getEncKey();
+  if (!_ephemeralTagKey) {
+    _ephemeralTagKey = encKey
+      // sub-key derived from the encryption key so it's stable across restarts
+      ? crypto.createHmac('sha256', encKey).update('sharesecure-user-tag-v1').digest()
+      : crypto.randomBytes(32); // ephemeral if no ENCRYPTION_KEY
+  }
+  return crypto.createHmac('sha256', _ephemeralTagKey).update(String(userId)).digest('hex');
+}
+
 module.exports = {
   generateId,
   sha256hex,
@@ -149,4 +171,5 @@ module.exports = {
   quantizeToHour,
   padSize,
   randomHex,
+  getUserTag,
 };

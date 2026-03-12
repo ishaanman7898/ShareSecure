@@ -3,8 +3,8 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 
-const { db }         = require('../db');
-const { decodeToken } = require('../utils');
+const { db }                    = require('../db');
+const { decodeToken, getUserTag } = require('../utils');
 
 function hashCode(code) {
   return crypto.createHash('sha256').update(code).digest('hex');
@@ -71,21 +71,24 @@ router.get('/user/files', (req, res) => {
   if (!auth) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
-    const encKey = require('../utils').getEncKey();
-    const { decryptString } = require('../utils');
+    const { getEncKey, decryptString } = require('../utils');
+    const encKey  = getEncKey();
+    const userTag = getUserTag(auth.userId);
 
+    // Query active files by pseudonymous tag — no username or user_id in query
     const files = db.prepare(`
       SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count
       FROM files
-      WHERE user_id = ? AND is_active = 1
+      WHERE user_tag = ? AND is_active = 1
+        AND (expires_at IS NULL OR expires_at > datetime('now'))
       ORDER BY uploaded_at DESC
-    `).all(auth.userId);
+    `).all(userTag);
 
+    // Count from upload_log — persists even after files are deleted
     const dailyRow = db.prepare(
-      "SELECT COUNT(*) AS count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')"
-    ).get(auth.userId);
+      "SELECT COUNT(*) AS count FROM upload_log WHERE user_tag = ? AND uploaded_at > datetime('now', '-1 day')"
+    ).get(userTag);
 
-    // decrypt filenames so the dashboard shows real names
     const decrypted = files.map(f => ({
       ...f,
       original_filename: decryptString(f.original_filename, encKey),

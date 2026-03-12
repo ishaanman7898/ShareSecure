@@ -19,7 +19,7 @@
         <h2>Terms and Conditions & Liability Disclaimer</h2>
       </div>
       <div class="tc-content" style="font-size: 0.95em; margin-bottom: 30px; color: var(--text-color); line-height: 1.6; text-align: left;">
-        <p><strong>IMPORTANT:</strong> By clicking "I Accept", you unconditionally agree to the <a href="/TERMS_AND_CONDITIONS.md" target="_blank" style="color: var(--primary-color);">Terms and Conditions</a> and the AI Scraping Policy.</p>
+        <p><strong>IMPORTANT:</strong> By clicking "I Accept", you unconditionally agree to the <a href="/terms" target="_blank" style="color: var(--primary-color);">Terms and Conditions</a> and the AI Scraping Policy.</p>
         <p>The Operator bears absolutely <strong>ZERO LIABILITY</strong> in any form for any content uploaded, transmitted, shared, or reshared. You are solely responsible for ensuring you have all rights to share content and that it complies with all laws.</p>
         <p>You cannot use this application or any content to train AI models.</p>
       </div>
@@ -78,7 +78,7 @@
         </div>
         <div class="landing-actions" style="display: flex; justify-content: center; gap: 15px; margin-top: 30px;">
           <button class="btn btn-primary" id="landing-start">Get Started</button>
-          <a href="https://github.com/ishaanman7898/ShareSecure" class="btn btn-ghost" style="text-decoration:none;">
+          <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost" style="text-decoration:none;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -144,8 +144,8 @@
         <p class="drop-label">Drop your file here</p>
         <p class="drop-sub">or</p>
         <label class="btn btn-primary">Choose File</label>
-        <input type="file" id="file-input" hidden />
-        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, text, audio, video</p>
+        <input type="file" id="file-input" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF and DOCX only</p>
       </div>
 
       <div class="file-preview hidden" id="file-preview">
@@ -247,7 +247,7 @@
   </div>
 
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 10px 16px; background: var(--surface, #0a0a0c); border-top: 1px solid var(--border, #1f1f23); color: var(--text-muted, #94a3b8); font-size: 0.78rem; z-index: 100;">
-    By using this service you agree to the <a href="/TERMS_AND_CONDITIONS.md" target="_blank" style="color: var(--accent, #0066ff);">Terms &amp; Conditions</a>.
+    By using this service you agree to the <a href="/terms" target="_blank" style="color: var(--accent, #0066ff);">Terms &amp; Conditions</a>.
     &nbsp;·&nbsp;
     <strong>IP Notice:</strong> Your IP address is visible to the server and any network infrastructure in the path. ShareSecure does not explicitly log IPs, but this cannot be guaranteed for all deployments. Use Tor or a VPN if IP anonymity is required.
   </footer>

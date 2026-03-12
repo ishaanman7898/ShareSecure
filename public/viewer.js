@@ -148,7 +148,6 @@ function startStatusPolling() {
 // ── drawing tools ─────────────────────────────────────────────────────────────
 let currentTool = 'pointer';
 let currentColor = '#e74c3c';
-let highlightColor = '#FFD600';
 let currentPenSize = 2.5;
 const annotCanvases = [];
 // track all drawing strokes for persistence
@@ -226,7 +225,7 @@ function setupDrawing(canvas, pageIndex) {
     currentStroke = {
       pageIndex,
       tool: currentTool,
-      color: currentTool === 'highlight' ? highlightColor : currentColor,
+      color: currentColor,
       size: currentPenSize,
       points: [{ x, y }]
     };
@@ -541,8 +540,6 @@ document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
 });
 
 $('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
-
-$('hl-color-picker')?.addEventListener('input', e => { highlightColor = e.target.value; });
 
 // pen size buttons
 document.querySelectorAll('.pen-size-btn').forEach(btn => {

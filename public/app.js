@@ -140,9 +140,20 @@ function getFileIcon(mime) {
   return `<svg ${iconProps}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 }
 
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx'];
+const ALLOWED_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+
 function setFile(file) {
   if (file.size > MAX_BYTES) {
     alert(`File is too large (${formatSize(file.size)}). Max allowed is 10 MB.`);
+    return;
+  }
+  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_MIMES.includes(file.type)) {
+    alert('Only PDF (.pdf) and Word (.docx) files are accepted.');
     return;
   }
   selectedFile = file;

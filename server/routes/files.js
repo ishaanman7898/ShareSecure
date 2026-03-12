@@ -10,10 +10,26 @@ const {
   generateId, sha256hex, compress, decompress,
   getEncKey, encryptBuffer, decryptBuffer,
   encryptString, decryptString, decodeToken,
-  quantizeToHour, padSize, randomHex,
+  quantizeToHour, padSize, randomHex, getUserTag,
 } = require('../utils');
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
+// ── magic byte detection ──────────────────────────────────────────────────────
+// Returns { type: 'pdf'|'docx', mime: string } or null if not a permitted type.
+// Validates actual file content, not user-supplied headers.
+function detectFileType(buf) {
+  if (!buf || buf.length < 4) return null;
+  // PDF: %PDF = 0x25 0x50 0x44 0x46
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
+    return { type: 'pdf', mime: 'application/pdf' };
+  }
+  // DOCX: PK ZIP = 0x50 0x4B 0x03 0x04 (Office Open XML is a ZIP container)
+  if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) {
+    return { type: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+  }
+  return null;
+}
 
 // Memory storage — we process (compress/encrypt) before writing to disk
 const upload = multer({
@@ -25,13 +41,26 @@ const upload = multer({
 router.post('/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
+  // ── server-side magic byte validation (zero-knowledge: no logging) ───────
+  const detected = detectFileType(req.file.buffer);
+  if (!detected) {
+    return res.status(415).json({
+      error: 'Only PDF (.pdf) and Word (.docx) files are accepted. File type is determined by content, not filename.',
+    });
+  }
+  // Override user-supplied MIME with content-derived MIME — prevents spoofing
+  req.file.mimetype = detected.mime;
+
   const auth = decodeToken(req.headers.authorization);
 
-  // rate-limit: 5 uploads per 24h per authenticated user
+  // rate-limit: 5 uploads per 24h per authenticated session
+  // Uses upload_log (pseudonymous tag) so count persists even if files are deleted.
+  let userTag = null;
   if (auth) {
+    userTag = getUserTag(auth.userId);
     const row = db.prepare(
-      "SELECT COUNT(*) AS count FROM files WHERE user_id = ? AND uploaded_at > datetime('now', '-1 day')"
-    ).get(auth.userId);
+      "SELECT COUNT(*) AS count FROM upload_log WHERE user_tag = ? AND uploaded_at > datetime('now', '-1 day')"
+    ).get(userTag);
 
     if (row.count >= 5) {
       return res.status(429).json({ error: 'Upload limit reached (5 files per 24h)' });
@@ -74,16 +103,22 @@ router.post('/upload', upload.single('file'), (req, res) => {
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
-      integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token, user_id,
+      integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token, user_tag,
       cluster_id, allow_annotations, allow_download
     ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     shortId, encFilename, encMime, paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
-    auth ? auth.userId : null,
+    userTag, // pseudonymous HMAC tag — not a user ID
     shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
     allow_annotations, allow_download
   );
+
+  // Log the upload for rate-limit counting (persists through file deletion)
+  if (userTag) {
+    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at) VALUES (?, ?)')
+      .run(userTag, uploaded_at);
+  }
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   res.json({
@@ -200,12 +235,12 @@ router.post('/delete/:shortId', (req, res) => {
   const short_id     = req.params.shortId;
 
   const file = db.prepare(
-    'SELECT short_id, user_id, delete_token, cluster_id FROM files WHERE short_id = ?'
+    'SELECT short_id, user_tag, delete_token, cluster_id FROM files WHERE short_id = ?'
   ).get(short_id);
 
   if (!file) return res.status(404).json({ error: 'File not found' });
 
-  const isOwner  = auth && file.user_id && String(file.user_id) === String(auth.userId);
+  const isOwner = auth && file.user_tag && file.user_tag === getUserTag(auth.userId);
   const hasToken = deleteToken && file.delete_token && file.delete_token === deleteToken;
 
   if (!isOwner && !hasToken) {

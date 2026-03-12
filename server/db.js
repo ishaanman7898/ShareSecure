@@ -60,6 +60,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_files_user       ON files(user_id);
   CREATE INDEX IF NOT EXISTS idx_files_expires    ON files(expires_at);
   CREATE INDEX IF NOT EXISTS idx_files_active     ON files(is_active);
+
+  -- upload_log: persists per-user upload counts even after files are deleted.
+  -- Stores a pseudonymous user_tag (HMAC), never a raw username or user_id.
+  CREATE TABLE IF NOT EXISTS upload_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_tag     TEXT NOT NULL,
+    uploaded_at  DATETIME NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_upload_log_tag ON upload_log(user_tag);
+  CREATE INDEX IF NOT EXISTS idx_upload_log_at  ON upload_log(uploaded_at);
 `);
 
 // ── safe migrations (add columns that may be missing in older DBs) ──────────
@@ -74,6 +85,8 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN compressed INTEGER DEFAULT 0',
   'ALTER TABLE files ADD COLUMN encrypted INTEGER DEFAULT 0',
   'ALTER TABLE files ADD COLUMN stored_filename TEXT',
+  // pseudonymous user tag replaces direct user_id linkage in queries
+  'ALTER TABLE files ADD COLUMN user_tag TEXT',
 ];
 
 for (const sql of migrations) {

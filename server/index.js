@@ -39,6 +39,24 @@ const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const PUBLIC_DIR = path.join(__dirname, '../public');
 
+// ── IP privacy ───────────────────────────────────────────────────────────────
+// Disable trust proxy so Express never treats X-Forwarded-For as real client IP.
+app.set('trust proxy', false);
+
+// Strip IP-revealing headers before they reach any route handler.
+// This ensures that even if logging is added later, no real client IP
+// can be read from standard forwarding headers in application code.
+app.use((req, _res, next) => {
+  delete req.headers['x-forwarded-for'];
+  delete req.headers['x-real-ip'];
+  delete req.headers['x-client-ip'];
+  delete req.headers['cf-connecting-ip'];
+  delete req.headers['true-client-ip'];
+  delete req.headers['x-forwarded-host'];
+  delete req.headers['forwarded'];
+  next();
+});
+
 // ── middleware ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));
@@ -66,9 +84,11 @@ app.get('/r/:shortId', (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'index.html')));
 
 // ── terms and conditions ─────────────────────────────────────────────────────
-app.get('/TERMS_AND_CONDITIONS.md', (req, res) => {
-  res.sendFile(path.join(__dirname, '../TERMS_AND_CONDITIONS.md'));
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'terms.html'));
 });
+// legacy redirect
+app.get('/TERMS_AND_CONDITIONS.md', (req, res) => res.redirect(301, '/terms'));
 
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));
