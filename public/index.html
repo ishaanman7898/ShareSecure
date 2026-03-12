@@ -169,6 +169,15 @@
         </button>
       </div>
 
+      <!-- document rename field — shown once a file is selected -->
+      <div id="display-name-wrap" class="hidden" style="margin-top: 12px;">
+        <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+          <span>Document name <span style="color: var(--text-muted, #888); font-size: 0.8rem; font-weight: normal;">(optional — leave blank to use original filename)</span></span>
+          <input type="text" id="display-name-input" placeholder="Enter a custom name for this document" maxlength="200"
+            style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#333);border-radius:6px;background:var(--bg-card,#1c1c1e);color:var(--text-color,#f1f1f1);font-size:0.9rem;font-family:inherit;" />
+        </label>
+      </div>
+
       <div class="options">
         <label class="option-label">
           Expire link after

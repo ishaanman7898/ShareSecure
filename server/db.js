@@ -89,6 +89,8 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN user_tag TEXT',
   // per-file wrapped key for forward secrecy (null = old direct-master-key format)
   'ALTER TABLE files ADD COLUMN wrapped_key TEXT',
+  // link upload_log entry back to the file so deletion can restore the daily count
+  'ALTER TABLE upload_log ADD COLUMN short_id TEXT',
 ];
 
 for (const sql of migrations) {

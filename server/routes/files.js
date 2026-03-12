@@ -102,6 +102,20 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const allow_annotations = req.body.allow_annotations === '1' ? 1 : 0;
   const allow_download    = req.body.allow_download    === '1' ? 1 : 0;
 
+  // Optional custom display name — sanitise and preserve correct extension
+  let displayName = (req.body.display_name || '').toString().trim();
+  if (displayName) {
+    const ext = detected.type === 'pdf' ? '.pdf' : '.docx';
+    // Strip any extension the user typed so we always enforce the correct one
+    displayName = displayName.replace(/\.[^.]+$/, '') + ext;
+    // Remove filesystem-unsafe characters
+    displayName = displayName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+    if (displayName.length > 200) displayName = displayName.substring(0, 197) + ext;
+    if (!displayName || displayName === ext) displayName = req.file.originalname;
+  } else {
+    displayName = req.file.originalname;
+  }
+
   const shortId    = generateId(8);
   const deleteToken = generateId(24);
   const mimeType   = req.file.mimetype || 'application/octet-stream';
@@ -126,7 +140,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   fs.writeFileSync(path.join(UPLOADS_DIR, storedFilename), processed);
 
   // encrypt metadata strings
-  const encFilename = encryptString(req.file.originalname, encKey);
+  const encFilename = encryptString(displayName, encKey);
   const encMime     = encryptString(mimeType, encKey);
 
   // privacy: quantize upload time to hour boundary; pad size to 100 KB boundary
@@ -151,10 +165,11 @@ router.post('/upload', upload.single('file'), (req, res) => {
     allow_annotations, allow_download
   );
 
-  // Log the upload for rate-limit counting (persists through file deletion)
+  // Log the upload for rate-limit counting.
+  // short_id stored so deleting the file can remove this entry and restore the count.
   if (userTag) {
-    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at) VALUES (?, ?)')
-      .run(userTag, uploaded_at);
+    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at, short_id) VALUES (?, ?, ?)')
+      .run(userTag, uploaded_at, shortId);
   }
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
@@ -287,10 +302,20 @@ router.post('/delete/:shortId', (req, res) => {
   // cascade: delete this cluster (original + all reshares)
   const clusterId = file.cluster_id || short_id;
 
-  // collect distinct stored filenames before deleting DB rows
-  const clusterFiles = db.prepare(
-    'SELECT DISTINCT stored_filename FROM files WHERE cluster_id = ?'
+  // collect all short_ids in this cluster before deletion
+  const clusterRows = db.prepare(
+    'SELECT short_id, stored_filename FROM files WHERE cluster_id = ?'
   ).all(clusterId);
+  const clusterShortIds = clusterRows.map(r => r.short_id);
+
+  // restore the uploader's daily count — delete the upload_log entry for this file
+  // (reshares never have upload_log entries, so this is safe for all cluster members)
+  for (const sid of clusterShortIds) {
+    db.prepare('DELETE FROM upload_log WHERE short_id = ?').run(sid);
+  }
+
+  // collect distinct stored filenames before deleting DB rows
+  const clusterFiles = clusterRows;
 
   db.prepare('DELETE FROM files WHERE cluster_id = ?').run(clusterId);
 

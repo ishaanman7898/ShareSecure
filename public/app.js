@@ -47,6 +47,7 @@ let currentDeleteToken = null;
 let userToken = localStorage.getItem('user_token');
 let isLoginMode = true;
 let customExpiryHours = null;
+let selfHostMode = false;
 
 // ── localStorage upload history (client-side dashboard) ───────────────────────
 const HISTORY_KEY = 'ss_upload_history';
@@ -193,6 +194,15 @@ function setFile(file) {
   filePreview.classList.remove('hidden');
   dropZone.classList.add('hidden');
   uploadBtn.disabled = false;
+
+  // Show rename field and pre-fill with filename minus extension
+  const nameWrap = document.getElementById('display-name-wrap');
+  const nameInput = document.getElementById('display-name-input');
+  if (nameWrap && nameInput) {
+    nameWrap.classList.remove('hidden');
+    // Pre-fill with filename without extension for easy editing
+    nameInput.value = file.name.replace(/\.[^.]+$/, '');
+  }
 }
 
 function clearSelection() {
@@ -201,6 +211,11 @@ function clearSelection() {
   filePreview.classList.add('hidden');
   dropZone.classList.remove('hidden');
   uploadBtn.disabled = true;
+
+  const nameWrap = document.getElementById('display-name-wrap');
+  const nameInput = document.getElementById('display-name-input');
+  if (nameWrap) nameWrap.classList.add('hidden');
+  if (nameInput) nameInput.value = '';
 }
 
 // drag & drop
@@ -238,6 +253,12 @@ uploadBtn.addEventListener('click', async () => {
   formData.append('allow_annotations', document.getElementById('allow-annotations').checked ? '1' : '0');
   formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
 
+  // Send custom display name if the user changed it
+  const displayNameInput = document.getElementById('display-name-input');
+  if (displayNameInput && displayNameInput.value.trim()) {
+    formData.append('display_name', displayNameInput.value.trim());
+  }
+
   uploadBtn.disabled = true;
   progressWrap.classList.remove('hidden');
   progressBar.style.width = '0%';
@@ -260,6 +281,7 @@ uploadBtn.addEventListener('click', async () => {
         const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
         if (userToken) updateDashboard();
+        if (selfHostMode) renderFileList(loadUploadHistory());
       } else if (xhr.status === 429) {
         alert('Upload limit reached (5 files per 24h).');
         uploadBtn.disabled = false;
@@ -292,10 +314,16 @@ function showResult(data, file) {
   deleteBtn.textContent = 'Delete File';
   deleteBtn.classList.remove('deleted');
 
+  // Determine the display name (custom name takes precedence over original filename)
+  const displayNameInput = document.getElementById('display-name-input');
+  const usedName = (displayNameInput && displayNameInput.value.trim())
+    ? displayNameInput.value.trim()
+    : file.name;
+
   // show the owner's direct url — same link they'll view the file at
   const ownerUrl = data.shortUrl;
   shortLink.textContent = ownerUrl;
-  
+
   if (ownerUrl.includes('localhost') || ownerUrl.includes('127.0.0.1')) {
     let warningText = document.getElementById('localhost-warn');
     if (!warningText) {
@@ -318,7 +346,7 @@ function showResult(data, file) {
   // Save full record to client-side dashboard history (no server-side user→file link)
   saveUploadToHistory({
     short_id:          data.shortId,
-    original_filename: file.name,
+    original_filename: usedName,
     mime_type:         file.type || 'application/octet-stream',
     size_bytes:        file.size,
     expires_at:        data.expiresAt,
@@ -326,7 +354,7 @@ function showResult(data, file) {
     delete_token:      data.deleteToken || null,
   });
 
-  resultFilename.textContent = file.name;
+  resultFilename.textContent = usedName;
   resultSize.textContent = formatSize(file.size);
 
   // live countdown
@@ -386,6 +414,7 @@ deleteBtn.addEventListener('click', async () => {
       if (countdownInterval) clearInterval(countdownInterval);
       removeFromHistory(currentShortId);
       if (userToken) updateDashboard();
+      if (selfHostMode) renderFileList(loadUploadHistory());
       resultCard.innerHTML = `
         <div class="result-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
@@ -461,6 +490,29 @@ function initAuth() {
   }
 }
 
+// ── self-host mode: skip auth, show upload UI immediately as admin ─────────────
+function initSelfHost() {
+  selfHostMode = true;
+
+  // Replace auth button with admin badge
+  if (authStatus) {
+    authStatus.innerHTML = `
+      <span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:4px 12px;font-size:0.82rem;font-weight:600;letter-spacing:0.03em;">Admin</span>
+    `;
+  }
+
+  // Skip landing page, show upload card and dashboard immediately
+  if (landingPage) landingPage.classList.add('hidden');
+  if (dashboardCard) dashboardCard.classList.remove('hidden');
+  if (uploadCard) uploadCard.classList.remove('hidden');
+
+  // Show upload count as unlimited
+  if (uploadCount) uploadCount.textContent = 'No limit';
+
+  // Render history from localStorage
+  renderFileList(loadUploadHistory());
+}
+
 function updateAuthUI() {
   modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
   authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
@@ -506,7 +558,7 @@ async function updateDashboard() {
 
 function renderFileList(files) {
   if (!files || files.length === 0) {
-    fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
+    fileList.innerHTML = `<p class="empty-msg">No uploaded files.</p>`;
     return;
   }
 
@@ -538,9 +590,11 @@ function renderFileList(files) {
       btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`;
       btn.disabled = true;
       try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
         const res = await fetch(`/api/delete/${shortId}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+          headers,
           body: JSON.stringify({ deleteToken }),
         });
         const data = await res.json();
@@ -548,8 +602,8 @@ function renderFileList(files) {
           removeFromHistory(shortId);
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
-          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">You haven't uploaded any files today.</p>`;
-          updateDashboard();
+          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">No uploaded files.</p>`;
+          if (userToken) updateDashboard();
         } else {
           btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
           btn.disabled = false;
@@ -565,6 +619,7 @@ function renderFileList(files) {
   files.forEach(f => {
     const expiry = new Date(f.expires_at).getTime();
     const el = fileList.querySelector(`[data-expires="${f.expires_at}"]`);
+    if (!el) return;
 
     function updateItemTick() {
       const remaining = expiry - Date.now();
@@ -642,8 +697,29 @@ authForm.addEventListener('submit', async (e) => {
   }
 });
 
+// ── mode detection + app initialisation ──────────────────────────────────────
 const tcModal = document.getElementById('tc-modal');
 const acceptTcBtn = document.getElementById('accept-tc-btn');
+
+async function detectSelfHostMode() {
+  try {
+    const res = await fetch('/api/mode', { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      const data = await res.json();
+      return data.selfHostMode === true;
+    }
+  } catch {}
+  return false;
+}
+
+async function startApp() {
+  const isSelfHost = await detectSelfHostMode();
+  if (isSelfHost) {
+    initSelfHost();
+  } else {
+    initAuth();
+  }
+}
 
 function initApp() {
   if (localStorage.getItem('tc_accepted') !== 'true') {
@@ -652,14 +728,14 @@ function initApp() {
     dashboardCard.classList.add('hidden');
     uploadCard.classList.add('hidden');
   } else {
-    initAuth();
+    startApp();
   }
 }
 
 acceptTcBtn?.addEventListener('click', () => {
   localStorage.setItem('tc_accepted', 'true');
   tcModal.classList.add('hidden');
-  initAuth();
+  startApp();
 });
 
 initApp();

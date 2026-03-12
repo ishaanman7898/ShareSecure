@@ -4,23 +4,120 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // ── block all download vectors ────────────────────────────────────────────────
 document.addEventListener('contextmenu', e => e.preventDefault());
+
+// ── screenshot shield ─────────────────────────────────────────────────────────
+let shieldBlankTimeout = null;
+
+function showShield(message, autohideMs) {
+  const shield = document.getElementById('screenshot-shield');
+  if (!shield) return;
+  if (message) {
+    shield.innerHTML = `
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:rgba(255,255,255,0.35);user-select:none;pointer-events:none;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <p style="margin-top:12px;font-size:0.85rem;letter-spacing:0.03em;">${message}</p>
+      </div>`;
+  } else {
+    shield.innerHTML = '';
+  }
+  shield.classList.remove('hidden');
+  if (shieldBlankTimeout) { clearTimeout(shieldBlankTimeout); shieldBlankTimeout = null; }
+  if (autohideMs) {
+    shieldBlankTimeout = setTimeout(hideShield, autohideMs);
+  }
+}
+
+function hideShield() {
+  const shield = document.getElementById('screenshot-shield');
+  if (shield) shield.classList.add('hidden');
+  if (shieldBlankTimeout) { clearTimeout(shieldBlankTimeout); shieldBlankTimeout = null; }
+}
+
+// Legacy alias used by keyboard handler below
+function flashScreenshotShield() {
+  showShield('Screenshot blocked', 2000);
+}
+
+// ── keyboard screenshot/copy/print blocking ───────────────────────────────────
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(e.key.toLowerCase())) e.preventDefault();
-  if (e.key === 'PrintScreen') {
+  const key = e.key.toLowerCase();
+
+  // Block save, print, view-source
+  if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(key)) {
+    e.preventDefault();
+    return;
+  }
+
+  // Block select-all and copy (prevent clipboard exfil)
+  if ((e.ctrlKey || e.metaKey) && ['a', 'c'].includes(key)) {
+    e.preventDefault();
+    return;
+  }
+
+  // PrintScreen / F13 (some keyboards)
+  if (e.key === 'PrintScreen' || e.key === 'F13') {
     e.preventDefault();
     flashScreenshotShield();
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText('');
+    return;
+  }
+
+  // macOS screenshot shortcuts: Cmd+Shift+3, 4, 5, 6
+  if (e.metaKey && e.shiftKey && ['3', '4', '5', '6'].includes(e.key)) {
+    e.preventDefault();
+    flashScreenshotShield();
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText('');
+    return;
+  }
+
+  // Windows Snipping Tool shortcut: Win+Shift+S is caught as Meta+Shift+s on some browsers
+  if (e.metaKey && e.shiftKey && key === 's') {
+    e.preventDefault();
+    flashScreenshotShield();
+    return;
+  }
+
+  // F12 / DevTools
+  if (e.key === 'F12') {
+    e.preventDefault();
+    return;
   }
 });
-window.addEventListener('beforeprint', () => { document.body.innerHTML = '<p style="padding:40px;font-size:1.2rem">Printing is disabled.</p>'; });
 
-// ── screenshot shield ─────────────────────────────────────────────────────────
-function flashScreenshotShield() {
-  const shield = document.getElementById('screenshot-shield');
-  if (!shield) return;
-  shield.classList.remove('hidden');
-  setTimeout(() => shield.classList.add('hidden'), 1500);
-}
+// ── Snapchat-style: black screen when page becomes hidden ─────────────────────
+// On mobile this fires when the user takes a screenshot (the screen dims/switches briefly),
+// opens the app switcher, or presses the home button.
+// On desktop it fires when the tab is switched or window minimised.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    showShield(''); // immediately go black
+  } else {
+    // Brief pause before restoring content so any screenshot captures the black screen
+    setTimeout(hideShield, 300);
+  }
+});
+
+// ── Blur-based protection: blank when the window loses focus ──────────────────
+// Fires when the user switches to another app (e.g., screenshot tool, Snipping Tool).
+// Debounced at 150 ms to avoid blanking on quick address-bar clicks.
+let blurBlankTimeout = null;
+
+window.addEventListener('blur', () => {
+  blurBlankTimeout = setTimeout(() => {
+    showShield('');
+  }, 150);
+});
+
+window.addEventListener('focus', () => {
+  if (blurBlankTimeout) { clearTimeout(blurBlankTimeout); blurBlankTimeout = null; }
+  hideShield();
+});
+
+window.addEventListener('beforeprint', () => {
+  document.body.innerHTML = '<div style="padding:40px;font-size:1.2rem;font-family:sans-serif;">Printing is disabled for this document.</div>';
+});
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];

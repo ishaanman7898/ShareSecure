@@ -65,6 +65,14 @@ app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/files'));
 
+// ── mode endpoint (self-host detection) ───────────────────────────────────────
+// Returns selfHostMode: true so the frontend can skip auth and show admin UI.
+// This endpoint only exists in the Express server, not in Cloudflare Pages functions,
+// so the frontend uses its presence to detect self-hosted mode.
+app.get('/api/mode', (_req, res) => {
+  res.json({ selfHostMode: true });
+});
+
 // ── viewer ───────────────────────────────────────────────────────────────────
 app.get('/r/:shortId', (req, res) => {
   const file = db.prepare(

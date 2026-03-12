@@ -74,8 +74,7 @@ sharesecure/
 │       ├── annotations/[shortId].js # GET/POST - PDF annotations
 │       └── r/[shortId].js         # Viewer route handler
 ├── .env.example                   # Example environment configuration
-├── package.json
-└── wrangler.toml                  # Cloudflare Wrangler config
+└── package.json
 ```
 
 ---
@@ -227,6 +226,8 @@ The server starts on `http://localhost:3000`.
 
 If `USE_LOCAL_TUNNEL=true`, a public HTTPS URL is printed to the console — share that with anyone on a different device or network.
 
+> **Note on localtunnel and document origin:** localtunnel routes all traffic through the device running ShareSecure. Every document served via the tunnel URL originates from **your specific machine**. This means the tunnel URL itself ties back to your device — there is no ambiguity about which device hosted the file. Recipients can see the tunnel URL subdomain, and all network connections pass through your machine before reaching localtunnel's servers.
+
 For development with auto-restart on code changes:
 ```bash
 npm run dev
@@ -363,9 +364,6 @@ Set `USE_LOCAL_TUNNEL=false` in `.env`. Use a reverse proxy for production.
 
 **"Cannot find module" on startup**
 Run `npm install` in the project directory.
-
-**Files not persisting after Docker restart**
-Ensure the volume mount is correct: `-v $(pwd)/data:/app/data`.
 
 ---
 

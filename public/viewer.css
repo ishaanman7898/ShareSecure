@@ -865,6 +865,9 @@ body {
   background: #000;
   z-index: 9999;
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ── text annotation input overlay ── */
