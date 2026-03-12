@@ -1,6 +1,6 @@
 # ShareSecure
 
-![ShareSecure](./ShareSecure.png)
+![ShareSecure](./public/ShareSecure.png)
 
 A dead-simple way to share files that actually respects your privacy.
 
@@ -36,12 +36,13 @@ Upload a PDF or Word document, get a link, share it. Everyone who opens it gets 
 
 ```
 sharesecure/
+├── db/                            # Database schemas (reference only — server auto-creates tables)
+│   ├── schema.sql                 # Files table schema
+│   └── auth_schema.sql            # Users table schema
 ├── docs/                          # Documentation
-│   ├── SECURITY.md                # Security policy
-│   ├── TERMS_AND_CONDITIONS.md    # Legal terms (source)
-│   ├── schema.sql                 # Database schema
-│   └── auth_schema.sql            # Auth schema
-├── public/                        # Static frontend
+│   ├── SECURITY.md                # Security policy & vulnerability reporting
+│   └── TERMS_AND_CONDITIONS.md    # Legal terms (source document)
+├── public/                        # Static frontend (served at root)
 │   ├── index.html                 # Upload page
 │   ├── app.js                     # Upload page logic
 │   ├── style.css                  # Upload page styles
@@ -51,11 +52,13 @@ sharesecure/
 │   ├── terms.html                 # Terms & Conditions page
 │   ├── 404.html                   # Not found page
 │   ├── expired.html               # Expired file page
+│   ├── icon.ico                   # Favicon
+│   ├── ShareSecure.png            # Logo / banner
 │   └── qrcode.min.js              # Client-side QR generation (no third-party calls)
-├── server/                        # Local Express.js server
-│   ├── index.js                   # Main server
-│   ├── db.js                      # SQLite database setup
-│   ├── utils.js                   # Encryption, compression utilities
+├── server/                        # Express.js server
+│   ├── index.js                   # Main server entry point
+│   ├── db.js                      # SQLite database setup & migrations
+│   ├── utils.js                   # Encryption, compression, pseudonymous ID utilities
 │   └── routes/
 │       ├── files.js               # Upload/download/delete/reshare routes
 │       └── auth.js                # Authentication routes
@@ -70,9 +73,7 @@ sharesecure/
 │       ├── delete/[shortId].js    # POST  - Delete file
 │       ├── annotations/[shortId].js # GET/POST - PDF annotations
 │       └── r/[shortId].js         # Viewer route handler
-├── .env.example                   # Example configuration
-├── docker-compose.yml             # Docker Compose configuration
-├── Dockerfile                     # Docker image
+├── .env.example                   # Example environment configuration
 ├── package.json
 └── wrangler.toml                  # Cloudflare Wrangler config
 ```
@@ -233,67 +234,7 @@ npm run dev
 
 ---
 
-### Method 2 — Docker
-
-No Node.js installation required.
-
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) installed and running.
-
-```bash
-# Build the image
-docker build -t sharesecure .
-
-# Run with your encryption key
-docker run -d \
-  --name sharesecure \
-  -p 3000:3000 \
-  -e ENCRYPTION_KEY=your64hexcharskeyhere \
-  -e BASE_URL=http://localhost:3000 \
-  -e USE_LOCAL_TUNNEL=false \
-  -v $(pwd)/data:/app/data \
-  --restart unless-stopped \
-  sharesecure
-```
-
-On Windows (PowerShell), replace `$(pwd)` with `${PWD}`.
-
-Access at `http://localhost:3000`. Data persists in `./data`.
-
-**View logs:**
-```bash
-docker logs -f sharesecure
-```
-
-**Stop:**
-```bash
-docker stop sharesecure
-docker rm sharesecure
-```
-
----
-
-### Method 3 — Docker Compose
-
-The repository includes a `docker-compose.yml` for single-command deployment:
-
-```bash
-# Edit docker-compose.yml to set your ENCRYPTION_KEY first, then:
-docker compose up -d
-```
-
-Or pass the key via environment variable:
-```bash
-ENCRYPTION_KEY=your64hexcharskeyhere docker compose up -d
-```
-
-**Stop:**
-```bash
-docker compose down
-```
-
----
-
-### Method 4 — Cloudflare Pages (Serverless)
+### Method 2 — Cloudflare Pages (Serverless)
 
 For a zero-maintenance serverless deployment with Cloudflare's global edge network.
 
@@ -312,7 +253,7 @@ For a zero-maintenance serverless deployment with Cloudflare's global edge netwo
    - `BASE_URL` — your Pages URL (e.g. `https://sharesecure.pages.dev`)
 5. In your Turso database, run the schema:
    ```bash
-   turso db shell YOUR_DB_NAME < docs/schema.sql
+   turso db shell YOUR_DB_NAME < db/schema.sql
    ```
 6. Deploy
 
@@ -320,7 +261,7 @@ All file data is AES-256-GCM encrypted before it hits the database. Even full DB
 
 ---
 
-### Method 5 — Reverse Proxy (Production)
+### Method 3 — Reverse Proxy (Production)
 
 For production use behind Nginx or Caddy:
 
@@ -550,8 +491,8 @@ We are transparent about the current limitations so users can make informed deci
 
 - [Terms & Conditions](/terms) — Legal disclaimer and usage policy
 - [Security Policy](docs/SECURITY.md) — Vulnerability reporting
-- [Database Schema](docs/schema.sql) — Files table
-- [Auth Schema](docs/auth_schema.sql) — Users table
+- [Database Schema](db/schema.sql) — Files table
+- [Auth Schema](db/auth_schema.sql) — Users table
 
 ---
 
