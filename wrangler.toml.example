@@ -1,0 +1,35 @@
+# wrangler.toml.example
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file to wrangler.toml and fill in your own values.
+#
+#   cp wrangler.toml.example wrangler.toml
+#
+# wrangler.toml is gitignored — never commit your real config.
+# Secrets (TURSO_TOKEN, ENCRYPTION_KEY) must be set via the Cloudflare
+# dashboard under Pages → Settings → Environment Variables, NOT in this file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name = "sharesecure"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "public"
+
+[vars]
+# Your Turso organization slug (run `turso org list` to find it)
+TURSO_ORG = "your-org-name"
+
+# Turso deployment region — pick the one closest to your users.
+# Common values: aws-us-east-1, aws-us-west-2, eu-west-1, ams, nrt, sin
+# Full list: https://docs.turso.tech/concepts#location
+TURSO_REGION = "aws-us-east-1"
+
+# Number of Turso database replicas (1 is fine for personal/small deployments)
+TURSO_NODES = "1"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DO NOT add TURSO_TOKEN or ENCRYPTION_KEY here.
+# Set them as encrypted secrets in the Cloudflare Pages dashboard:
+#   Cloudflare → Pages → sharesecure → Settings → Environment Variables
+#
+#   TURSO_TOKEN      — your Turso auth token (`turso db tokens create YOUR_DB`)
+#   ENCRYPTION_KEY   — 64 hex chars (`npm run generate-key`)
+# ─────────────────────────────────────────────────────────────────────────────

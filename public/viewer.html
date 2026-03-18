@@ -94,6 +94,13 @@
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
       </button>
+      <div class="divider desktop-only"></div>
+      <div class="screenshot-protection-badge desktop-only" title="Screenshot protection is active: content is blanked when the window loses focus or the tab is hidden.">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span>Protected</span>
+      </div>
       <div class="divider"></div>
       <button class="tb-btn tb-btn-download hidden" id="download-btn" title="Download file">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -328,7 +335,11 @@
   <footer style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 7px 16px; background: var(--bg-top, #141417); border-top: 1px solid var(--border-color, #2a2a2e); color: var(--text-muted, #6b7280); font-size: 0.72rem; z-index: 100; pointer-events: auto;">
     <a href="/terms" target="_blank" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Terms &amp; Conditions</a>
     &nbsp;·&nbsp;
+    <a href="/changelog" target="_blank" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Changelog</a>
+    &nbsp;·&nbsp;
     <strong>IP Notice:</strong> Your IP address is visible to the server and network infrastructure. ShareSecure does not log IPs, but this may vary by deployment. Use Tor or a VPN for IP anonymity.
+    &nbsp;·&nbsp;
+    <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Report an Issue</a>
   </footer>
 
   <script src="/qrcode.min.js"></script>

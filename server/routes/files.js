@@ -166,7 +166,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   );
 
   // Log the upload for rate-limit counting.
-  // short_id stored so deleting the file can remove this entry and restore the count.
+  // Count persists even if the file is later deleted — prevents quota circumvention.
   if (userTag) {
     db.prepare('INSERT INTO upload_log (user_tag, uploaded_at, short_id) VALUES (?, ?, ?)')
       .run(userTag, uploaded_at, shortId);
@@ -306,13 +306,10 @@ router.post('/delete/:shortId', (req, res) => {
   const clusterRows = db.prepare(
     'SELECT short_id, stored_filename FROM files WHERE cluster_id = ?'
   ).all(clusterId);
-  const clusterShortIds = clusterRows.map(r => r.short_id);
 
-  // restore the uploader's daily count — delete the upload_log entry for this file
-  // (reshares never have upload_log entries, so this is safe for all cluster members)
-  for (const sid of clusterShortIds) {
-    db.prepare('DELETE FROM upload_log WHERE short_id = ?').run(sid);
-  }
+  // upload_log entries are intentionally NOT removed on deletion — the daily quota
+  // is consumed at upload time and persists regardless of whether the file is deleted,
+  // preventing users from circumventing the 5-files/24h limit by uploading then deleting.
 
   // collect distinct stored filenames before deleting DB rows
   const clusterFiles = clusterRows;

@@ -103,6 +103,11 @@ app.get('/security', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'security.html'));
 });
 
+// ── changelog ─────────────────────────────────────────────────────────────────
+app.get('/changelog', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'changelog.html'));
+});
+
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));
 
