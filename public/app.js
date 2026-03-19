@@ -52,15 +52,23 @@ let selfHostMode = false;
 // ── localStorage upload history (client-side dashboard) ───────────────────────
 const HISTORY_KEY = 'ss_upload_history';
 
+const HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 function loadUploadHistory() {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
     const items = JSON.parse(raw);
     if (!Array.isArray(items)) return [];
-    // Prune expired entries so the list self-cleans
     const now = Date.now();
-    return items.filter(f => !f.expires_at || new Date(f.expires_at).getTime() > now);
+    return items.filter(f => {
+      // Remove if the link has expired
+      if (f.expires_at && new Date(f.expires_at).getTime() <= now) return false;
+      // Remove if the entry is older than 30 days regardless of expiry
+      // This limits the permanent paper trail on the uploader's device
+      if (f.uploaded_at && now - new Date(f.uploaded_at).getTime() > HISTORY_MAX_AGE_MS) return false;
+      return true;
+    });
   } catch { return []; }
 }
 
@@ -69,6 +77,21 @@ function saveUploadToHistory(record) {
     const history = loadUploadHistory();
     history.unshift(record);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
+  } catch {}
+}
+
+// Purge stale owner_* tokens from localStorage so they don't accumulate forever.
+// Runs once on startup; removes tokens whose matching history entry no longer exists.
+function purgeStaleOwnerTokens() {
+  try {
+    const history = loadUploadHistory();
+    const activeIds = new Set(history.map(f => f.short_id));
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('owner_'))
+      .forEach(k => {
+        const id = k.slice(6);
+        if (!activeIds.has(id)) localStorage.removeItem(k);
+      });
   } catch {}
 }
 
@@ -712,6 +735,7 @@ async function startApp() {
 }
 
 function initApp() {
+  purgeStaleOwnerTokens();
   if (localStorage.getItem('tc_accepted') !== 'true') {
     tcModal.classList.remove('hidden');
     landingPage.classList.add('hidden');

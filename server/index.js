@@ -57,6 +57,19 @@ app.use((req, _res, next) => {
   next();
 });
 
+// ── security headers ─────────────────────────────────────────────────────────
+app.use((_req, res, next) => {
+  // Prevent the browser from sending the current URL as a Referer on any request
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  // Prevent MIME-type sniffing (protects against content-type confusion attacks)
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Deny embedding in iframes (prevents clickjacking)
+  res.setHeader('X-Frame-Options', 'DENY');
+  // Disable browser features that could leak location or enable covert capture
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  next();
+});
+
 // ── middleware ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));

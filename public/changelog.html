@@ -314,6 +314,40 @@
         <div class="change-groups">
 
           <div class="change-group">
+            <h3><span class="group-dot dot-security"></span><span class="color-security">Security &amp; Privacy</span></h3>
+            <ul class="change-list">
+              <li>
+                <strong>In-file metadata stripping</strong> — DOCX files now have <code>docProps/core.xml</code> and
+                <code>docProps/app.xml</code> replaced with blank versions before storage, removing Author, Last
+                Modified By, Company, and revision history. All ZIP entry timestamps are also zeroed. PDF files have
+                their <code>/Info</code> dictionary values and XMP metadata packet cleared.
+              </li>
+              <li>
+                <strong>HMAC integrity hash</strong> — <code>integrity_hash</code> is now HMAC-SHA256 keyed with a
+                sub-key derived from <code>ENCRYPTION_KEY</code> rather than raw SHA-256. This prevents the stored
+                hash from being looked up in public content-addressable databases (VirusTotal, NSRL, etc.) to trace
+                the original uploader.
+              </li>
+              <li>
+                <strong>upload_log <code>short_id</code> removed</strong> — the daily rate-limit log no longer stores
+                which specific file was uploaded per pseudonymous user tag. A database leak can no longer reconstruct
+                which user uploaded which file from the rate-limit table.
+              </li>
+              <li>
+                <strong>Security headers added</strong> — all server responses now include
+                <code>Referrer-Policy: no-referrer</code>, <code>X-Content-Type-Options: nosniff</code>,
+                <code>X-Frame-Options: DENY</code>, and <code>Permissions-Policy</code> disabling camera, microphone,
+                geolocation, and payment.
+              </li>
+              <li>
+                <strong>localStorage auto-purge</strong> — upload history entries are now removed after 30 days
+                regardless of their expiry date, limiting the permanent paper trail on the uploader's device. Stale
+                <code>owner_*</code> delete tokens are also purged on startup.
+              </li>
+            </ul>
+          </div>
+
+          <div class="change-group">
             <h3><span class="group-dot dot-fix"></span><span class="color-fix">Bug Fixes</span></h3>
             <ul class="change-list">
               <li>

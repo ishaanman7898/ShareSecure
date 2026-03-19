@@ -7,11 +7,12 @@ const multer = require('multer');
 
 const { db, UPLOADS_DIR } = require('../db');
 const {
-  generateId, sha256hex, compress, decompress,
+  generateId, sha256hex, hmacHex, compress, decompress,
   getEncKey, encryptBuffer, decryptBuffer,
   encryptString, decryptString, decodeToken,
   quantizeToHour, padSize, randomHex, getUserTag,
   encryptWithPerFileKey, decryptWithPerFileKey,
+  stripDocxMetadata, stripPdfMetadata,
 } = require('../utils');
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -119,10 +120,15 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const shortId    = generateId(8);
   const deleteToken = generateId(24);
   const mimeType   = req.file.mimetype || 'application/octet-stream';
-  const rawBuffer  = req.file.buffer;
 
-  // integrity hash of original bytes
-  const integrity_hash = sha256hex(rawBuffer);
+  // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
+  // Removes identifying information embedded in the document before storage.
+  let rawBuffer = req.file.buffer;
+  if (detected.type === 'docx') rawBuffer = stripDocxMetadata(rawBuffer);
+  if (detected.type === 'pdf')  rawBuffer = stripPdfMetadata(rawBuffer);
+
+  // HMAC-SHA256 integrity hash (keyed — not searchable in public hash databases)
+  const integrity_hash = hmacHex(rawBuffer);
 
   // compress then optionally encrypt with per-file key wrapping
   let processed = compress(rawBuffer);
@@ -167,9 +173,11 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
   // Log the upload for rate-limit counting.
   // Count persists even if the file is later deleted — prevents quota circumvention.
+  // short_id is intentionally NOT stored here — linking a pseudonymous tag to a specific
+  // file ID would let a DB leak reconstruct upload activity even without usernames.
   if (userTag) {
-    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at, short_id) VALUES (?, ?, ?)')
-      .run(userTag, uploaded_at, shortId);
+    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at) VALUES (?, ?)')
+      .run(userTag, uploaded_at);
   }
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
