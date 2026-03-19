@@ -413,28 +413,18 @@ deleteBtn.addEventListener('click', async () => {
     if (data.deleted) {
       if (countdownInterval) clearInterval(countdownInterval);
       removeFromHistory(currentShortId);
+      currentShortId = null;
+      currentDeleteToken = null;
       if (userToken) updateDashboard();
       if (selfHostMode) renderFileList(loadUploadHistory());
-      resultCard.innerHTML = `
-        <div class="result-icon" style="background:rgba(239,68,68,0.1);color:#ef4444;">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          </svg>
-        </div>
-        <p class="result-label">File deleted</p>
-        <p style="font-size:0.85rem;color:var(--text-muted);">This file has been permanently removed.</p>
-        <button class="btn btn-primary btn-full" id="post-delete-upload-btn">Upload a New File</button>
-      `;
-      document.getElementById('post-delete-upload-btn').addEventListener('click', () => {
-        clearSelection();
-        progressWrap.classList.add('hidden');
-        progressBar.style.width = '0%';
-        expiresSelect.value = '1';
-        customExpiryWrap.classList.add('hidden');
-        customExpiryHours = null;
-        resultCard.classList.add('hidden');
-        uploadCard.classList.remove('hidden');
-      });
+      clearSelection();
+      progressWrap.classList.add('hidden');
+      progressBar.style.width = '0%';
+      expiresSelect.value = '1';
+      customExpiryWrap.classList.add('hidden');
+      customExpiryHours = null;
+      resultCard.classList.add('hidden');
+      uploadCard.classList.remove('hidden');
     } else {
       deleteBtn.textContent = 'Failed';
       deleteBtn.disabled = false;

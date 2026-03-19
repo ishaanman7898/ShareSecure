@@ -702,6 +702,25 @@ function loadVideo(url) {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
+// ── docx ──────────────────────────────────────────────────────────────────────
+async function loadDocx(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Failed to fetch DOCX');
+    const arrayBuffer = await res.arrayBuffer();
+    if (!window.mammoth) throw new Error('mammoth.js not loaded');
+    const result = await window.mammoth.convertToHtml({ arrayBuffer });
+    const docContent = $('docx-content');
+    docContent.innerHTML = result.value;
+    hide('loader');
+    show('docx-container');
+    hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
+  } catch (err) {
+    console.error('DOCX Load Error:', err);
+    showUnsupported();
+  }
+}
+
 // ── audio ─────────────────────────────────────────────────────────────────────
 function loadAudio(url, name) {
   $('audio-player').src = url;
@@ -884,6 +903,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   const rawUrl = `/api/raw/${myShortId}`;
 
   if (mimeType === 'application/pdf') { await loadPDF(rawUrl); }
+  else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
   else if (mimeType.startsWith('image/')) { loadImage(rawUrl); }
   else if (mimeType.startsWith('video/')) { loadVideo(rawUrl); }
   else if (mimeType.startsWith('audio/')) { loadAudio(rawUrl, filename); }

@@ -323,6 +323,23 @@
                 deletion.
                 <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/14" target="_blank" rel="noopener noreferrer">#14</a>
               </li>
+              <li>
+                <strong>DOCX files now render in the viewer</strong> — Word documents previously showed "this file
+                can't be opened" because no DOCX renderer existed. Mammoth.js is now used to convert DOCX to styled
+                HTML client-side, with full dark-mode support and screenshot protection applied.
+              </li>
+              <li>
+                <strong><code>/api/mode</code> 404 on Cloudflare Pages fixed</strong> — the self-host detection
+                endpoint only existed in the Express server. A Cloudflare Pages Function at
+                <code>functions/api/mode.js</code> now returns <code>{"{"}"selfHostMode": false{"}"}</code>, eliminating
+                the 404 console error on hosted deployments.
+              </li>
+              <li>
+                <strong>Null <code>TypeError</code> after file deletion fixed</strong> — the delete handler previously
+                replaced the entire result card's HTML, destroying cached element references. The next upload would
+                crash with <code>Cannot set properties of null (setting 'href')</code>. The handler now transitions
+                cleanly back to the upload card without destroying the DOM structure.
+              </li>
             </ul>
           </div>
 
