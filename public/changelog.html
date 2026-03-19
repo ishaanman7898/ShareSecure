@@ -8,279 +8,14 @@
   <meta name="robots" content="noindex, nofollow" />
   <title>Changelog — ShareSecure</title>
   <link rel="icon" type="image/x-icon" href="/icon.ico" />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg: #0a0a0c;
-      --bg-card: #111113;
-      --border: #1f1f23;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
-      --accent: #3b82f6;
-      --green: #22c55e;
-      --yellow: #f59e0b;
-      --red: #ef4444;
-      --purple: #a78bfa;
-    }
-
-    html { scroll-behavior: smooth; }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 15px;
-      line-height: 1.7;
-      min-height: 100vh;
-    }
-
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      background: rgba(10, 10, 12, 0.95);
-      backdrop-filter: blur(8px);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-    }
-
-    .topbar-brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 1.05rem;
-      color: var(--text);
-      text-decoration: none;
-    }
-
-    .topbar-back {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      text-decoration: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      transition: color 0.15s, border-color 0.15s;
-    }
-
-    .topbar-back:hover { color: var(--text); border-color: #444; text-decoration: none; }
-
-    .wrapper {
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 48px 24px 100px;
-    }
-
-    .page-title {
-      font-size: 2rem;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
-    }
-
-    .page-subtitle {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      margin-bottom: 32px;
-    }
-
-    /* ── timeline ── */
-    .timeline {
-      position: relative;
-      padding-left: 28px;
-    }
-
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 7px;
-      top: 8px;
-      bottom: 0;
-      width: 2px;
-      background: var(--border);
-    }
-
-    .release {
-      position: relative;
-      margin-bottom: 56px;
-    }
-
-    .release::before {
-      content: '';
-      position: absolute;
-      left: -25px;
-      top: 8px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--accent);
-      border: 2px solid var(--bg);
-      box-shadow: 0 0 0 2px var(--accent);
-    }
-
-    .release.latest::before {
-      background: var(--green);
-      box-shadow: 0 0 0 2px var(--green);
-    }
-
-    .release-header {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .release-version {
-      font-size: 1.35rem;
-      font-weight: 800;
-      letter-spacing: -0.3px;
-      color: var(--text);
-    }
-
-    .release-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      padding: 3px 9px;
-      border-radius: 20px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .badge-stable {
-      background: rgba(34, 197, 94, 0.12);
-      color: #86efac;
-      border: 1px solid rgba(34, 197, 94, 0.3);
-    }
-
-    .badge-patch {
-      background: rgba(59, 130, 246, 0.12);
-      color: #93c5fd;
-      border: 1px solid rgba(59, 130, 246, 0.3);
-    }
-
-    .release-date {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      margin-left: auto;
-    }
-
-    .change-groups {
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    .change-group h3 {
-      font-size: 0.75rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-    }
-
-    .group-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .dot-fix    { background: var(--green); }
-    .dot-feat   { background: var(--accent); }
-    .dot-security { background: var(--yellow); }
-    .dot-chore  { background: var(--purple); }
-    .dot-docs   { background: var(--text-muted); }
-
-    .color-fix      { color: #86efac; }
-    .color-feat     { color: #93c5fd; }
-    .color-security { color: #fde68a; }
-    .color-chore    { color: #c4b5fd; }
-    .color-docs     { color: var(--text-muted); }
-
-    .change-list {
-      list-style: none;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-    }
-
-    .change-list li {
-      font-size: 0.9rem;
-      color: var(--text);
-      padding: 10px 14px;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 7px;
-      line-height: 1.5;
-    }
-
-    .change-list li strong { color: #fff; }
-    .change-list li code {
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 0.82em;
-      background: #1e1e22;
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 1px 5px;
-    }
-
-    .issue-ref {
-      display: inline-block;
-      font-size: 0.75em;
-      font-weight: 600;
-      color: var(--text-muted);
-      background: rgba(148,163,184,0.08);
-      border: 1px solid rgba(148,163,184,0.15);
-      border-radius: 4px;
-      padding: 1px 6px;
-      margin-left: 6px;
-      text-decoration: none;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-      vertical-align: middle;
-    }
-
-    .issue-ref:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
-
-    .footer {
-      margin-top: 64px;
-      padding-top: 24px;
-      border-top: 1px solid var(--border);
-      text-align: center;
-      color: var(--text-muted);
-      font-size: 0.82rem;
-      line-height: 1.8;
-    }
-
-    .footer a { color: var(--text-muted); }
-    .footer a:hover { color: var(--accent); }
-  </style>
+  <link rel="stylesheet" href="/docs.css" />
 </head>
 
 <body>
 
-  <div class="topbar">
+  <header class="topbar">
     <a class="topbar-brand" href="/">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round" stroke-linejoin="round">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -288,245 +23,88 @@
       ShareSecure
     </a>
     <a class="topbar-back" href="/">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
         stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 18 9 12 15 6" />
       </svg>
-      Back to App
+      Return to App
     </a>
-  </div>
+  </header>
 
-  <div class="wrapper">
+  <main class="wrapper">
 
-    <h1 class="page-title">Changelog</h1>
-    <p class="page-subtitle">Every release, every change — documented publicly.</p>
+    <header>
+      <h1 class="page-title">Changelog</h1>
+      <p class="page-subtitle">Every release, every change — documented publicly.</p>
+    </header>
 
     <div class="timeline">
 
-      <!-- ── v1.1.0 ── -->
-      <div class="release latest">
+      <!-- v1.1.0 -->
+      <section class="release latest">
         <div class="release-header">
           <span class="release-version">v1.1.0</span>
-          <span class="release-badge badge-stable">Stable Release</span>
           <span class="release-date">March 2026</span>
+          <span class="status-badge badge-done">Latest</span>
         </div>
 
-        <div class="change-groups">
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-security"></span><span class="color-security">Security &amp; Privacy</span></h3>
-            <ul class="change-list">
-              <li>
-                <strong>In-file metadata stripping</strong> — DOCX files now have <code>docProps/core.xml</code> and
-                <code>docProps/app.xml</code> replaced with blank versions before storage, removing Author, Last
-                Modified By, Company, and revision history. All ZIP entry timestamps are also zeroed. PDF files have
-                their <code>/Info</code> dictionary values and XMP metadata packet cleared.
-              </li>
-              <li>
-                <strong>HMAC integrity hash</strong> — <code>integrity_hash</code> is now HMAC-SHA256 keyed with a
-                sub-key derived from <code>ENCRYPTION_KEY</code> rather than raw SHA-256. This prevents the stored
-                hash from being looked up in public content-addressable databases (VirusTotal, NSRL, etc.) to trace
-                the original uploader.
-              </li>
-              <li>
-                <strong>upload_log <code>short_id</code> removed</strong> — the daily rate-limit log no longer stores
-                which specific file was uploaded per pseudonymous user tag. A database leak can no longer reconstruct
-                which user uploaded which file from the rate-limit table.
-              </li>
-              <li>
-                <strong>Security headers added</strong> — all server responses now include
-                <code>Referrer-Policy: no-referrer</code>, <code>X-Content-Type-Options: nosniff</code>,
-                <code>X-Frame-Options: DENY</code>, and <code>Permissions-Policy</code> disabling camera, microphone,
-                geolocation, and payment.
-              </li>
-              <li>
-                <strong>localStorage auto-purge</strong> — upload history entries are now removed after 30 days
-                regardless of their expiry date, limiting the permanent paper trail on the uploader's device. Stale
-                <code>owner_*</code> delete tokens are also purged on startup.
-              </li>
-            </ul>
-          </div>
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-fix"></span><span class="color-fix">Bug Fixes</span></h3>
-            <ul class="change-list">
-              <li>
-                <strong>Upload quota bypass closed</strong> — daily upload count now persists after file deletion.
-                Previously, uploading and immediately deleting a file restored the quota slot, allowing the 5-files/24h
-                limit to be bypassed indefinitely. The <code>upload_log</code> entry is now intentionally kept on
-                deletion.
-                <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/14" target="_blank" rel="noopener noreferrer">#14</a>
-              </li>
-              <li>
-                <strong>DOCX files now render in the viewer</strong> — Word documents previously showed "this file
-                can't be opened" because no DOCX renderer existed. Mammoth.js is now used to convert DOCX to styled
-                HTML client-side, with full dark-mode support and screenshot protection applied.
-              </li>
-              <li>
-                <strong><code>/api/mode</code> 404 on Cloudflare Pages fixed</strong> — the self-host detection
-                endpoint only existed in the Express server. A Cloudflare Pages Function at
-                <code>functions/api/mode.js</code> now returns <code>{"{"}"selfHostMode": false{"}"}</code>, eliminating
-                the 404 console error on hosted deployments.
-              </li>
-              <li>
-                <strong>Null <code>TypeError</code> after file deletion fixed</strong> — the delete handler previously
-                replaced the entire result card's HTML, destroying cached element references. The next upload would
-                crash with <code>Cannot set properties of null (setting 'href')</code>. The handler now transitions
-                cleanly back to the upload card without destroying the DOM structure.
-              </li>
-            </ul>
-          </div>
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-feat"></span><span class="color-feat">Features</span></h3>
-            <ul class="change-list">
-              <li>
-                <strong>Screenshot protection badge</strong> — a visible "Protected" indicator now appears in the viewer
-                topbar so users can confirm screenshot protection is active.
-                <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/12" target="_blank" rel="noopener noreferrer">#12</a>
-                <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/16" target="_blank" rel="noopener noreferrer">#16</a>
-              </li>
-              <li>
-                <strong>CSS content protection</strong> — <code>user-select: none</code> and
-                <code>-webkit-touch-callout: none</code> added to PDF pages, images, and text content to prevent
-                text selection and long-press save on mobile.
-                <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/12" target="_blank" rel="noopener noreferrer">#12</a>
-              </li>
-              <li>
-                <strong>"Report an Issue" link</strong> — added to footers on the main app and viewer pages, linking
-                directly to the GitHub Issues tracker.
-                <a class="issue-ref" href="https://github.com/ishaanman7898/ShareSecure/issues/15" target="_blank" rel="noopener noreferrer">#15</a>
-              </li>
-              <li>
-                <strong>Public changelog</strong> — this page. All releases documented in one place, accessible at
-                <code>/changelog</code>.
-              </li>
-              <li>
-                <strong><code>wrangler.toml.example</code></strong> — Cloudflare Pages deployment config template added.
-                The real <code>wrangler.toml</code> remains gitignored; the example guides users through all required
-                variables without exposing credentials.
-              </li>
-            </ul>
-          </div>
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-docs"></span><span class="color-docs">Docs &amp; Legal</span></h3>
-            <ul class="change-list">
-              <li>
-                <strong>README rewritten</strong> — feature table, badges, cleaner architecture diagram, consolidated
-                self-hosting guide, quick troubleshooting table, legal notice.
-              </li>
-              <li>
-                <strong>Terms &amp; Conditions strengthened</strong> — zero-liability language now explicitly covers
-                content uploaded, stored, transmitted, shared, and sent to other people. Section 3.2 expanded with a
-                full bulleted list of user responsibilities. Section 9 (Limitation of Liability) extended to cover
-                third-party harm and what others receive.
-              </li>
-              <li>
-                <strong>Security policy updated</strong> — removed "Dev Testing" badge and dev-build warnings.
-                <code>docs/SECURITY.md</code> rewritten with accurate feature descriptions (removed incorrect JWT
-                reference from original).
-              </li>
-            </ul>
-          </div>
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-chore"></span><span class="color-chore">Housekeeping</span></h3>
-            <ul class="change-list">
-              <li>
-                <strong>Removed <code>public/index_old.html</code></strong> — legacy upload page no longer needed.
-              </li>
-              <li>
-                <strong>Removed <code>public/SecureShare.png</code></strong> — old branding asset superseded by
-                <code>ShareSecure.png</code>.
-              </li>
-            </ul>
-          </div>
-
+        <div class="change-group">
+          <h3>Security & Privacy</h3>
+          <ul class="change-list">
+            <li><strong>In-file metadata stripping</strong> — Automatic scrubbing of PDF and DOCX metadata (Author, computer, revision info).</li>
+            <li><strong>HMAC integrity hashes</strong> — HMAC-SHA256 keyed with a secret salt prevents correlation with public file databases.</li>
+            <li><strong>Security headers added</strong> — Full suite of Referrer-Policy, nosniff, Frame-Options, and Permissions-Policy.</li>
+            <li><strong>Reduced database footprint</strong> — Removed <code>short_id</code> from upload logs to break user→file association.</li>
+          </ul>
         </div>
-      </div>
 
-      <!-- ── v1.0.x ── -->
-      <div class="release">
+        <div class="change-group">
+          <h3>Bug Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Upload quota bypass closed</strong> — Quotas now persist even if a file is immediately deleted.</li>
+            <li><strong>DOCX Viewer</strong> — Fixed rendering of Word documents using Mammoth.js for client-side HTML conversion.</li>
+            <li><strong>Memory leaks fixed</strong> — Resolved various <code>TypeError</code> crashes related to DOM replacement.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.0.x -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.0.x</span>
-          <span class="release-badge badge-patch">Patch Series</span>
           <span class="release-date">March 2026</span>
+          <span class="status-badge badge-plan">Patches</span>
         </div>
 
-        <div class="change-groups">
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-feat"></span><span class="color-feat">Features</span></h3>
-            <ul class="change-list">
-              <li><strong>Self-host admin mode</strong> — server detects self-hosted deployments via <code>/api/mode</code> and exposes an admin UI that bypasses authentication, showing upload history and unlimited quota.</li>
-              <li><strong>Document rename</strong> — uploaders can set a custom display name for their document before sharing. The original filename is preserved server-side; the display name is used in the viewer and dashboard.</li>
-              <li><strong>Enhanced screenshot protection</strong> — document blanks on <code>visibilitychange</code> (tab hidden, app switcher) and <code>window.blur</code> (focus lost to another app), providing Snapchat-style blackout behaviour.</li>
-              <li><strong>Upload count display</strong> — dashboard now shows authoritative "Used X/5 today" count fetched from the server's <code>upload_log</code>, surviving localStorage clears.</li>
-            </ul>
-          </div>
-
-          <div class="change-group">
-            <h3><span class="group-dot dot-security"></span><span class="color-security">Security &amp; Privacy</span></h3>
-            <ul class="change-list">
-              <li><strong>Forward secrecy for stored files</strong> — per-file key wrapping introduced. Each file is encrypted with a unique ephemeral key; only the wrapped key is stored. Compromise of one file's key does not compromise others.</li>
-              <li><strong>DOCX container validation</strong> — ZIP magic bytes are no longer sufficient. DOCX uploads must contain a valid <code>word/document.xml</code> entry, closing the gap where any <code>.zip</code> could pass as a Word document.</li>
-              <li><strong>Session privacy</strong> — authentication tokens are stateless base64 credentials (no session storage server-side). Upload history moved entirely to <code>localStorage</code> — no server-side user→file association.</li>
-              <li><strong>Pseudonymous rate limiting</strong> — upload rate limits now use an HMAC-SHA256 derived tag instead of raw user IDs. A full database leak cannot link rate-limit records to a specific account.</li>
-              <li><strong>IP address stripping</strong> — forwarding headers (<code>X-Forwarded-For</code>, <code>CF-Connecting-IP</code>, etc.) are stripped at the middleware layer before reaching any route handler.</li>
-              <li><strong>Encryption key management documented</strong> — security policy updated to recommend injecting <code>ENCRYPTION_KEY</code> via environment variables or a secrets manager rather than co-locating it with the database.</li>
-            </ul>
-          </div>
-
+        <div class="change-group">
+          <h3>Features</h3>
+          <ul class="change-list">
+            <li><strong>Self-host Admin Mode</strong> — Automatic detection and exposure of admin UI for local deployments.</li>
+            <li><strong>Document Rename</strong> — Uploaders can set custom display names for their files.</li>
+            <li><strong>Forward Secrecy</strong> — Per-file key wrapping for stored content.</li>
+            <li><strong>Screenshot Protection</strong> — Blackout behaviors on tab blur or visibility change.</li>
+          </ul>
         </div>
-      </div>
-
-      <!-- ── v1.0.0 ── -->
-      <div class="release">
-        <div class="release-header">
-          <span class="release-version">v1.0.0</span>
-          <span class="release-badge badge-stable">Initial Release</span>
-          <span class="release-date">February 2026</span>
-        </div>
-
-        <div class="change-groups">
-          <div class="change-group">
-            <h3><span class="group-dot dot-feat"></span><span class="color-feat">Initial Features</span></h3>
-            <ul class="change-list">
-              <li><strong>Encrypted ephemeral file sharing</strong> — upload PDF/DOCX, receive a short-lived encrypted link. Files auto-delete in 1 minute to 24 hours.</li>
-              <li><strong>Untraceable resharing</strong> — every recipient gets an independent link with no parent-child database linkage.</li>
-              <li><strong>AES-256-GCM encryption at rest</strong> with SHA-256 integrity verification on every access.</li>
-              <li><strong>Magic byte validation</strong> — file type determined by binary signature, not filename or MIME header.</li>
-              <li><strong>PDF annotations</strong> — pen, highlighter, text, eraser tools. Annotations encrypted and isolated per-link.</li>
-              <li><strong>QR code generation</strong> — fully client-side, no third-party calls.</li>
-              <li><strong>Optional download toggle</strong> — uploader controls whether recipients can download the file.</li>
-              <li><strong>Authentication system</strong> — optional account registration for tracked upload history and daily quota.</li>
-              <li><strong>Self-hosting support</strong> — full Node.js/Express server with SQLite, localtunnel, and configurable encryption key.</li>
-              <li><strong>Cloudflare Pages deployment</strong> — serverless variant using Turso/libSQL for edge-hosted database.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      </section>
 
     </div>
 
-    <div class="footer">
-      <p>
-        <a href="https://github.com/ishaanman7898/ShareSecure/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
-        &nbsp;·&nbsp;
-        <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an Issue</a>
-        &nbsp;·&nbsp;
+    <footer class="footer">
+      <div class="footer-nav">
+        <a href="/">App Home</a>
         <a href="/security">Security Policy</a>
-        &nbsp;·&nbsp;
-        <a href="/terms">Terms &amp; Conditions</a>
-        &nbsp;·&nbsp;
-        <a href="/">Back to App</a>
+        <a href="/terms">Terms & Conditions</a>
+        <a href="https://github.com/ishaanman7898/ShareSecure/issues">Report Issue</a>
+      </div>
+      <p class="footer-legal">
+        ShareSecure is an open-source project. Every change is documented here for maximum transparency.
       </p>
-      <br>
-      <p>&copy; 2026 ShareSecure. MIT Licensed.</p>
-    </div>
+      <p class="footer-copyright">
+        &copy; 2026 <strong>ShareSecure</strong>. Privacy by Design. MIT Licensed.
+      </p>
+    </footer>
 
-  </div>
+  </main>
 </body>
 
 </html>
