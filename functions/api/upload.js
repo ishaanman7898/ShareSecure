@@ -71,7 +71,7 @@ export async function onRequestPost(context) {
   }
 
   const rawHours = parseFloat(formData.get('expires_hours')) || 1;
-  const expiresHours = Math.max(rawHours, 1 / 60);
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 72);
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = formData.get('allow_annotations') === '1' ? 1 : 0;

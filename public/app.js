@@ -111,7 +111,7 @@ expiresSelect.addEventListener('change', () => {
   if (expiresSelect.value === 'custom') {
     customExpiryWrap.classList.remove('hidden');
     const now = new Date();
-    const max = new Date(now.getTime() + 24 * 60 * 60 * 1000 - 60 * 1000);
+    const max = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000 - 60 * 1000);
     customExpiryInput.min = toLocalDatetimeString(now);
     customExpiryInput.max = toLocalDatetimeString(max);
     if (!customExpiryInput.value) {
@@ -132,8 +132,8 @@ customExpiryInput.addEventListener('change', () => {
   if (diffMs <= 0) {
     customExpiryErr.textContent = 'Please select a future time.';
     customExpiryHours = null;
-  } else if (diffMs >= 24 * 60 * 60 * 1000) {
-    customExpiryErr.textContent = 'Must be less than 24 hours from now.';
+  } else if (diffMs >= 3 * 24 * 60 * 60 * 1000) {
+    customExpiryErr.textContent = 'Must be less than 3 days from now.';
     customExpiryHours = null;
   } else {
     customExpiryHours = diffMs / (1000 * 3600);
@@ -265,7 +265,7 @@ uploadBtn.addEventListener('click', async () => {
 
   if (expiresSelect.value === 'custom') {
     if (!customExpiryHours) {
-      alert('Please select a valid custom expiry time (within the next 24 hours).');
+      alert('Please select a valid custom expiry time (within the next 3 days).');
       return;
     }
   }

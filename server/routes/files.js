@@ -97,7 +97,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   }
 
   const rawHours = parseFloat(req.body.expires_hours) || 1;
-  const expiresHours = Math.max(rawHours, 1 / 60); // minimum 1 minute
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 72); // min 1 min, max 3 days
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = req.body.allow_annotations === '1' ? 1 : 0;
