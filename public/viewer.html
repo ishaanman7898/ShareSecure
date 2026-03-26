@@ -65,11 +65,16 @@
         <button class="tb-btn" id="next-page" title="Next page">&rarr;</button>
       </div>
       <div class="divider desktop-only"></div>
-      <button class="tb-btn desktop-only" id="zoom-out-btn" title="Zoom out">&#x2212;</button>
+      <button class="tb-btn desktop-only" id="zoom-out-btn" title="Zoom out (-)">&#x2212;</button>
       <span class="zoom-label desktop-only" id="zoom-label">100%</span>
-      <button class="tb-btn desktop-only" id="zoom-in-btn" title="Zoom in">&#x2b;</button>
+      <button class="tb-btn desktop-only" id="zoom-in-btn" title="Zoom in (+)">&#x2b;</button>
+      <button class="tb-btn desktop-only" id="fit-btn" title="Fit to width (F)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
       <div class="divider desktop-only"></div>
-      <button class="tb-btn" id="rotate-btn" title="Rotate clockwise">
+      <button class="tb-btn" id="rotate-btn" title="Rotate clockwise (R)">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
@@ -92,6 +97,21 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round" class="theme-moon hidden">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
+      <button class="tb-btn desktop-only" id="search-btn" title="Search in document (Ctrl+F)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <span class="desktop-only">Search</span>
+      </button>
+      <button class="tb-btn" id="fullscreen-btn" title="Fullscreen (F11)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="fs-expand">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="fs-shrink hidden">
+          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
         </svg>
       </button>
       <div class="divider desktop-only"></div>
@@ -188,11 +208,18 @@
       </svg>
     </button>
     <div class="draw-divider"></div>
-    <button class="draw-btn" id="undo-btn" title="Undo last stroke">
+    <button class="draw-btn" id="undo-btn" title="Undo (Ctrl+Z)">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 7v6h6" />
         <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+      </svg>
+    </button>
+    <button class="draw-btn" id="redo-btn" title="Redo (Ctrl+Shift+Z)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 7v6h-6" />
+        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
       </svg>
     </button>
     <button class="draw-btn" id="invert-pdf-btn" title="Invert PDF colors">
@@ -223,6 +250,24 @@
       </svg>
       Save
     </button>
+  </div>
+
+  <!-- search bar -->
+  <div class="search-bar hidden" id="search-bar">
+    <div class="search-inner">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.5">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" id="search-input" placeholder="Search in document…" autocomplete="off" spellcheck="false" />
+      <span class="search-count" id="search-count"></span>
+      <button class="search-nav-btn" id="search-prev" title="Previous match">&#x25B2;</button>
+      <button class="search-nav-btn" id="search-next" title="Next match">&#x25BC;</button>
+      <button class="search-close-btn" id="search-close" title="Close (Esc)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- main area -->

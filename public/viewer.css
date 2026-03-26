@@ -977,3 +977,179 @@ body {
     z-index: 9999;
   }
 }
+
+/* ── search bar ── */
+.search-bar {
+  flex-shrink: 0;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  animation: slideDown 0.15s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.search-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 480px;
+}
+
+#search-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+#search-input:focus {
+  border-color: var(--accent);
+}
+
+.search-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+
+.search-nav-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.search-close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.1s;
+}
+
+.search-close-btn:hover {
+  color: var(--text);
+}
+
+/* ── PDF search highlights ── */
+.search-highlight {
+  position: absolute;
+  background: rgba(255, 200, 0, 0.4);
+  border: 1px solid rgba(255, 160, 0, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.search-highlight.current {
+  background: rgba(255, 120, 0, 0.5);
+  border-color: rgba(255, 80, 0, 0.8);
+}
+
+/* ── fit button active state ── */
+#fit-btn.active {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── fullscreen styles ── */
+:fullscreen .topbar,
+:-webkit-full-screen .topbar,
+:-moz-full-screen .topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+}
+
+:fullscreen .viewer-shell,
+:-webkit-full-screen .viewer-shell,
+:-moz-full-screen .viewer-shell {
+  height: 100vh;
+  padding-top: 56px;
+}
+
+/* fullscreen button active */
+#fullscreen-btn.active {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── keyboard shortcut toast ── */
+.kb-toast {
+  position: fixed;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  border-radius: 20px;
+  pointer-events: none;
+  z-index: 300;
+  opacity: 1;
+  transition: opacity 0.3s, transform 0.3s;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+.kb-toast.fade-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+/* ── improved topbar button hover ── */
+.tb-btn:hover {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--accent);
+}
+
+/* ── better doc info truncation on medium screens ── */
+@media (max-width: 1024px) and (min-width: 801px) {
+  .doc-title {
+    max-width: 180px;
+  }
+}
+
+/* ── loading progress text ── */
+.loader-progress {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: -8px;
+}

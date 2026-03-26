@@ -2,6 +2,22 @@ import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
 
+// ── keyboard toast notification ───────────────────────────────────────────────
+let kbToastTimer = null;
+function showKbToast(msg) {
+  let el = document.getElementById('kb-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kb-toast';
+    el.className = 'kb-toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.classList.remove('fade-out');
+  if (kbToastTimer) clearTimeout(kbToastTimer);
+  kbToastTimer = setTimeout(() => { el.classList.add('fade-out'); }, 1200);
+}
+
 // ── block all download vectors ────────────────────────────────────────────────
 document.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -40,9 +56,11 @@ function flashScreenshotShield() {
   showShield('Screenshot blocked', 2000);
 }
 
-// ── keyboard screenshot/copy/print blocking ───────────────────────────────────
+// ── keyboard shortcuts & screenshot/copy/print blocking ──────────────────────
 document.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
+  const tag = document.activeElement?.tagName?.toLowerCase();
+  const inInput = tag === 'input' || tag === 'textarea' || tag === 'select';
 
   // Block save, print, view-source
   if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u'].includes(key)) {
@@ -83,6 +101,127 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F12') {
     e.preventDefault();
     return;
+  }
+
+  // ── viewer keyboard shortcuts (skip when typing in inputs) ────────────────
+  if (inInput) return;
+
+  // Undo / Redo annotations
+  if ((e.ctrlKey || e.metaKey) && key === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) {
+      doRedo();
+    } else {
+      doUndo();
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && key === 'y') {
+    e.preventDefault();
+    doRedo();
+    return;
+  }
+
+  // Open search
+  if ((e.ctrlKey || e.metaKey) && key === 'f') {
+    e.preventDefault();
+    openSearch();
+    return;
+  }
+
+  // Fullscreen
+  if (e.key === 'F11') {
+    e.preventDefault();
+    toggleFullscreen();
+    return;
+  }
+
+  // Escape: close search, share panel, or exit fullscreen
+  if (e.key === 'Escape') {
+    if (!document.getElementById('search-bar')?.classList.contains('hidden')) {
+      closeSearch();
+      return;
+    }
+    if (!document.getElementById('share-panel')?.classList.contains('hidden')) {
+      closeSharePanel();
+      return;
+    }
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+      return;
+    }
+    return;
+  }
+
+  // PDF navigation — arrow keys
+  if (pdfDoc) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const target = Math.min(pdfDoc.numPages, parseInt($('page-num').value) + 1);
+      $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const target = Math.max(1, parseInt($('page-num').value) - 1);
+      $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    if (e.key === 'Home') {
+      e.preventDefault();
+      $('page-wrapper-1')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    if (e.key === 'End') {
+      e.preventDefault();
+      $('page-wrapper-' + pdfDoc.numPages)?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    // Zoom with + / -
+    if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      adjustZoom(+0.25);
+      return;
+    }
+    if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      adjustZoom(-0.25);
+      return;
+    }
+    // Reset zoom
+    if (e.key === '0') {
+      e.preventDefault();
+      zoomScale = 1.3;
+      fitMode = null;
+      $('fit-btn')?.classList.remove('active');
+      updateZoomLabel();
+      renderAllPages();
+      showKbToast('Zoom reset to 100%');
+      return;
+    }
+    // Fit to width
+    if (key === 'f') {
+      e.preventDefault();
+      toggleFitToWidth();
+      return;
+    }
+    // Rotate
+    if (key === 'r') {
+      e.preventDefault();
+      currentRotation = (currentRotation + 90) % 360;
+      renderAllPages();
+      showKbToast(`Rotated ${currentRotation}°`);
+      return;
+    }
+    // Invert
+    if (key === 'i') {
+      e.preventDefault();
+      pdfInverted = !pdfInverted;
+      $('pdf-container')?.classList.toggle('pdf-inverted', pdfInverted);
+      $('invert-pdf-btn')?.classList.toggle('active', pdfInverted);
+      showKbToast(pdfInverted ? 'Colors inverted' : 'Colors restored');
+      return;
+    }
   }
 });
 
@@ -154,6 +293,220 @@ function updateOwnershipDisplay() {
   isOwner = !!myDeleteToken;
   if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
   // download visibility is set after fileInfo loads (depends on allowDownload flag)
+}
+
+// ── zoom helpers ──────────────────────────────────────────────────────────────
+function updateZoomLabel() {
+  const pct = Math.round((zoomScale / 1.3) * 100);
+  if ($('zoom-label')) $('zoom-label').textContent = pct + '%';
+}
+
+function adjustZoom(delta) {
+  zoomScale = Math.min(4, Math.max(0.4, zoomScale + delta));
+  fitMode = null;
+  $('fit-btn')?.classList.remove('active');
+  updateZoomLabel();
+  renderAllPages();
+}
+
+// ── mouse wheel zoom (Ctrl + scroll) ──────────────────────────────────────────
+document.addEventListener('wheel', e => {
+  if (!pdfDoc) return;
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    adjustZoom(e.deltaY < 0 ? 0.15 : -0.15);
+  }
+}, { passive: false });
+
+// ── fullscreen ─────────────────────────────────────────────────────────────────
+function toggleFullscreen() {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  const isFs = !!document.fullscreenElement;
+  const btn = $('fullscreen-btn');
+  if (btn) {
+    btn.classList.toggle('active', isFs);
+    btn.querySelector('.fs-expand')?.classList.toggle('hidden', isFs);
+    btn.querySelector('.fs-shrink')?.classList.toggle('hidden', !isFs);
+  }
+});
+
+// ── fit to width ───────────────────────────────────────────────────────────────
+let fitMode = null;
+
+function toggleFitToWidth() {
+  if (fitMode === 'width') {
+    fitMode = null;
+    $('fit-btn')?.classList.remove('active');
+    zoomScale = 1.3;
+    updateZoomLabel();
+    renderAllPages();
+    showKbToast('Fit off');
+  } else {
+    fitMode = 'width';
+    $('fit-btn')?.classList.add('active');
+    applyFitToWidth();
+    renderAllPages();
+    showKbToast('Fit to width');
+  }
+}
+
+async function applyFitToWidth() {
+  if (!pdfDoc) return;
+  try {
+    const page = await pdfDoc.getPage(1);
+    const vp = page.getViewport({ scale: 1 });
+    const container = $('viewer-shell');
+    const availWidth = container.clientWidth - 48; // 24px each side padding
+    zoomScale = Math.max(0.4, availWidth / vp.width);
+    updateZoomLabel();
+  } catch (_) {}
+}
+
+// ── PDF text search ────────────────────────────────────────────────────────────
+let searchMatches = [];
+let searchCurrentIdx = -1;
+let searchActive = false;
+
+function openSearch() {
+  if (!pdfDoc) return;
+  const bar = $('search-bar');
+  if (bar) bar.classList.remove('hidden');
+  const inp = $('search-input');
+  if (inp) { inp.focus(); inp.select(); }
+  searchActive = true;
+}
+
+function closeSearch() {
+  const bar = $('search-bar');
+  if (bar) bar.classList.add('hidden');
+  clearSearchHighlights();
+  searchMatches = [];
+  searchCurrentIdx = -1;
+  searchActive = false;
+  if ($('search-count')) $('search-count').textContent = '';
+}
+
+function clearSearchHighlights() {
+  document.querySelectorAll('.search-highlight').forEach(el => el.remove());
+}
+
+async function runSearch(query) {
+  clearSearchHighlights();
+  searchMatches = [];
+  searchCurrentIdx = -1;
+  if ($('search-count')) $('search-count').textContent = '';
+  if (!query || !pdfDoc) return;
+
+  for (let n = 1; n <= pdfDoc.numPages; n++) {
+    const page = await pdfDoc.getPage(n);
+    const textContent = await page.getTextContent();
+    const vp = page.getViewport({ scale: zoomScale, rotation: currentRotation });
+    const wrapper = $('page-wrapper-' + n);
+    if (!wrapper) continue;
+
+    const fullText = textContent.items.map(i => i.str).join('');
+    const queryLower = query.toLowerCase();
+    let searchStr = fullText.toLowerCase();
+    let offset = 0;
+    let charCount = 0;
+
+    // Build char-to-item mapping for position lookup
+    const charMap = []; // [{item, charOffset}]
+    for (const item of textContent.items) {
+      for (let ci = 0; ci < item.str.length; ci++) {
+        charMap.push({ item, charOffset: ci });
+      }
+    }
+
+    while ((offset = searchStr.indexOf(queryLower, charCount)) !== -1) {
+      const matchChar = charMap[offset];
+      if (matchChar) {
+        const item = matchChar.item;
+        const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
+        const x = tx[4];
+        const y = tx[5];
+        const charWidth = item.width ? (item.width * zoomScale / Math.max(1, item.str.length)) : 8;
+        const charHeight = Math.abs(item.transform[3]) * zoomScale || 14;
+
+        const highlight = document.createElement('div');
+        highlight.className = 'search-highlight';
+        highlight.style.left = (x) + 'px';
+        highlight.style.top = (y - charHeight) + 'px';
+        highlight.style.width = (charWidth * query.length) + 'px';
+        highlight.style.height = charHeight + 'px';
+        wrapper.appendChild(highlight);
+        searchMatches.push({ el: highlight, pageNum: n });
+      }
+      charCount = offset + 1;
+      if (charCount >= searchStr.length) break;
+    }
+  }
+
+  if ($('search-count')) {
+    $('search-count').textContent = searchMatches.length > 0
+      ? `1 / ${searchMatches.length}`
+      : 'No results';
+  }
+
+  if (searchMatches.length > 0) {
+    searchCurrentIdx = 0;
+    highlightSearchCurrent();
+  }
+}
+
+function highlightSearchCurrent() {
+  searchMatches.forEach((m, i) => m.el.classList.toggle('current', i === searchCurrentIdx));
+  const cur = searchMatches[searchCurrentIdx];
+  if (cur) {
+    cur.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if ($('search-count')) {
+      $('search-count').textContent = `${searchCurrentIdx + 1} / ${searchMatches.length}`;
+    }
+  }
+}
+
+function searchNext() {
+  if (!searchMatches.length) return;
+  searchCurrentIdx = (searchCurrentIdx + 1) % searchMatches.length;
+  highlightSearchCurrent();
+}
+
+function searchPrev() {
+  if (!searchMatches.length) return;
+  searchCurrentIdx = (searchCurrentIdx - 1 + searchMatches.length) % searchMatches.length;
+  highlightSearchCurrent();
+}
+
+// ── redo stack ─────────────────────────────────────────────────────────────────
+let redoStack = [];
+
+function doUndo() {
+  if (allStrokes.length === 0) return;
+  const stroke = allStrokes.pop();
+  redoStack.push(stroke);
+  redrawAllStrokes();
+  if (allStrokes.length === 0) {
+    annotationsDirty = false;
+  } else {
+    markAnnotationsDirty();
+  }
+  showKbToast('Undo');
+}
+
+function doRedo() {
+  if (redoStack.length === 0) return;
+  const stroke = redoStack.pop();
+  allStrokes.push(stroke);
+  redrawAllStrokes();
+  markAnnotationsDirty();
+  showKbToast('Redo');
 }
 
 // ── theme management ────────────────────────────────────────────────────────
@@ -291,6 +644,7 @@ function startTextInput(e, canvas, pageIndex) {
     if (wrapper.contains(ta)) wrapper.removeChild(ta);
     if (text) {
       allStrokes.push({ pageIndex, tool: 'text', text, x: canvasX, y: canvasY, color: currentColor, size: currentPenSize });
+      redoStack = [];
       redrawAllStrokes();
       markAnnotationsDirty();
     }
@@ -368,6 +722,7 @@ function setupDrawing(canvas, pageIndex) {
   function endDraw() {
     if (isDrawing && currentStroke && currentStroke.points.length > 1) {
       allStrokes.push(currentStroke);
+      redoStack = []; // new stroke clears redo history
       markAnnotationsDirty();
     }
     isDrawing = false;
@@ -542,11 +897,24 @@ async function renderAllPages() {
   hide('pdf-container');
   show('loader');
 
+  // Apply fit-to-width before rendering
+  if (fitMode === 'width') await applyFitToWidth();
+
   const container = $('pdf-container');
   container.innerHTML = '';
   annotCanvases.length = 0;
 
+  // Show page progress
+  const loader = $('loader');
+  let progressEl = loader?.querySelector('.loader-progress');
+  if (!progressEl && loader) {
+    progressEl = document.createElement('span');
+    progressEl.className = 'loader-progress';
+    loader.appendChild(progressEl);
+  }
+
   for (let n = 1; n <= pdfDoc.numPages; n++) {
+    if (progressEl) progressEl.textContent = `Page ${n} of ${pdfDoc.numPages}`;
     const page = await pdfDoc.getPage(n);
     const vp = page.getViewport({ scale: zoomScale, rotation: currentRotation });
 
@@ -611,19 +979,33 @@ $('page-num')?.addEventListener('change', (e) => {
 
 $('rotate-btn')?.addEventListener('click', async () => {
   currentRotation = (currentRotation + 90) % 360;
+  showKbToast(`Rotated ${currentRotation}°`);
   await renderAllPages();
 });
 
-$('zoom-in-btn')?.addEventListener('click', async () => {
-  zoomScale = Math.min(zoomScale + 0.2, 4);
-  if ($('zoom-label')) $('zoom-label').textContent = Math.round(zoomScale / 1.3 * 100) + '%';
-  await renderAllPages();
+$('zoom-in-btn')?.addEventListener('click', () => adjustZoom(+0.25));
+$('zoom-out-btn')?.addEventListener('click', () => adjustZoom(-0.25));
+$('fit-btn')?.addEventListener('click', toggleFitToWidth);
+$('fullscreen-btn')?.addEventListener('click', toggleFullscreen);
+
+// Search bar events
+$('search-btn')?.addEventListener('click', openSearch);
+$('search-close')?.addEventListener('click', closeSearch);
+$('search-next')?.addEventListener('click', searchNext);
+$('search-prev')?.addEventListener('click', searchPrev);
+
+let searchDebounce = null;
+$('search-input')?.addEventListener('input', e => {
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => runSearch(e.target.value.trim()), 350);
 });
 
-$('zoom-out-btn')?.addEventListener('click', async () => {
-  zoomScale = Math.max(zoomScale - 0.2, 0.5);
-  if ($('zoom-label')) $('zoom-label').textContent = Math.round(zoomScale / 1.3 * 100) + '%';
-  await renderAllPages();
+$('search-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (e.shiftKey) searchPrev(); else searchNext();
+  }
+  if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
 });
 
 // drawing toolbar
@@ -647,17 +1029,9 @@ document.querySelectorAll('.pen-size-btn').forEach(btn => {
   });
 });
 
-// undo last stroke
-$('undo-btn')?.addEventListener('click', () => {
-  if (allStrokes.length === 0) return;
-  allStrokes.pop();
-  redrawAllStrokes();
-  if (allStrokes.length === 0) {
-    annotationsDirty = false;
-  } else {
-    markAnnotationsDirty();
-  }
-});
+// undo / redo
+$('undo-btn')?.addEventListener('click', doUndo);
+$('redo-btn')?.addEventListener('click', doRedo);
 
 // invert PDF colors toggle
 let pdfInverted = false;

@@ -1,3 +1,34 @@
+// ── toast notification system ─────────────────────────────────────────────────
+function showToast(message, type = 'info', durationMs = 4000) {
+  let container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const icons = {
+    success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    error:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    warn:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
+    info:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="8"/><line x1="12" y1="12" x2="12" y2="16"/></svg>`,
+  };
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
+  container.appendChild(toast);
+
+  const remove = () => {
+    toast.classList.add('fade-out');
+    setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 280);
+  };
+
+  const timer = setTimeout(remove, durationMs);
+  toast.addEventListener('click', () => { clearTimeout(timer); remove(); });
+}
+
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const filePreview = document.getElementById('file-preview');
@@ -202,12 +233,12 @@ const ALLOWED_MIMES = [
 
 function setFile(file) {
   if (file.size > MAX_BYTES) {
-    alert(`File is too large (${formatSize(file.size)}). Max allowed is 10 MB.`);
+    showToast(`File too large (${formatSize(file.size)}). Max is 10 MB.`, 'error');
     return;
   }
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_MIMES.includes(file.type)) {
-    alert('Only PDF (.pdf) and Word (.docx) files are accepted.');
+    showToast('Only PDF (.pdf) and Word (.docx) files are accepted.', 'error');
     return;
   }
   selectedFile = file;
@@ -265,7 +296,7 @@ uploadBtn.addEventListener('click', async () => {
 
   if (expiresSelect.value === 'custom') {
     if (!customExpiryHours) {
-      alert('Please select a valid custom expiry time (within the next 3 days).');
+      showToast('Please select a valid custom expiry time (within the next 3 days).', 'warn');
       return;
     }
   }
@@ -303,28 +334,29 @@ uploadBtn.addEventListener('click', async () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
+        showToast('File uploaded successfully!', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
       } else if (xhr.status === 429) {
-        alert('Upload limit reached (5 files per 24h).');
+        showToast('Upload limit reached (5 files per 24h). Try again tomorrow.', 'warn', 6000);
         uploadBtn.disabled = false;
         progressWrap.classList.add('hidden');
       } else {
-        alert('Upload failed. Please try again.');
+        showToast('Upload failed. Please try again.', 'error');
         uploadBtn.disabled = false;
         progressWrap.classList.add('hidden');
       }
     };
 
     xhr.onerror = () => {
-      alert('Network error. Please try again.');
+      showToast('Network error. Check your connection and try again.', 'error');
       uploadBtn.disabled = false;
       progressWrap.classList.add('hidden');
     };
 
     xhr.send(formData);
   } catch (err) {
-    alert('Upload failed.');
+    showToast('Upload failed. Please try again.', 'error');
     uploadBtn.disabled = false;
     progressWrap.classList.add('hidden');
   }
@@ -408,17 +440,20 @@ copyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(shortLink.textContent).then(() => {
     copyBtn.textContent = 'Copied!';
     copyBtn.classList.add('copied');
+    showToast('Link copied to clipboard!', 'success', 2500);
     setTimeout(() => {
       copyBtn.textContent = 'Copy';
       copyBtn.classList.remove('copied');
     }, 2000);
+  }).catch(() => {
+    showToast('Could not copy — try manually selecting the link.', 'warn');
   });
 });
 
 // delete file
 deleteBtn.addEventListener('click', async () => {
   if (!currentShortId) return;
-  if (!confirm('Permanently delete this file for everyone? This cannot be undone.')) return;
+  if (!confirm('Delete this file for everyone? This cannot be undone.')) return;
 
   deleteBtn.disabled = true;
   deleteBtn.textContent = 'Deleting...';
@@ -434,6 +469,7 @@ deleteBtn.addEventListener('click', async () => {
     });
     const data = await res.json();
     if (data.deleted) {
+      showToast('File deleted successfully.', 'success');
       if (countdownInterval) clearInterval(countdownInterval);
       removeFromHistory(currentShortId);
       currentShortId = null;
@@ -449,11 +485,13 @@ deleteBtn.addEventListener('click', async () => {
       resultCard.classList.add('hidden');
       uploadCard.classList.remove('hidden');
     } else {
-      deleteBtn.textContent = 'Failed';
+      showToast('Delete failed. You may not have permission.', 'error');
+      deleteBtn.textContent = 'Delete File';
       deleteBtn.disabled = false;
     }
   } catch {
-    deleteBtn.textContent = 'Error';
+    showToast('Network error during delete.', 'error');
+    deleteBtn.textContent = 'Delete File';
     deleteBtn.disabled = false;
   }
 });
@@ -612,16 +650,19 @@ function renderFileList(files) {
         });
         const data = await res.json();
         if (data.deleted) {
+          showToast('File deleted.', 'success');
           removeFromHistory(shortId);
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
           if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">No uploaded files.</p>`;
           if (userToken) updateDashboard();
         } else {
+          showToast('Delete failed.', 'error');
           btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
           btn.disabled = false;
         }
       } catch {
+        showToast('Network error.', 'error');
         btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         btn.disabled = false;
       }
@@ -693,17 +734,17 @@ authForm.addEventListener('submit', async (e) => {
         // clear potential stale sessions on new account
         localStorage.removeItem('user_token');
         userToken = null;
-        alert('Account created! You can now sign in.');
+        showToast('Account created! You can now sign in.', 'success');
         isLoginMode = true;
         modalTitle.textContent = 'Sign In';
         authSubmit.textContent = 'Sign In';
         toggleAuth.textContent = 'Sign Up';
       }
     } else {
-      alert(data.error || 'Operation failed');
+      showToast(data.error || 'Operation failed', 'error');
     }
   } catch (err) {
-    alert('An error occurred');
+    showToast('An error occurred. Please try again.', 'error');
   } finally {
     authSubmit.disabled = false;
     authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
