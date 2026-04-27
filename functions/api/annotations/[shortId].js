@@ -13,7 +13,7 @@ export async function onRequestGet(context) {
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
 
   const encKey = await getEncKey(env);
-  const raw = await decryptStr(file.annotations, encKey);
+  const raw = await decryptStr(file.annotations, encKey, env, params.shortId);
 
   return Response.json({
     annotations: raw ? JSON.parse(raw) : []
@@ -49,7 +49,7 @@ export async function onRequestPost(context) {
   if (!res.rows[0]) return Response.json({ error: 'File not found' }, { status: 404 });
 
   const encKey = await getEncKey(env);
-  const encAnnot = await encryptStr(annotStr, encKey);
+  const encAnnot = await encryptStr(annotStr, encKey, env, params.shortId);
 
   await client.execute({
     sql: 'UPDATE files SET annotations = ? WHERE short_id = ?',

@@ -1,4 +1,4 @@
-import { getAuthClient, sha256 } from '../../_turso.js';
+import { getAuthClient, sha256, signToken } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -41,7 +41,7 @@ export async function onRequestPost(context) {
       return Response.json({ error: 'Invalid username or access code' }, { status: 401 });
     }
 
-    const token = btoa(`${user.username}:${user.id.toString()}`);
+    const token = await signToken({ username: user.username, userId: user.id, iat: Math.floor(Date.now() / 1000) }, env);
     return Response.json({
       success: true,
       userId: user.id.toString(),

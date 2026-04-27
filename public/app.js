@@ -588,23 +588,36 @@ landingStartBtn.addEventListener('click', () => {
 async function updateDashboard() {
   if (!userToken) return;
 
-  // Load file list from client-side localStorage — no server-side user→file link
-  const history = loadUploadHistory();
-  // Persist pruned list back (removes any that expired since last visit)
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch {}
-  renderFileList(history);
+  // Render localStorage cache instantly so the UI is never blank during the round-trip
+  const cached = loadUploadHistory();
+  renderFileList(cached);
 
-  // Fetch authoritative daily count from the server (enforced via upload_log)
+  // Fetch authoritative file list from server — works across devices since uploads
+  // are linked to the account via a server-held HMAC pseudonym (user_tag).
   try {
     const res = await fetch('/api/auth/user/files', {
       headers: { 'Authorization': `Bearer ${userToken}` }
     });
     if (res.status === 401) { logout(); return; }
-    if (res.ok) {
-      const data = await res.json();
-      uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
-    }
-  } catch { /* ignore network errors — count display is non-critical */ }
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const serverFiles = (data.files || []).map(f => ({
+      short_id:          f.short_id,
+      original_filename: f.original_filename,
+      mime_type:         f.mime_type,
+      size_bytes:        f.size_bytes,
+      uploaded_at:       f.uploaded_at,
+      expires_at:        f.expires_at,
+      delete_token:      f.delete_token || null
+    }));
+
+    // Refresh local cache so offline reloads show the latest list
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(serverFiles.slice(0, 50))); } catch {}
+
+    renderFileList(serverFiles);
+    uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
+  } catch { /* network error — keep showing cached list */ }
 }
 
 function renderFileList(files) {

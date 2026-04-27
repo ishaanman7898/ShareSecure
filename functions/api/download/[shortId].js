@@ -41,10 +41,10 @@ export async function onRequestGet(context) {
 
   const encKey = await getEncKey(env);
 
-  const wasEncrypted = file.file_data.startsWith('enc:');
+  const wasEncrypted = file.file_data.startsWith('enc:') || file.file_data.startsWith('enc2:');
   let buffer;
   try {
-    buffer = await decryptField(file.file_data, encKey);
+    buffer = await decryptField(file.file_data, encKey, env, params.shortId);
   } catch {
     return new Response('Decryption failed', { status: 500 });
   }
@@ -62,8 +62,8 @@ export async function onRequestGet(context) {
     if (!valid) return new Response('Integrity check failed — file may have been tampered with', { status: 422 });
   }
 
-  const mimeType = await decryptStr(file.mime_type, encKey);
-  const filename = await decryptStr(file.original_filename, encKey);
+  const mimeType = await decryptStr(file.mime_type, encKey, env, params.shortId);
+  const filename = await decryptStr(file.original_filename, encKey, env, params.shortId);
 
   return new Response(buffer, {
     headers: {

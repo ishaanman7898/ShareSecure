@@ -18,8 +18,8 @@ export async function onRequestGet(context) {
   }
 
   const encKey = await getEncKey(env);
-  const filename = await decryptStr(file.original_filename, encKey);
-  const mimeType = await decryptStr(file.mime_type, encKey);
+  const filename = await decryptStr(file.original_filename, encKey, env, params.shortId);
+  const mimeType = await decryptStr(file.mime_type, encKey, env, params.shortId);
 
   return Response.json({
     filename,

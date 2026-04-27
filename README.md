@@ -339,12 +339,13 @@ Load or save PDF annotation strokes. Annotations are encrypted and link-isolated
 
 ## Security
 
-- AES-256-GCM encryption at rest with per-file key wrapping
+- AES-256-GCM encryption at rest with **per-file HKDF-derived keys** (salt = shortId, prefix `enc2:`)
+- HMAC-signed auth tokens (rejects forged or tampered tokens)
+- HMAC pseudonymous file ownership (`user_tag`) — DB rows never store raw user IDs
 - SHA-256 integrity verification on every file access
 - Magic byte + ZIP manifest validation (DOCX must contain `word/document.xml`)
 - No IP logging, no referrer headers, no caching, no iframe embedding
-- Pseudonymous rate limiting via HMAC-derived tags (no raw user IDs in `upload_log`)
-- Client-side dashboard — no server-side user→file association
+- Cross-device dashboard via pseudonym lookup — recipients still cannot trace files to an account
 
 See [Security Policy](docs/SECURITY.md) for vulnerability disclosure and full details.
 
