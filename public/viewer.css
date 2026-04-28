@@ -324,135 +324,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-/* ── drawing toolbar ── */
-.draw-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  background: var(--topbar);
-  border-bottom: 1px solid var(--border);
-}
-
-.draw-btn {
-  background: none;
-  border: 1px solid transparent;
-  color: var(--text);
-  width: 34px;
-  height: 34px;
-  border-radius: 6px;
-  font-size: 1rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.draw-btn:hover {
-  background: var(--bg);
-  border-color: var(--border);
-  color: var(--accent);
-}
-
-.draw-btn.active {
-  background: #e8f0fe;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-[data-theme="dark"] .draw-btn.active {
-  background: rgba(59, 130, 246, 0.15);
-}
-
-.draw-divider {
-  width: 1px;
-  height: 24px;
-  background: var(--border);
-  margin: 0 2px;
-}
-
-#color-picker {
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  padding: 2px;
-  background: none;
-}
-
-/* ── highlight color swatches ── */
-.hl-colors {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.hl-color-btn {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  transition: transform 0.15s, border-color 0.15s;
-}
-
-.hl-color-btn:hover {
-  transform: scale(1.2);
-}
-
-.hl-color-btn.active {
-  border-color: var(--text);
-  transform: scale(1.1);
-}
-
-/* ── save annotations button ── */
-.save-btn {
-  width: auto !important;
-  padding: 6px 14px !important;
-  font-size: 0.82rem !important;
-  font-weight: 600;
-  gap: 4px;
-  white-space: nowrap;
-  border: 1px solid var(--border) !important;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.save-btn:hover {
-  background: #e8f0fe !important;
-  border-color: var(--accent) !important;
-}
-
-.save-btn.unsaved {
-  background: #fff3e0 !important;
-  border-color: #f59e0b !important;
-  color: #92400e;
-  animation: gentle-pulse 2s ease-in-out infinite;
-}
-
-.save-btn.saved {
-  background: #e8f5e9 !important;
-  border-color: #4caf50 !important;
-  color: #2e7d32;
-}
-
-@keyframes gentle-pulse {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.7;
-  }
-}
-
 /* ── viewer shell ── */
 .viewer-shell {
   flex: 1;
@@ -462,6 +333,8 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 32px 24px 72px; /* extra bottom clearance for fixed footer */
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 /* ── loader ── */
@@ -510,13 +383,7 @@ body {
 .pdf-page-canvas {
   display: block;
   pointer-events: none;
-}
-
-.pdf-annot-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  cursor: crosshair;
+  touch-action: pan-y;
 }
 
 /* ── image ── */
@@ -1024,10 +891,6 @@ body {
   /* Darker back for PDF gap */
 }
 
-/* PDF inversion — only when user explicitly toggles it */
-.pdf-inverted .pdf-page-canvas {
-  filter: invert(1) hue-rotate(180deg);
-}
 
 [data-theme="dark"] .img-viewer {
   filter: brightness(0.8);
@@ -1125,26 +988,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ── text annotation input overlay ── */
-.text-annot-input {
-  position: absolute;
-  background: transparent;
-  border: 1px dashed currentColor;
-  outline: none;
-  resize: none;
-  padding: 2px 4px;
-  font-family: sans-serif;
-  line-height: 1.3;
-  min-width: 80px;
-  min-height: 24px;
-  z-index: 50;
-  overflow: hidden;
-}
-
-.pdf-annot-canvas.text-mode {
-  cursor: text;
 }
 
 @media print {

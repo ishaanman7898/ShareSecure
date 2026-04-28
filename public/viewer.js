@@ -51,7 +51,6 @@ function hideShield() {
   if (shieldBlankTimeout) { clearTimeout(shieldBlankTimeout); shieldBlankTimeout = null; }
 }
 
-// Legacy alias used by keyboard handler below
 function flashScreenshotShield() {
   showShield('Screenshot blocked', 2000);
 }
@@ -68,13 +67,13 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Block select-all and copy (prevent clipboard exfil)
+  // Block select-all and copy
   if ((e.ctrlKey || e.metaKey) && ['a', 'c'].includes(key)) {
     e.preventDefault();
     return;
   }
 
-  // PrintScreen / F13 (some keyboards)
+  // PrintScreen / F13
   if (e.key === 'PrintScreen' || e.key === 'F13') {
     e.preventDefault();
     flashScreenshotShield();
@@ -82,7 +81,7 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // macOS screenshot shortcuts: Cmd+Shift+3, 4, 5, 6
+  // macOS screenshot shortcuts
   if (e.metaKey && e.shiftKey && ['3', '4', '5', '6'].includes(e.key)) {
     e.preventDefault();
     flashScreenshotShield();
@@ -90,7 +89,7 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Windows Snipping Tool shortcut: Win+Shift+S is caught as Meta+Shift+s on some browsers
+  // Windows Snipping Tool
   if (e.metaKey && e.shiftKey && key === 's') {
     e.preventDefault();
     flashScreenshotShield();
@@ -103,24 +102,7 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // ── viewer keyboard shortcuts (skip when typing in inputs) ────────────────
   if (inInput) return;
-
-  // Undo / Redo annotations
-  if ((e.ctrlKey || e.metaKey) && key === 'z') {
-    e.preventDefault();
-    if (e.shiftKey) {
-      doRedo();
-    } else {
-      doUndo();
-    }
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && key === 'y') {
-    e.preventDefault();
-    doRedo();
-    return;
-  }
 
   // Open search
   if ((e.ctrlKey || e.metaKey) && key === 'f') {
@@ -213,34 +195,19 @@ document.addEventListener('keydown', e => {
       showKbToast(`Rotated ${currentRotation}°`);
       return;
     }
-    // Invert
-    if (key === 'i') {
-      e.preventDefault();
-      pdfInverted = !pdfInverted;
-      $('pdf-container')?.classList.toggle('pdf-inverted', pdfInverted);
-      $('invert-pdf-btn')?.classList.toggle('active', pdfInverted);
-      showKbToast(pdfInverted ? 'Colors inverted' : 'Colors restored');
-      return;
-    }
   }
 });
 
 // ── Snapchat-style: black screen when page becomes hidden ─────────────────────
-// On mobile this fires when the user takes a screenshot (the screen dims/switches briefly),
-// opens the app switcher, or presses the home button.
-// On desktop it fires when the tab is switched or window minimised.
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    showShield(''); // immediately go black
+    showShield('');
   } else {
-    // Brief pause before restoring content so any screenshot captures the black screen
     setTimeout(hideShield, 300);
   }
 });
 
-// ── Blur-based protection: blank when the window loses focus ──────────────────
-// Fires when the user switches to another app (e.g., screenshot tool, Snipping Tool).
-// Debounced at 150 ms to avoid blanking on quick address-bar clicks.
+// ── Blur-based protection ──────────────────────────────────────────────────────
 let blurBlankTimeout = null;
 
 window.addEventListener('blur', () => {
@@ -261,10 +228,8 @@ window.addEventListener('beforeprint', () => {
 // ── helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
 
-// ── current short id management ──────────────────────────────────────────────
 let myShortId = rawShortId;
 
-// ── ownership detection ───────────────────────────────────────────────────────
 function checkOwnership() {
   try {
     const key = 'owner_' + myShortId;
@@ -292,7 +257,6 @@ function updateOwnershipDisplay() {
   myDeleteToken = checkOwnership();
   isOwner = !!myDeleteToken;
   if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
-  // download visibility is set after fileInfo loads (depends on allowDownload flag)
 }
 
 // ── zoom helpers ──────────────────────────────────────────────────────────────
@@ -363,7 +327,7 @@ async function applyFitToWidth() {
     const page = await pdfDoc.getPage(1);
     const vp = page.getViewport({ scale: 1 });
     const container = $('viewer-shell');
-    const availWidth = container.clientWidth - 48; // 24px each side padding
+    const availWidth = container.clientWidth - 48;
     zoomScale = Math.max(0.4, availWidth / vp.width);
     updateZoomLabel();
   } catch (_) {}
@@ -417,8 +381,7 @@ async function runSearch(query) {
     let offset = 0;
     let charCount = 0;
 
-    // Build char-to-item mapping for position lookup
-    const charMap = []; // [{item, charOffset}]
+    const charMap = [];
     for (const item of textContent.items) {
       for (let ci = 0; ci < item.str.length; ci++) {
         charMap.push({ item, charOffset: ci });
@@ -484,34 +447,8 @@ function searchPrev() {
   highlightSearchCurrent();
 }
 
-// ── redo stack ─────────────────────────────────────────────────────────────────
-let redoStack = [];
-
-function doUndo() {
-  if (allStrokes.length === 0) return;
-  const stroke = allStrokes.pop();
-  redoStack.push(stroke);
-  redrawAllStrokes();
-  if (allStrokes.length === 0) {
-    annotationsDirty = false;
-  } else {
-    markAnnotationsDirty();
-  }
-  showKbToast('Undo');
-}
-
-function doRedo() {
-  if (redoStack.length === 0) return;
-  const stroke = redoStack.pop();
-  allStrokes.push(stroke);
-  redrawAllStrokes();
-  markAnnotationsDirty();
-  showKbToast('Redo');
-}
-
 // ── theme management ────────────────────────────────────────────────────────
 function initTheme() {
-  // Default to dark to match the main ShareSecure site
   const saved = localStorage.getItem('viewer_theme') || 'dark';
   setTheme(saved);
 }
@@ -574,13 +511,12 @@ async function assignFreshId() {
     if (data.shortId) {
       myShortId = data.shortId;
       history.replaceState(null, '', `/r/${myShortId}`);
-      // If we got a delete token (as a sub-owner), store it so we can delete later
       if (data.deleteToken) {
         localStorage.setItem('owner_' + myShortId, data.deleteToken);
       }
       updateOwnershipDisplay();
     }
-  } catch (_) { /* fall back to original id */ }
+  } catch (_) {}
 }
 
 // ── countdown ─────────────────────────────────────────────────────────────────
@@ -617,293 +553,17 @@ async function loadMeta() {
   return res.json();
 }
 
-// ── status polling (kick others out) ─────────────────────────────────────────
+// ── status polling ─────────────────────────────────────────────────────────────
 function startStatusPolling() {
   setInterval(async () => {
     try {
       const res = await fetch(`/api/info/${myShortId}`);
       if (res.status === 404 || res.status === 410) {
-        // file is gone! kill the tab.
         document.body.innerHTML = '';
         location.replace('/expired.html');
       }
-    } catch (err) { /* ignore network blips */ }
+    } catch (err) {}
   }, 5000);
-}
-
-// ── drawing tools ─────────────────────────────────────────────────────────────
-let currentTool = 'pointer';
-let currentColor = '#e74c3c';
-let currentPenSize = 2.5;
-const annotCanvases = [];
-// track all drawing strokes for persistence
-let allStrokes = []; // Array of { pageIndex, tool, color, points: [{x,y}] }
-let isDrawing = false;
-let currentStroke = null;
-
-function updateAnnotCursors() {
-  annotCanvases.forEach(c => {
-    c.classList.toggle('text-mode', currentTool === 'text');
-    if (currentTool === 'pointer') c.style.cursor = 'default';
-    else if (currentTool === 'text') c.style.cursor = '';
-    else c.style.cursor = 'crosshair';
-  });
-}
-
-function startTextInput(e, canvas, pageIndex) {
-  const rect = canvas.getBoundingClientRect();
-  const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-  const src = e.touches ? e.touches[0] : e;
-  const screenX = src.clientX - rect.left;
-  const screenY = src.clientY - rect.top;
-  const canvasX = screenX * sx;
-  const canvasY = screenY * sy;
-  const fontSize = Math.max(12, currentPenSize * 7);
-
-  const wrapper = canvas.parentElement;
-
-  const ta = document.createElement('textarea');
-  ta.className = 'text-annot-input';
-  ta.style.left = screenX + 'px';
-  ta.style.top = (screenY - fontSize) + 'px';
-  ta.style.color = currentColor;
-  ta.style.fontSize = fontSize + 'px';
-  ta.style.borderColor = currentColor;
-  wrapper.appendChild(ta);
-  ta.focus();
-
-  let committed = false;
-  function commit() {
-    if (committed) return;
-    committed = true;
-    const text = ta.value.trim();
-    if (wrapper.contains(ta)) wrapper.removeChild(ta);
-    if (text) {
-      allStrokes.push({ pageIndex, tool: 'text', text, x: canvasX, y: canvasY, color: currentColor, size: currentPenSize });
-      redoStack = [];
-      redrawAllStrokes();
-      markAnnotationsDirty();
-    }
-  }
-
-  ta.addEventListener('keydown', ev => {
-    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(); }
-    if (ev.key === 'Escape') { committed = true; if (wrapper.contains(ta)) wrapper.removeChild(ta); }
-  });
-  ta.addEventListener('blur', commit);
-}
-
-function setupDrawing(canvas, pageIndex) {
-  const ctx = canvas.getContext('2d');
-
-  function getPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-    const src = e.touches ? e.touches[0] : e;
-    return [(src.clientX - rect.left) * sx, (src.clientY - rect.top) * sy];
-  }
-
-  function startDraw(e) {
-    e.preventDefault();
-    if (currentTool === 'pointer') return;
-    if (currentTool === 'text') { startTextInput(e, canvas, pageIndex); return; }
-    isDrawing = true;
-    const [x, y] = getPos(e);
-    currentStroke = {
-      pageIndex,
-      tool: currentTool,
-      color: currentColor,
-      size: currentPenSize,
-      points: [{ x, y }]
-    };
-  }
-
-  function moveDraw(e) {
-    e.preventDefault();
-    if (!isDrawing || !currentStroke) return;
-    const [x, y] = getPos(e);
-    currentStroke.points.push({ x, y });
-
-    // Draw the segment
-    const pts = currentStroke.points;
-    const prev = pts[pts.length - 2];
-    const curr = pts[pts.length - 1];
-
-    ctx.save();
-    if (currentStroke.tool === 'pen') {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = currentStroke.color;
-      ctx.lineWidth = currentStroke.size || 2.5;
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    } else if (currentStroke.tool === 'highlight') {
-      ctx.globalAlpha = 0.35;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = currentStroke.color;
-      ctx.lineWidth = 22;
-      ctx.lineCap = 'square';
-    } else if (currentStroke.tool === 'eraser') {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = 24;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,1)';
-    }
-    ctx.beginPath();
-    ctx.moveTo(prev.x, prev.y); ctx.lineTo(curr.x, curr.y);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function endDraw() {
-    if (isDrawing && currentStroke && currentStroke.points.length > 1) {
-      allStrokes.push(currentStroke);
-      redoStack = []; // new stroke clears redo history
-      markAnnotationsDirty();
-    }
-    isDrawing = false;
-    currentStroke = null;
-  }
-
-  canvas.addEventListener('mousedown', startDraw);
-  canvas.addEventListener('mousemove', moveDraw);
-  canvas.addEventListener('mouseup', endDraw);
-  canvas.addEventListener('mouseleave', endDraw);
-  canvas.addEventListener('touchstart', startDraw, { passive: false });
-  canvas.addEventListener('touchmove', moveDraw, { passive: false });
-  canvas.addEventListener('touchend', endDraw);
-}
-
-// ── redraw all strokes (for loading saved annotations or after zoom) ──────────
-function redrawAllStrokes() {
-  // clear all annotation canvases
-  annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-
-  for (const stroke of allStrokes) {
-    if (stroke.pageIndex >= annotCanvases.length) continue;
-    const canvas = annotCanvases[stroke.pageIndex];
-    const ctx = canvas.getContext('2d');
-
-    ctx.save();
-    if (stroke.tool === 'text') {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = stroke.color;
-      const fontSize = Math.max(12, (stroke.size || 2.5) * 7);
-      ctx.font = `bold ${fontSize}px sans-serif`;
-      const lines = stroke.text.split('\n');
-      lines.forEach((line, i) => ctx.fillText(line, stroke.x, stroke.y + i * fontSize * 1.3));
-    } else if (stroke.tool === 'pen') {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = stroke.size || 2.5;
-      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.beginPath();
-      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
-      ctx.stroke();
-    } else if (stroke.tool === 'highlight') {
-      ctx.globalAlpha = 0.35;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.strokeStyle = stroke.color;
-      ctx.lineWidth = 22;
-      ctx.lineCap = 'square';
-      ctx.beginPath();
-      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
-      ctx.stroke();
-    } else if (stroke.tool === 'eraser') {
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'destination-out';
-      ctx.lineWidth = 24;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = 'rgba(0,0,0,1)';
-      ctx.beginPath();
-      stroke.points.forEach((pt, i) => i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-}
-
-// ── annotation save state tracking ────────────────────────────────────────────
-let annotationsDirty = false;
-
-function markAnnotationsDirty() {
-  annotationsDirty = true;
-  const saveBtn = $('save-annotations-btn');
-  if (saveBtn) {
-    saveBtn.classList.add('unsaved');
-    saveBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save*
-    `;
-  }
-}
-
-async function saveAnnotations() {
-  const saveBtn = $('save-annotations-btn');
-  if (saveBtn) {
-    saveBtn.innerHTML = `
-      <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>
-      Saving...
-    `;
-    saveBtn.disabled = true;
-  }
-
-  try {
-    const res = await fetch(`/api/annotations/${myShortId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ annotations: allStrokes })
-    });
-    const data = await res.json();
-    if (data.saved) {
-      annotationsDirty = false;
-      if (saveBtn) {
-        saveBtn.classList.remove('unsaved');
-        saveBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          Saved!
-        `;
-        saveBtn.classList.add('saved');
-        setTimeout(() => {
-          saveBtn.innerHTML = `
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save
-          `;
-          saveBtn.classList.remove('saved');
-        }, 2000);
-      }
-    }
-  } catch (err) {
-    if (saveBtn) {
-      saveBtn.innerHTML = `
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Error
-      `;
-      setTimeout(() => {
-        saveBtn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v13a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          Save
-        `;
-      }, 2000);
-    }
-  } finally {
-    if (saveBtn) saveBtn.disabled = false;
-  }
-}
-
-async function loadAnnotations() {
-  try {
-    const res = await fetch(`/api/annotations/${myShortId}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data.annotations && data.annotations.length > 0) {
-        allStrokes = data.annotations;
-        redrawAllStrokes();
-      }
-    }
-  } catch (_) { /* ignore — annotations are optional */ }
 }
 
 // ── pdf viewer logic ───────────────────────────────────────────────────────
@@ -919,7 +579,6 @@ async function loadPDF(url) {
     show('page-nav');
 
     await renderAllPages();
-    await loadAnnotations();
     setupPageTracking();
   } catch (err) {
     console.error('PDF Load Error:', err);
@@ -933,14 +592,11 @@ async function renderAllPages() {
   hide('pdf-container');
   show('loader');
 
-  // Apply fit-to-width before rendering
   if (fitMode === 'width') await applyFitToWidth();
 
   const container = $('pdf-container');
   container.innerHTML = '';
-  annotCanvases.length = 0;
 
-  // Show page progress
   const loader = $('loader');
   let progressEl = loader?.querySelector('.loader-progress');
   if (!progressEl && loader) {
@@ -964,22 +620,14 @@ async function renderAllPages() {
     pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
     pdfCanvas.className = 'pdf-page-canvas';
 
-    const annotCanvas = document.createElement('canvas');
-    annotCanvas.width = vp.width; annotCanvas.height = vp.height;
-    annotCanvas.className = 'pdf-annot-canvas';
-    annotCanvases.push(annotCanvas);
-
-    wrapper.append(pdfCanvas, annotCanvas);
+    wrapper.appendChild(pdfCanvas);
     container.appendChild(wrapper);
 
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
-    setupDrawing(annotCanvas, n - 1);
   }
 
   hide('loader');
   show('pdf-container');
-  if (fileInfo?.allowAnnotations !== 0) show('draw-toolbar');
-  redrawAllStrokes();
   isRendering = false;
 }
 
@@ -1043,48 +691,6 @@ $('search-input')?.addEventListener('keydown', e => {
   }
   if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
 });
-
-// drawing toolbar
-document.querySelectorAll('.draw-btn[data-tool]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.draw-btn[data-tool]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentTool = btn.dataset.tool;
-    updateAnnotCursors();
-  });
-});
-
-$('color-picker')?.addEventListener('input', e => { currentColor = e.target.value; });
-
-// pen size buttons
-document.querySelectorAll('.pen-size-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.pen-size-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentPenSize = parseFloat(btn.dataset.size);
-  });
-});
-
-// undo / redo
-$('undo-btn')?.addEventListener('click', doUndo);
-$('redo-btn')?.addEventListener('click', doRedo);
-
-// invert PDF colors toggle
-let pdfInverted = false;
-$('invert-pdf-btn')?.addEventListener('click', () => {
-  pdfInverted = !pdfInverted;
-  $('pdf-container').classList.toggle('pdf-inverted', pdfInverted);
-  $('invert-pdf-btn').classList.toggle('active', pdfInverted);
-});
-
-$('clear-btn')?.addEventListener('click', () => {
-  if (!confirm('Clear all drawings on this document?')) return;
-  annotCanvases.forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-  allStrokes = [];
-  markAnnotationsDirty();
-});
-
-$('save-annotations-btn')?.addEventListener('click', saveAnnotations);
 
 // ── image ─────────────────────────────────────────────────────────────────────
 function loadImage(url) {
@@ -1222,29 +828,24 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
     }
   }
 
-  // owner keeps their original link — no redirect, no reshare.
-  // non-owner (no delete token) gets a fresh unique id so their link is untraceable.
   if (!isOwner) {
     await assignFreshId();
   }
 
-  // ownership and polling initialization
   updateOwnershipDisplay();
   startStatusPolling();
 
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
-  const { filename, size, mimeType, expiresAt, integrityHash, allowAnnotations, allowDownload } = fileInfo;
+  const { filename, size, mimeType, expiresAt, integrityHash, allowDownload } = fileInfo;
   document.title = filename + ' — ShareSecure';
 
-  // show download button only for owner AND if uploader allowed it
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
 
-  // show integrity hash badge (only meaningful on the original uploader's link)
   if (integrityHash && isOwner) {
     const badge = $('integrity-badge');
     if (badge) {
@@ -1282,7 +883,6 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
     }
   });
 
-  // use the refined delete handler
   $('delete-file-btn').addEventListener('click', async () => {
     const confirmed = await showDeleteConfirm();
     if (!confirmed) return;
@@ -1310,7 +910,6 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
     }
   });
 
-  // use the owner's short id for raw access (not the reshared one)
   const rawUrl = `/api/raw/${myShortId}`;
 
   if (mimeType === 'application/pdf') { await loadPDF(rawUrl); }
@@ -1320,12 +919,4 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   else if (mimeType.startsWith('audio/')) { loadAudio(rawUrl, filename); }
   else if (mimeType.startsWith('text/') || mimeType === 'application/json') { await loadText(rawUrl); }
   else { showUnsupported(); }
-
-  // warn before leaving with unsaved annotations
-  window.addEventListener('beforeunload', (e) => {
-    if (annotationsDirty) {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-  });
 })();
