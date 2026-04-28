@@ -17,15 +17,7 @@ export async function onRequestPost(context) {
 
   try {
     const db = getAuthClient(env);
-    await db.execute({
-      sql: `CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        access_code TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-      args: []
-    });
+    // NOTE: Table is created during registration; no DDL needed here.
     const result = await db.execute({
       sql: 'SELECT * FROM users WHERE username = ?',
       args: [username]
@@ -49,7 +41,8 @@ export async function onRequestPost(context) {
       token
     });
   } catch (err) {
-    console.error('Login error:', err.message);
-    return Response.json({ error: 'Login failed' }, { status: 500 });
+    console.error('Login error:', err.message, err.stack);
+    // Temporarily expose error details for debugging — remove before final deploy
+    return Response.json({ error: 'Login failed', detail: err.message }, { status: 500 });
   }
 }

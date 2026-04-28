@@ -38,7 +38,10 @@ function createClient({ url, authToken }) {
       const result = data.results[0];
       if (result.type === 'error') throw new Error(result.error.message);
 
-      const { cols, rows } = result.response.result;
+      // DDL statements (CREATE TABLE, etc.) may return a response without a result object
+      const resultBody = result.response?.result;
+      if (!resultBody) return { rows: [] };
+      const { cols, rows } = resultBody;
 
       // convert to plain row objects keyed by column name
       const rowObjects = rows.map(row => {
