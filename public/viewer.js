@@ -511,17 +511,18 @@ function doRedo() {
 
 // ── theme management ────────────────────────────────────────────────────────
 function initTheme() {
-  const saved = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  // Default to dark to match the main ShareSecure site
+  const saved = localStorage.getItem('viewer_theme') || 'dark';
   setTheme(saved);
 }
 
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('theme', theme);
+  localStorage.setItem('viewer_theme', theme);
   const isDark = theme === 'dark';
   $('theme-btn').querySelector('.theme-sun').classList.toggle('hidden', isDark);
   $('theme-btn').querySelector('.theme-moon').classList.toggle('hidden', !isDark);
-  $('theme-meta').content = isDark ? '#141417' : '#ffffff';
+  $('theme-meta').content = isDark ? '#0d0d12' : '#ffffff';
 }
 
 $('theme-btn').addEventListener('click', () => {
@@ -530,6 +531,41 @@ $('theme-btn').addEventListener('click', () => {
 });
 
 initTheme();
+
+// ── delete confirmation modal ───────────────────────────────────────────────────
+function showDeleteConfirm() {
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'delete-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="delete-modal-card">
+        <div class="delete-modal-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+        </div>
+        <p class="delete-modal-title">Delete this file?</p>
+        <p class="delete-modal-sub">This permanently removes the file and all share links. This action cannot be undone.</p>
+        <div class="delete-modal-actions">
+          <button class="delete-modal-cancel" id="del-cancel">Cancel</button>
+          <button class="delete-modal-confirm" id="del-confirm">Delete</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const cleanup = (result) => {
+      backdrop.style.animation = 'backdropIn 0.15s ease reverse';
+      setTimeout(() => { if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop); }, 150);
+      resolve(result);
+    };
+
+    backdrop.querySelector('#del-confirm').addEventListener('click', () => cleanup(true));
+    backdrop.querySelector('#del-cancel').addEventListener('click', () => cleanup(false));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) cleanup(false); });
+  });
+}
 
 async function assignFreshId() {
   try {
@@ -1248,7 +1284,8 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
   // use the refined delete handler
   $('delete-file-btn').addEventListener('click', async () => {
-    if (!confirm('Delete this link?')) return;
+    const confirmed = await showDeleteConfirm();
+    if (!confirmed) return;
 
     $('delete-file-btn').textContent = '⏳';
     $('delete-file-btn').disabled = true;

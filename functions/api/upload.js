@@ -95,6 +95,12 @@ export async function onRequestPost(context) {
   const deleteToken = generateId(24);
   const mimeType = file.type || 'application/octet-stream';
 
+  // Use custom display_name if provided, otherwise fall back to original filename
+  const rawDisplayName = formData.get('display_name');
+  const displayName = (rawDisplayName && rawDisplayName.toString().trim())
+    ? rawDisplayName.toString().trim()
+    : file.name;
+
   const buffer = await file.arrayBuffer();
 
   // hash the raw bytes BEFORE compress/encrypt so we can verify after decrypt
@@ -106,7 +112,7 @@ export async function onRequestPost(context) {
   const file_data = await encryptField(compressed, encKey, env, shortId);
 
   // encrypt metadata strings with same per-file key for consistency
-  const enc_filename = await encryptStr(file.name, encKey, env, shortId);
+  const enc_filename = await encryptStr(displayName, encKey, env, shortId);
   const enc_mime = await encryptStr(mimeType, encKey, env, shortId);
 
   context.waitUntil(globalPurgeExpired(env, context));
