@@ -513,12 +513,24 @@ newUploadBtn.addEventListener('click', () => {
 
 function initAuth() {
   if (userToken) {
-    let username = 'User';
-    try {
-      username = atob(userToken).split(':')[0];
-    } catch (e) {
-      logout();
-      return;
+    // Prefer username stored at login time (avoids needing to decode token)
+    let username = localStorage.getItem('user_name') || 'User';
+    if (username === 'User') {
+      try {
+        if (userToken.includes('.')) {
+          // Signed token: <b64url(payload)>.<b64url(sig)>
+          const payloadB64 = userToken.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(atob(payloadB64 + '=='));
+          username = payload.username || 'User';
+        } else {
+          // Legacy token: base64(username:userId)
+          username = atob(userToken).split(':')[0];
+        }
+      } catch (e) {
+        // Token is corrupt — log out cleanly
+        logout();
+        return;
+      }
     }
     authStatus.innerHTML = `
       <span class="user-name">Hi, ${username}</span>
@@ -704,6 +716,7 @@ function renderFileList(files) {
 function logout() {
   userToken = null;
   localStorage.removeItem('user_token');
+  localStorage.removeItem('user_name');
   initAuth();
 }
 
@@ -741,6 +754,8 @@ authForm.addEventListener('submit', async (e) => {
       if (isLoginMode) {
         userToken = data.token;
         localStorage.setItem('user_token', userToken);
+        // Store username separately so initAuth never needs to decode the token
+        if (data.username) localStorage.setItem('user_name', data.username);
         authModal.classList.add('hidden');
         initAuth();
       } else {
