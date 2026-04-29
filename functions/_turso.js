@@ -63,16 +63,18 @@ function createClient({ url, authToken }) {
 
 // ── DB clients ───────────────────────────────────────────────────────────────
 
+const TURSO_FALLBACK_URL = 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io';
+
 export function getFilesClient(env) {
   return createClient({
-    url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
+    url: env.TURSO_URL || TURSO_FALLBACK_URL,
     authToken: env.TURSO_TOKEN
   });
 }
 
 export function getAuthClient(env) {
   return createClient({
-    url: 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io',
+    url: env.TURSO_URL || TURSO_FALLBACK_URL,
     authToken: env.TURSO_TOKEN
   });
 }

@@ -562,66 +562,198 @@ body {
   body {
     padding: 0;
     align-items: flex-start;
-    min-height: 100vh;
+    min-height: 100dvh;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }
 
   .container {
     max-width: 100%;
-    padding: 20px 16px 40px;
+    padding: 16px 14px calc(32px + env(safe-area-inset-bottom));
   }
 
   .header {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
   }
 
   .header h1 {
-    font-size: 1.6rem;
+    font-size: 1.5rem;
   }
 
   .card {
-    padding: 20px 16px;
-    border-radius: 10px;
-    gap: 16px;
+    padding: 18px 14px;
+    border-radius: 12px;
+    gap: 14px;
   }
 
   .drop-zone {
-    padding: 32px 16px;
+    padding: 28px 14px;
+    gap: 10px;
   }
 
+  .drop-icon svg {
+    width: 40px;
+    height: 40px;
+  }
+
+  .drop-label {
+    font-size: 0.95rem;
+  }
+
+  /* full-width stacked link box on mobile */
   .link-box {
     flex-direction: column;
-    border-radius: 8px;
+    border-radius: 10px;
   }
 
   .link-box span {
     padding: 12px 14px;
-    border-radius: 8px 8px 0 0;
-    font-size: 0.8rem;
+    border-radius: 10px 10px 0 0;
+    font-size: 0.78rem;
+    word-break: break-all;
   }
 
   .btn-copy {
-    padding: 11px;
-    border-radius: 0 0 8px 8px;
+    padding: 13px;
+    border-radius: 0 0 10px 10px;
     text-align: center;
+    font-size: 0.9rem;
+    min-height: 48px;
   }
 
+  /* larger QR on mobile */
   .qr-wrap {
-    padding: 10px;
+    padding: 12px;
   }
 
   #qr-canvas canvas,
   #qr-canvas img {
-    width: 160px !important;
-    height: 160px !important;
+    width: 180px !important;
+    height: 180px !important;
   }
 
   .result-actions {
-    gap: 8px;
+    gap: 10px;
   }
 
   .btn {
-    padding: 12px 16px;
+    padding: 14px 16px;
+    font-size: 0.92rem;
+    min-height: 48px;
+    border-radius: 12px;
+  }
+
+  .btn-ghost {
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+
+  /* dashboard improvements on mobile */
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .dashboard-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .file-item {
+    padding: 14px 12px;
+    gap: 10px;
+  }
+
+  .file-item-name {
     font-size: 0.88rem;
+  }
+
+  .file-item-actions {
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .file-item-actions .btn {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    min-height: 38px;
+    border-radius: 8px;
+  }
+
+  /* options layout on mobile */
+  .option-label {
+    font-size: 0.83rem;
+  }
+
+  select {
+    font-size: 0.88rem;
+    padding: 9px 10px;
+  }
+
+  /* auth modal on mobile */
+  .modal {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    border-radius: 18px 18px 0 0;
+    margin-bottom: calc(0px - env(safe-area-inset-bottom));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .modal-content.card {
+    gap: 18px;
+    padding: 28px 20px calc(24px + env(safe-area-inset-bottom));
+    border-radius: 18px 18px 0 0;
+  }
+
+  /* header on mobile */
+  .header-top {
+    margin-bottom: 4px;
+  }
+
+  /* landing page mobile */
+  .landing-features {
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .landing h1 {
+    font-size: 1.9rem;
+  }
+
+  .landing p {
+    font-size: 0.95rem;
+  }
+
+  .landing-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .landing-actions .btn {
+    width: 100%;
+  }
+
+  /* result card improvements */
+  .result-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  .result-meta {
+    font-size: 0.78rem;
+  }
+
+  /* footer adjustments for mobile safe area */
+  .app-footer {
+    padding: 10px 14px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    font-size: 0.7rem;
+    gap: 7px;
   }
 }
 
@@ -877,12 +1009,14 @@ body {
 
 @media (max-width: 560px) {
   .toast-container {
-    bottom: 56px;
+    bottom: calc(56px + env(safe-area-inset-bottom));
     left: 12px;
     right: 12px;
   }
   .toast {
     max-width: 100%;
+    font-size: 0.85rem;
+    padding: 12px 14px;
   }
 }
 

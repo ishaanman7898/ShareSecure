@@ -142,7 +142,7 @@ expiresSelect.addEventListener('change', () => {
   if (expiresSelect.value === 'custom') {
     customExpiryWrap.classList.remove('hidden');
     const now = new Date();
-    const max = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000 - 60 * 1000);
+    const max = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 - 60 * 1000);
     customExpiryInput.min = toLocalDatetimeString(now);
     customExpiryInput.max = toLocalDatetimeString(max);
     if (!customExpiryInput.value) {
@@ -163,8 +163,8 @@ customExpiryInput.addEventListener('change', () => {
   if (diffMs <= 0) {
     customExpiryErr.textContent = 'Please select a future time.';
     customExpiryHours = null;
-  } else if (diffMs >= 3 * 24 * 60 * 60 * 1000) {
-    customExpiryErr.textContent = 'Must be less than 3 days from now.';
+  } else if (diffMs >= 30 * 24 * 60 * 60 * 1000) {
+    customExpiryErr.textContent = 'Must be less than 30 days from now.';
     customExpiryHours = null;
   } else {
     customExpiryHours = diffMs / (1000 * 3600);
@@ -453,7 +453,7 @@ copyBtn.addEventListener('click', () => {
 // delete file
 deleteBtn.addEventListener('click', async () => {
   if (!currentShortId) return;
-  if (!confirm('Delete this file for everyone? This cannot be undone.')) return;
+  if (!confirm('Delete this file? This cannot be undone.')) return;
 
   deleteBtn.disabled = true;
   deleteBtn.textContent = 'Deleting...';

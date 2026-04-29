@@ -2,7 +2,6 @@ import { getFilesClient, verifyToken, getUserTag } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
-
   const client = getFilesClient(env);
 
   const res = await client.execute({
@@ -15,24 +14,28 @@ export async function onRequestPost(context) {
 
   const auth = await verifyToken(request.headers.get('Authorization'), env);
 
-  let authorized = false;
+  let isOwner = false;
+  let authorizedViaToken = false;
+
   if (auth) {
     const userTag = await getUserTag(auth.userId, env);
-    // Match by pseudonymous tag (new rows) or legacy user_id (pre-migration rows)
-    if (file.user_tag && userTag && file.user_tag === userTag) authorized = true;
-    else if (!file.user_tag && file.user_id && String(file.user_id) === String(auth.userId)) authorized = true;
+    if (file.user_tag && userTag && file.user_tag === userTag) isOwner = true;
+    else if (!file.user_tag && file.user_id && String(file.user_id) === String(auth.userId)) isOwner = true;
   }
 
-  if (!authorized) {
+  if (!isOwner) {
     let body = {};
     try { body = await request.json(); } catch {}
-    if (body.deleteToken && file.delete_token === body.deleteToken) authorized = true;
+    if (body.deleteToken && file.delete_token === body.deleteToken) authorizedViaToken = true;
   }
 
-  if (!authorized) return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  if (!isOwner && !authorizedViaToken) {
+    return Response.json({ error: 'Unauthorized' }, { status: 403 });
+  }
 
-  // cascade delete — wipe this file and every reshare in the same cluster
-  if (file.cluster_id) {
+  // Owner → cascade-delete entire cluster (removes file for everyone)
+  // Non-owner with deleteToken → delete only this copy (removes for self only)
+  if (isOwner && file.cluster_id) {
     await client.execute({
       sql: 'DELETE FROM files WHERE cluster_id = ?',
       args: [file.cluster_id]
@@ -44,5 +47,5 @@ export async function onRequestPost(context) {
     });
   }
 
-  return Response.json({ deleted: true });
+  return Response.json({ deleted: true, scope: isOwner ? 'everyone' : 'self' });
 }

@@ -297,6 +297,48 @@
     <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Report an Issue</a>
   </footer>
 
+  <!-- mobile bottom toolbar (PDF only) -->
+  <div class="mobile-toolbar hidden" id="mobile-toolbar">
+    <button class="m-btn" id="m-prev-page" title="Previous page" aria-label="Previous page">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <div class="m-page-indicator">
+      <span id="m-current-page">1</span>
+      <span class="m-sep">/</span>
+      <span id="m-total-pages">—</span>
+    </div>
+    <button class="m-btn" id="m-next-page" title="Next page" aria-label="Next page">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
+    <div class="m-divider"></div>
+    <button class="m-btn" id="m-zoom-out" title="Zoom out" aria-label="Zoom out">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+    <button class="m-btn" id="m-zoom-in" title="Zoom in" aria-label="Zoom in">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+    <div class="m-divider"></div>
+    <button class="m-btn" id="m-search-btn" title="Search" aria-label="Search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+    </button>
+    <button class="m-btn m-btn-share" id="m-share-btn" title="Share" aria-label="Share">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+    </button>
+  </div>
+
   <script src="/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs" type="module"></script>

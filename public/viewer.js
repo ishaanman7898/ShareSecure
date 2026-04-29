@@ -365,8 +365,11 @@ async function runSearch(query) {
   clearSearchHighlights();
   searchMatches = [];
   searchCurrentIdx = -1;
-  if ($('search-count')) $('search-count').textContent = '';
-  if (!query || !pdfDoc) return;
+  if (!query || !pdfDoc) {
+    if ($('search-count')) $('search-count').textContent = '';
+    return;
+  }
+  if ($('search-count')) $('search-count').textContent = '…';
 
   for (let n = 1; n <= pdfDoc.numPages; n++) {
     const page = await pdfDoc.getPage(n);
@@ -574,14 +577,22 @@ let isRendering = false;
 
 async function loadPDF(url) {
   try {
+    // Fit to width by default on mobile
+    if (window.innerWidth <= 800) {
+      fitMode = 'width';
+    }
+
     pdfDoc = await pdfjsLib.getDocument(url).promise;
     $('page-count').textContent = pdfDoc.numPages;
+    if ($('m-total-pages')) $('m-total-pages').textContent = pdfDoc.numPages;
     show('page-nav');
 
     await renderAllPages();
     setupPageTracking();
+    setupMobileToolbar();
+    setupPinchToZoom();
+    setupScrollAutoHide();
   } catch (err) {
-    console.error('PDF Load Error:', err);
     showUnsupported();
   }
 }
@@ -641,8 +652,91 @@ function setupPageTracking() {
       const diff = Math.abs(p.getBoundingClientRect().top - 60);
       if (diff < minDiff) { minDiff = diff; current = i + 1; }
     });
-    $('page-num').value = current;
+    if ($('page-num')) $('page-num').value = current;
+    if ($('m-current-page')) $('m-current-page').textContent = current;
+  }, { passive: true });
+}
+
+function setupMobileToolbar() {
+  const toolbar = $('mobile-toolbar');
+  if (!toolbar) return;
+  toolbar.classList.add('pdf-mode');
+  toolbar.classList.remove('hidden');
+
+  $('m-prev-page')?.addEventListener('click', () => {
+    const cur = parseInt($('m-current-page')?.textContent || '1');
+    const target = Math.max(1, cur - 1);
+    $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
   });
+
+  $('m-next-page')?.addEventListener('click', () => {
+    const cur = parseInt($('m-current-page')?.textContent || '1');
+    const target = Math.min(pdfDoc?.numPages || 1, cur + 1);
+    $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  $('m-zoom-in')?.addEventListener('click', () => adjustZoom(+0.2));
+  $('m-zoom-out')?.addEventListener('click', () => adjustZoom(-0.2));
+  $('m-search-btn')?.addEventListener('click', openSearch);
+  $('m-share-btn')?.addEventListener('click', openSharePanel);
+}
+
+function setupPinchToZoom() {
+  let lastDist = null;
+  let pinchStartScale = null;
+
+  const container = $('viewer-shell');
+  if (!container) return;
+
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      lastDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      pinchStartScale = zoomScale;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2 || lastDist === null) return;
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const ratio = dist / lastDist;
+    const newScale = Math.min(4, Math.max(0.4, pinchStartScale * ratio));
+    if (Math.abs(newScale - zoomScale) > 0.03) {
+      zoomScale = newScale;
+      fitMode = null;
+      $('fit-btn')?.classList.remove('active');
+      updateZoomLabel();
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', () => {
+    if (lastDist !== null) {
+      lastDist = null;
+      renderAllPages();
+    }
+  }, { passive: true });
+}
+
+function setupScrollAutoHide() {
+  const shell = $('viewer-shell');
+  const topbar = document.querySelector('.topbar');
+  if (!shell || !topbar || window.innerWidth > 800) return;
+
+  let lastScrollY = shell.scrollTop;
+  shell.addEventListener('scroll', () => {
+    const scrollY = shell.scrollTop;
+    if (scrollY > lastScrollY + 5 && scrollY > 60) {
+      topbar.classList.add('scrolled-down');
+    } else if (scrollY < lastScrollY - 5 || scrollY < 10) {
+      topbar.classList.remove('scrolled-down');
+    }
+    lastScrollY = scrollY;
+  }, { passive: true });
 }
 
 // UI Event Listeners
