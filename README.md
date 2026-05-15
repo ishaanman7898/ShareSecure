@@ -8,6 +8,7 @@ Upload a PDF or Word document, get a short-lived encrypted link, share it. Every
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org)
+[![Security: AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-success.svg)](#security)
 
 ---
 
@@ -15,16 +16,17 @@ Upload a PDF or Word document, get a short-lived encrypted link, share it. Every
 
 | Feature | Details |
 |---|---|
-| **End-to-end privacy** | No IP logging, no cookies, no analytics. Zero user tracking. |
-| **AES-256-GCM encryption** | Every file is encrypted at rest with a unique per-file key. |
+| **End-to-end privacy** | No IP logging, no cookies, no analytics. Zero user tracking by default. |
+| **AES-256-GCM encryption** | Every file is encrypted at rest with a unique per-file key derived via HKDF. |
 | **Untraceable resharing** | Each share generates an independent link with no chain back to the original. |
-| **SHA-256 integrity** | Every file access is verified against its upload-time hash. |
-| **Magic byte validation** | File type is determined by binary signature — not filename or MIME header. Spoofing is impossible. |
-| **Auto-expiry** | Files self-destruct in 1 minute to 24 hours. No backups. No archives. |
-| **Screenshot protection** | Content blanks when the window loses focus. Right-click, print, and save-as are blocked. |
-| **PDF annotations** | Mark up PDFs with pen, highlighter, text, and eraser. Annotations are isolated per-link. |
-| **Client-side dashboard** | Upload history lives in `localStorage` — no server-side user→file association. |
-| **Self-hostable** | Run your own private instance. You own the data and the keys. |
+| **Metadata Stripping** | Automatically removes author, creator, and timestamp metadata from PDF/DOCX files. |
+| **Magic Byte Validation** | Content-based file type detection. Prevents spoofing via extensions or MIME headers. |
+| **SHA-256 Integrity** | Every file access is verified against its upload-time HMAC-SHA256 hash. |
+| **Auto-expiry** | Files self-destruct in 1 minute to 24 hours (configurable up to 72h). No backups. |
+| **Screenshot Protection** | Content blanks when the window loses focus. Right-click and print are blocked. |
+| **PDF Annotations** | Mark up PDFs with pen, highlighter, and text. Annotations are link-isolated. |
+| **Pseudonymous Dashboard** | Upload history lives in `localStorage`. Server only tracks counts via HMAC tags. |
+| **Rate Limiting** | Built-in 5-upload-per-day limit for authenticated users to prevent abuse. |
 
 ---
 
@@ -53,7 +55,10 @@ Even a full database leak cannot reconstruct who shared with whom.
 All rows look identical — no timestamps, no parent references, no fingerprints.
 ```
 
-> **IP Notice:** Your IP address is visible to the server and any network infrastructure between you and it. ShareSecure does not log IPs in application code, but the underlying OS or hosting provider may retain connection-level logs outside the application's control. Use **Tor** or a trusted **VPN** if IP anonymity is required.
+### The "Zero-Knowledge" Philosophy
+- **No User Association**: While you can create an account, the server never stores your username next to your files. Instead, it uses a one-way HMAC of your user ID to track rate limits without knowing *what* you uploaded.
+- **Client-Side History**: Your list of uploaded files is stored entirely in your browser's `localStorage`. If you clear your cache or switch browsers, the history is gone.
+- **Ephemeral Keys**: Encryption keys can be rotated. If the master key is lost, all data becomes unreadable—this is by design.
 
 ---
 
@@ -61,35 +66,29 @@ All rows look identical — no timestamps, no parent references, no fingerprints
 
 ```
 sharesecure/
-├── db/                              # Database schemas (reference — server auto-creates tables)
-│   ├── schema.sql                   # Files table
+├── db/                              # Database schemas & migrations
+│   ├── schema.sql                   # Files and Upload logs
 │   └── auth_schema.sql              # Users table
-├── docs/                            # Documentation
-│   └── SECURITY.md                  # Vulnerability reporting & security policy
-├── public/                          # Static frontend (served at root)
-│   ├── index.html / app.js          # Upload page
-│   ├── viewer.html / viewer.js      # File viewer (PDF.js, annotations, screenshot protection)
-│   ├── style.css / viewer.css       # Styles
-│   ├── terms.html                   # Terms & Conditions
-│   ├── security.html                # Security policy
-│   ├── 404.html / expired.html      # Error pages
-│   ├── download.html                # Self-host installer page
-│   ├── install.sh / install.ps1     # One-line installer scripts
-│   └── qrcode.min.js                # Client-side QR generation (no third-party calls)
-├── server/                          # Express.js server (self-hosted mode)
-│   ├── index.js                     # Entry point, middleware, cleanup
-│   ├── db.js                        # SQLite setup & auto-migrations
-│   ├── utils.js                     # AES-256-GCM encryption, compression, pseudonymous IDs
+├── docs/                            # Detailed documentation
+│   ├── SECURITY.md                  # Security policy & disclosure
+│   └── TERMS_AND_CONDITIONS.md      # Full legal terms
+├── public/                          # Static frontend assets
+│   ├── index.html / app.js          # Upload & Dashboard logic
+│   ├── viewer.html / viewer.js      # Encrypted viewer (PDF.js + Protection)
+│   ├── style.css / viewer.css       # Modern glassmorphism UI
+│   └── ...                          # Terms, Security, and Error pages
+├── server/                          # Express.js backend
+│   ├── index.js                     # Server entry & middleware
+│   ├── db.js                        # SQLite/Better-SQLite3 configuration
+│   ├── utils.js                     # Crypto, Compression, & Metadata stripping
 │   └── routes/
-│       ├── files.js                 # Upload / download / delete / reshare
-│       └── auth.js                  # Authentication
-├── functions/                       # Cloudflare Pages Functions (serverless)
-│   ├── _middleware.js               # Security headers
-│   ├── _turso.js                    # Turso/libSQL connection helper
-│   └── api/                         # Mirrors server/routes/ for the edge
-├── .env.example                     # Environment variable template
-├── wrangler.toml.example            # Cloudflare Pages config template (real file is gitignored)
-└── package.json
+│       ├── files.js                 # Upload, Download, Reshare, Delete
+│       └── auth.js                  # Registration & Session management
+├── functions/                       # Cloudflare Pages Functions (Serverless)
+│   ├── api/                         # Edge-ready API mirrors
+│   └── _turso.js                    # Turso/libSQL edge connector
+├── .env.example                     # Template for secrets
+└── wrangler.toml.example            # Cloudflare deployment config
 ```
 
 ---
@@ -100,265 +99,119 @@ Run your own private ShareSecure instance. You own the data, you control the enc
 
 ### Prerequisites
 
-- **Node.js 18+** — [nodejs.org](https://nodejs.org)
-- **Git** — [git-scm.com](https://git-scm.com)
+- **Node.js 18+**
+- **Git**
 
----
+### Installation
 
-### Step 1 — Clone & Install
-
-```bash
-git clone https://github.com/ishaanman7898/ShareSecure.git
-cd ShareSecure
-npm install
-```
-
----
-
-### Step 2 — Generate an Encryption Key
-
-```bash
-npm run generate-key
-```
-
-This prints a `ENCRYPTION_KEY=<64 hex chars>` line. Copy the entire thing.
-
-Alternatives:
-```bash
-# Node.js (any platform)
-node -e "console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))"
-
-# OpenSSL
-openssl rand -hex 32   # then prefix: ENCRYPTION_KEY=<output>
-```
-
----
-
-### Step 3 — Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-PORT=3000
-BASE_URL=http://localhost:3000
-
-# Paste from Step 2
-ENCRYPTION_KEY=your64hexcharskeyhere
-
-# Set to false to disable the localtunnel public URL
-USE_LOCAL_TUNNEL=true
-
-# Optional: reserve a stable localtunnel subdomain
-# TUNNEL_SUBDOMAIN=my-sharesecure
-```
-
-> **Important:** Keep `ENCRYPTION_KEY` backed up safely. Losing it makes all stored files permanently unreadable.
-
-**First-run shortcut:** If you skip `.env` setup, the server auto-generates one on first start. Check the console and back up the printed key.
-
----
-
-### Step 4 — Start
-
-```bash
-npm start
-```
-
-Opens on `http://localhost:3000`. If `USE_LOCAL_TUNNEL=true`, a public HTTPS URL is printed to the console — share it with anyone.
-
-For development with auto-restart:
-```bash
-npm run dev
-```
-
----
-
-### Cloudflare Pages Deployment (Serverless)
-
-For a zero-maintenance serverless deployment on Cloudflare's global edge:
-
-**Requirements:**
-- Free [Cloudflare](https://cloudflare.com) account
-- Free [Turso](https://turso.tech) database (SQLite on the edge)
-
-**Steps:**
-
-1. Fork this repo to your GitHub account
-2. Cloudflare → Pages → Create project → Connect your fork
-3. Set build output directory to `public` (no build command)
-4. Copy `wrangler.toml.example` to `wrangler.toml` and fill in your Turso org/region
-5. In Pages → Settings → Environment Variables, add:
-   - `TURSO_TOKEN` — your Turso auth token
-   - `ENCRYPTION_KEY` — 64 hex chars
-   - `BASE_URL` — your Pages URL (e.g. `https://sharesecure.pages.dev`)
-6. Run the schema in your Turso database:
+1. **Clone the repository:**
    ```bash
-   turso db shell YOUR_DB_NAME < db/schema.sql
+   git clone https://github.com/ishaanman7898/ShareSecure.git
+   cd ShareSecure
    ```
-7. Deploy
 
-> `wrangler.toml` is gitignored — your Turso credentials never enter version control.
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
----
+3. **Generate your master encryption key:**
+   ```bash
+   npm run generate-key
+   ```
+   *Copy the `ENCRYPTION_KEY=...` line provided.*
 
-### Production: Reverse Proxy
+4. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   ```
+   Edit `.env` and paste your key. Ensure `BASE_URL` matches your intended access point.
 
-**Nginx:**
-```nginx
-server {
-    listen 80;
-    server_name sharesecure.yourdomain.com;
-    return 301 https://$host$request_uri;
-}
-server {
-    listen 443 ssl;
-    server_name sharesecure.yourdomain.com;
-    ssl_certificate     /etc/letsencrypt/live/sharesecure.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/sharesecure.yourdomain.com/privkey.pem;
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        client_max_body_size 12M;
-    }
-}
-```
-
-**Caddy (automatic HTTPS):**
-```caddyfile
-sharesecure.yourdomain.com {
-    reverse_proxy localhost:3000
-    request_body { max_size 12MB }
-}
-```
-
-Set `BASE_URL=https://sharesecure.yourdomain.com` and `USE_LOCAL_TUNNEL=false` in `.env`.
+5. **Start the server:**
+   ```bash
+   npm start
+   ```
+   The app will be available at `http://localhost:3000`.
 
 ---
 
-### Run as a System Service (Linux)
+## Deployment Options
 
-```bash
-sudo nano /etc/systemd/system/sharesecure.service
-```
+### 1. Cloudflare Pages (Serverless Edge)
+Perfect for zero-maintenance, global availability.
+- **DB**: Use [Turso](https://turso.tech) for edge-compatible SQLite.
+- **Setup**: Connect your GitHub fork to Cloudflare Pages.
+- **Vars**: Set `TURSO_TOKEN`, `ENCRYPTION_KEY`, and `BASE_URL` in the Pages dashboard.
+- **Schema**: Import `db/schema.sql` into your Turso database.
 
-```ini
-[Unit]
-Description=ShareSecure
-After=network.target
-
-[Service]
-Type=simple
-User=www-data
-WorkingDirectory=/opt/sharesecure
-ExecStart=/usr/bin/node server/index.js
-Restart=on-failure
-Environment=NODE_ENV=production
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now sharesecure
-sudo systemctl status sharesecure
-```
-
----
-
-### Environment Variables Reference
-
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3000` | HTTP port |
-| `BASE_URL` | `http://localhost:3000` | Public-facing URL for generated links |
-| `ENCRYPTION_KEY` | *(auto-generated)* | 64 hex chars — AES-256-GCM master key |
-| `USE_LOCAL_TUNNEL` | `true` | Set `false` to disable localtunnel |
-| `TUNNEL_SUBDOMAIN` | *(random)* | Fixed subdomain for localtunnel |
-| `DATA_DIR` | `./data` | Directory for the SQLite DB and file blobs |
-| `DB_PATH` | `<DATA_DIR>/sharesecure.db` | Override database path |
-
----
-
-### Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `ENCRYPTION_KEY not set` warning | Run `npm run generate-key`, add the output to `.env` |
-| Port already in use | Set `PORT=3001` in `.env` |
-| localtunnel not starting | Set `USE_LOCAL_TUNNEL=false` in `.env` |
-| `Cannot find module` on startup | Run `npm install` |
+### 2. Traditional VPS (Nginx/Caddy)
+Recommended for high-performance private instances.
+- Use **Nginx** or **Caddy** as a reverse proxy.
+- Set `USE_LOCAL_TUNNEL=false` in production.
+- Use **systemd** to manage the process (see example in `docs/`).
 
 ---
 
 ## API Reference
 
-### `POST /api/upload`
-Upload a file. Returns a short URL, delete token, and expiry.
+### Authentication
+- `POST /api/auth/register`: Create a pseudonymous account.
+- `POST /api/auth/login`: Start a session and receive an auth token.
+- `GET /api/auth/user/files`: Get the current user's daily upload usage.
 
-**Body:** `multipart/form-data`
-- `file` — PDF or DOCX, max 10 MB
-- `expires_hours` — expiry in hours (min 1 min, max 24 h)
-- `allow_annotations` — `1` to enable annotations
-- `allow_download` — `1` to enable download button
-- `display_name` — optional custom display name
+### File Operations
+- `POST /api/upload`: Upload a PDF/DOCX (max 10MB).
+- `GET /api/info/:shortId`: Retrieve metadata (size, filename, expiry) without file content.
+- `GET /api/raw/:shortId`: Stream decrypted/decompressed file bytes (viewer use).
+- `GET /api/download/:shortId`: Force download (owner/permitted only).
+- `POST /api/reshare/:shortId`: Create a new, independent link for an existing file.
+- `POST /api/delete/:shortId`: Immediate destruction of a file cluster.
 
-**Response:**
-```json
-{
-  "shortId": "ABC12345",
-  "shortUrl": "https://example.com/r/ABC12345",
-  "filename": "document.pdf",
-  "size": 245760,
-  "expiresAt": "2024-01-01T13:00:00.000Z",
-  "deleteToken": "x9Kp2mQ7..."
-}
-```
-
-### `GET /api/info/:shortId`
-File metadata (no file content).
-
-### `GET /api/raw/:shortId`
-Raw file bytes for viewer rendering. Returns `application/octet-stream`.
-
-### `POST /api/reshare/:shortId`
-Generate a new untraceable link pointing to the same content.
-
-### `POST /api/delete/:shortId`
-Delete a file. Body: `{ "deleteToken": "..." }`. Cascades to the entire share cluster.
-
-### `GET|POST /api/annotations/:shortId`
-Load or save PDF annotation strokes. Annotations are encrypted and link-isolated.
+### Annotations
+- `GET /api/annotations/:shortId`: Load encrypted PDF markup.
+- `POST /api/annotations/:shortId`: Save new encrypted markup strokes.
 
 ---
 
-## Security
+## Security Deep Dive
 
-- AES-256-GCM encryption at rest with **per-file HKDF-derived keys** (salt = shortId, prefix `enc2:`)
-- HMAC-signed auth tokens (rejects forged or tampered tokens)
-- HMAC pseudonymous file ownership (`user_tag`) — DB rows never store raw user IDs
-- SHA-256 integrity verification on every file access
-- Magic byte + ZIP manifest validation (DOCX must contain `word/document.xml`)
-- No IP logging, no referrer headers, no caching, no iframe embedding
-- Cross-device dashboard via pseudonym lookup — recipients still cannot trace files to an account
+### AES-256-GCM Encryption
+Files are not just encrypted with a master key. We use **Forward Secrecy per file**:
+1. A random 32-byte key is generated for every upload.
+2. The file is compressed (zlib) then encrypted with this unique key.
+3. The unique key is wrapped using the `ENCRYPTION_KEY` via HKDF.
+4. Even if one file's key is compromised, others remain safe.
 
-See [Security Policy](docs/SECURITY.md) for vulnerability disclosure and full details.
+### Magic Byte Validation
+We don't trust `.pdf` or `.docx` extensions. 
+- **PDFs**: Checked for `%PDF` header.
+- **DOCX**: Checked for ZIP structure AND the internal `word/document.xml` manifest.
+This prevents attackers from uploading malicious scripts disguised as documents.
+
+### Metadata Stripping
+Before a document is stored, it is scrubbed:
+- **PDF**: XMP metadata, Info dicts, and Creator tools are wiped.
+- **DOCX**: `docProps/core.xml` and `docProps/app.xml` are sanitized.
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|---|---|
+| **ENCRYPTION_KEY not set** | Run `npm run generate-key` and update your `.env`. |
+| **Upload Limit Reached** | Wait 24h or use a different authenticated session. |
+| **File Not Found (404)** | The file may have expired and been automatically deleted. |
+| **Decryption Failed** | The `ENCRYPTION_KEY` has changed since the file was uploaded. |
 
 ---
 
 ## Legal
 
-By using ShareSecure, you agree to the [Terms & Conditions](/terms). The operator bears **zero liability** for content uploaded, shared, stored, or transmitted by users. You are solely responsible for all content you upload and share.
-
-See [Terms & Conditions](/terms) for the full disclaimer.
+ShareSecure is provided "as is" without warranty. Operators are not liable for user-generated content. See [Terms & Conditions](/terms) for full details.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © 2024 Ishaan
