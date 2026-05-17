@@ -129,6 +129,15 @@
       <div id="file-list" class="file-list">
         <p class="empty-msg">You haven't uploaded any files today.</p>
       </div>
+      <div id="inbox-section" style="border-top:1px solid var(--border,#1e1e28);margin-top:20px;padding-top:16px;">
+        <div class="dashboard-header" style="margin-bottom:10px;">
+          <h2>Inbox <span style="font-size:0.75rem;font-weight:500;color:var(--text-muted,#8892a4);font-family:'Inter',sans-serif;">(files sent to you)</span></h2>
+          <span class="upload-limit" id="inbox-count"></span>
+        </div>
+        <div id="inbox-list" class="file-list">
+          <p class="empty-msg">No files received.</p>
+        </div>
+      </div>
     </div>
 
     <div class="card hidden" id="upload-card">

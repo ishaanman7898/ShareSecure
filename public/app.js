@@ -602,6 +602,7 @@ function initAuth() {
     dashboardCard.classList.remove('hidden');
     uploadCard.classList.remove('hidden');
     updateDashboard();
+    updateInbox();
   } else {
     authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
 
@@ -689,6 +690,52 @@ async function updateDashboard() {
     renderFileList(serverFiles);
     uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
   } catch { /* network error — keep showing cached list */ }
+}
+
+async function updateInbox() {
+  if (!userToken) return;
+  try {
+    const res = await fetch('/api/inbox', {
+      headers: { 'Authorization': `Bearer ${userToken}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    renderInbox(data.files || []);
+    const count = (data.files || []).length;
+    const inboxCount = document.getElementById('inbox-count');
+    if (inboxCount) inboxCount.textContent = count > 0 ? `${count} received` : '';
+  } catch {}
+}
+
+function renderInbox(files) {
+  const list = document.getElementById('inbox-list');
+  if (!list) return;
+  if (!files || files.length === 0) {
+    list.innerHTML = '<p class="empty-msg">No files received.</p>';
+    return;
+  }
+  list.innerHTML = files.map(f => {
+    const expiryMs = f.expires_at ? new Date(f.expires_at) - Date.now() : null;
+    const expired = expiryMs !== null && expiryMs <= 0;
+    const expiryStr = expired
+      ? '<span style="color:#ef4444">Expired</span>'
+      : expiryMs !== null
+        ? `<span style="color:var(--text-muted)">Expires ${new Date(f.expires_at).toLocaleString()}</span>`
+        : '<span style="color:var(--text-muted)">No expiry</span>';
+    const sizeStr = f.size_bytes < 1024 ? f.size_bytes + ' B'
+      : f.size_bytes < 1048576 ? (f.size_bytes / 1024).toFixed(1) + ' KB'
+      : (f.size_bytes / 1048576).toFixed(1) + ' MB';
+    return `
+      <div class="file-item" style="opacity:${expired ? '0.5' : '1'}">
+        <div class="file-item-info">
+          <span class="file-item-name">${f.original_filename || 'Unknown'}</span>
+          <span class="file-item-meta">${sizeStr} · ${expiryStr}</span>
+        </div>
+        <div class="file-item-actions">
+          ${!expired ? `<a class="btn btn-primary" href="/r/${f.short_id}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;padding:6px 14px;font-size:0.8rem">Open</a>` : ''}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderFileList(files) {

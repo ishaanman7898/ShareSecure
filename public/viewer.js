@@ -1155,6 +1155,84 @@ function showAnnToolbar() {
   $('ann-toolbar')?.classList.remove('hidden');
 }
 
+// ── send to user ──────────────────────────────────────────────────────────────
+function showSendDialog() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'delete-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="delete-modal-card">
+      <div class="delete-modal-icon" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.25);color:#10b981">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </div>
+      <p class="delete-modal-title">Send to user</p>
+      <p class="delete-modal-sub" id="send-dialog-sub">They won't know who sent it. Enter their exact username.</p>
+      <input id="send-username-input" type="text" placeholder="Username" autocomplete="off" spellcheck="false"
+        style="width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(0,0,0,0.4);color:var(--text,#f0f0ff);font-size:0.9rem;font-family:inherit;outline:none;margin:4px 0;" />
+      <div class="delete-modal-actions">
+        <button class="delete-modal-cancel" id="send-cancel-btn">Cancel</button>
+        <button class="delete-modal-confirm" id="send-confirm-btn" style="background:rgba(16,185,129,0.85);border-color:rgba(16,185,129,0.5)">Send</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  const input = backdrop.querySelector('#send-username-input');
+  const sub = backdrop.querySelector('#send-dialog-sub');
+  const confirmBtn = backdrop.querySelector('#send-confirm-btn');
+  input.focus();
+
+  const close = () => {
+    backdrop.style.animation = 'backdropIn 0.15s ease reverse';
+    setTimeout(() => { if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop); }, 150);
+  };
+
+  const doSend = async () => {
+    const username = input.value.trim();
+    if (!username) return;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Sending…';
+    sub.style.color = '';
+
+    const token = localStorage.getItem('user_token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`/api/send/${myShortId}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ targetUsername: username })
+      });
+      const data = await res.json();
+      if (data.sent) {
+        close();
+        showKbToast('Sent!');
+      } else {
+        sub.textContent = data.error || 'Failed to send.';
+        sub.style.color = 'var(--danger,#ef4444)';
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Send';
+      }
+    } catch {
+      sub.textContent = 'Network error. Try again.';
+      sub.style.color = 'var(--danger,#ef4444)';
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Send';
+    }
+  };
+
+  confirmBtn.addEventListener('click', doSend);
+  backdrop.querySelector('#send-cancel-btn').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doSend(); }
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    e.stopPropagation();
+  });
+}
+
 // ── ghost link ────────────────────────────────────────────────────────────────
 function showGhostModal(url) {
   const backdrop = document.createElement('div');
@@ -1333,6 +1411,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
     }
   }
 
+  $('send-to-user-btn').addEventListener('click', showSendDialog);
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);

@@ -747,7 +747,7 @@ body {
   -webkit-backdrop-filter: blur(8px);
   z-index: 600;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
   padding: 24px;
   animation: backdropIn 0.2s ease;
