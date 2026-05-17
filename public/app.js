@@ -75,6 +75,7 @@ const landingStartBtn = document.getElementById('landing-start');
 let qrInstance = null;
 let currentShortId = null;
 let currentDeleteToken = null;
+let currentHistoryRecord = null;
 let userToken = localStorage.getItem('user_token');
 let isLoginMode = true;
 let customExpiryHours = null;
@@ -399,7 +400,7 @@ function showResult(data, file) {
   }
 
   // Save full record to client-side dashboard history (no server-side user→file link)
-  saveUploadToHistory({
+  currentHistoryRecord = {
     short_id:          data.shortId,
     original_filename: usedName,
     mime_type:         file.type || 'application/octet-stream',
@@ -407,7 +408,8 @@ function showResult(data, file) {
     expires_at:        data.expiresAt,
     uploaded_at:       new Date().toISOString(),
     delete_token:      data.deleteToken || null,
-  });
+  };
+  saveUploadToHistory(currentHistoryRecord);
 
   resultFilename.textContent = usedName;
   resultSize.textContent = formatSize(file.size);
@@ -493,6 +495,63 @@ deleteBtn.addEventListener('click', async () => {
     showToast('Network error during delete.', 'error');
     deleteBtn.textContent = 'Delete File';
     deleteBtn.disabled = false;
+  }
+});
+
+// ghost link — reshare + delete original to erase owner trail
+document.getElementById('ghost-link-btn').addEventListener('click', async () => {
+  if (!currentShortId || !currentDeleteToken) return;
+
+  const btn = document.getElementById('ghost-link-btn');
+  btn.disabled = true;
+  btn.textContent = 'Working...';
+
+  try {
+    const reshareRes = await fetch(`/api/reshare/${currentShortId}`, { method: 'POST' });
+    if (!reshareRes.ok) throw new Error('reshare failed');
+    const reshareData = await reshareRes.json();
+    if (!reshareData.shortId) throw new Error('no shortId');
+
+    // delete original to break the DB trail
+    await fetch(`/api/delete/${currentShortId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteToken: currentDeleteToken })
+    });
+
+    // clean up old localStorage owner token
+    localStorage.removeItem('owner_' + currentShortId);
+    removeFromHistory(currentShortId);
+
+    // update state to ghost identity
+    currentShortId = reshareData.shortId;
+    currentDeleteToken = reshareData.deleteToken;
+    localStorage.setItem('owner_' + currentShortId, currentDeleteToken);
+
+    if (currentHistoryRecord) {
+      currentHistoryRecord = { ...currentHistoryRecord, short_id: currentShortId, delete_token: currentDeleteToken };
+      saveUploadToHistory(currentHistoryRecord);
+    }
+
+    // update UI
+    shortLink.textContent = reshareData.shortUrl;
+    document.getElementById('view-btn').href = reshareData.shortUrl;
+
+    qrCanvasEl.innerHTML = '';
+    qrInstance = new QRCode(qrCanvasEl, {
+      text: reshareData.shortUrl, width: 200, height: 200,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    btn.textContent = 'Ghost Active';
+    btn.style.background = 'rgba(139,92,246,0.25)';
+    btn.style.borderColor = 'rgba(139,92,246,0.6)';
+    showToast('Ghost link active — owner trail erased from database.', 'success', 4000);
+  } catch {
+    btn.disabled = false;
+    btn.textContent = 'Ghost Link';
+    showToast('Ghost link failed. Try again.', 'error');
   }
 });
 

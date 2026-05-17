@@ -111,6 +111,13 @@ document.addEventListener('keydown', e => {
     return;
   }
 
+  // Annotation undo
+  if ((e.ctrlKey || e.metaKey) && key === 'z' && annEnabled && !isMobile()) {
+    e.preventDefault();
+    annUndoOne();
+    return;
+  }
+
   // Fullscreen
   if (e.key === 'F11') {
     e.preventDefault();
@@ -240,6 +247,7 @@ function checkOwnership() {
 
 let myDeleteToken = checkOwnership();
 let isOwner = !!myDeleteToken;
+let ghostLinkGenerated = false;
 
 const $ = id => document.getElementById(id);
 const show = id => $(id)?.classList.remove('hidden');
@@ -257,6 +265,7 @@ function updateOwnershipDisplay() {
   myDeleteToken = checkOwnership();
   isOwner = !!myDeleteToken;
   if (isOwner) show('delete-file-btn'); else hide('delete-file-btn');
+  if (isOwner && !ghostLinkGenerated) show('ghost-link-btn'); else hide('ghost-link-btn');
 }
 
 // ── zoom helpers ──────────────────────────────────────────────────────────────
@@ -607,6 +616,7 @@ async function renderAllPages() {
 
   const container = $('pdf-container');
   container.innerHTML = '';
+  annCanvases.clear();
 
   const loader = $('loader');
   let progressEl = loader?.querySelector('.loader-progress');
@@ -635,8 +645,10 @@ async function renderAllPages() {
     container.appendChild(wrapper);
 
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+    if (annEnabled && !isMobile()) attachAnnCanvas(wrapper, n, vp.width, vp.height);
   }
 
+  if (annEnabled && !isMobile()) setAnnTool(annTool);
   hide('loader');
   show('pdf-container');
   isRendering = false;
@@ -847,6 +859,378 @@ function showUnsupported() {
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
+// ── Annotation system ─────────────────────────────────────────────────────────
+let annEnabled = false;
+let annData = [];
+const annCanvases = new Map();
+let annTool = 'cursor';
+let annColor = '#ef4444';
+let annDrawing = false;
+let annCurrentPoints = [];
+let annHlStart = null;
+let annSaveTimer = null;
+
+function isMobile() {
+  return window.innerWidth <= 800;
+}
+
+async function fetchAnnotations() {
+  try {
+    const res = await fetch(`/api/annotations/${myShortId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    annEnabled = data.allow_annotations !== false;
+    annData = Array.isArray(data.annotations) ? data.annotations : [];
+  } catch (_) {}
+}
+
+function setAnnStatus(state) {
+  const dot = $('ann-save-dot');
+  if (!dot) return;
+  dot.classList.remove('saving', 'error');
+  if (state === 'saving') dot.classList.add('saving');
+  else if (state === 'error') dot.classList.add('error');
+}
+
+function scheduleSave() {
+  setAnnStatus('saving');
+  if (annSaveTimer) clearTimeout(annSaveTimer);
+  annSaveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/annotations/${myShortId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ annotations: annData })
+      });
+      setAnnStatus(res.ok ? 'saved' : 'error');
+    } catch {
+      setAnnStatus('error');
+    }
+  }, 2000);
+}
+
+function setAnnTool(tool) {
+  annTool = tool;
+  const cursors = { pen: 'crosshair', hl: 'crosshair', txt: 'text', erase: 'cell' };
+  document.querySelectorAll('.ann-btn[data-tool]').forEach(btn => {
+    btn.classList.toggle('ann-active', btn.dataset.tool === tool);
+  });
+  annCanvases.forEach(canvas => {
+    canvas.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
+    canvas.style.cursor = cursors[tool] || 'default';
+  });
+}
+
+function redrawPage(pageNum) {
+  const canvas = annCanvases.get(pageNum);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  for (const ann of annData) {
+    if (ann.p !== pageNum) continue;
+    if (ann.k === 'stroke') {
+      if (!ann.pts || ann.pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.strokeStyle = ann.c;
+      ctx.lineWidth = ann.lw || 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(ann.pts[0].x * W, ann.pts[0].y * H);
+      for (let i = 1; i < ann.pts.length; i++) {
+        ctx.lineTo(ann.pts[i].x * W, ann.pts[i].y * H);
+      }
+      ctx.stroke();
+    } else if (ann.k === 'hl') {
+      ctx.fillStyle = ann.c + '55';
+      ctx.fillRect(ann.x * W, ann.y * H, ann.w * W, ann.h * H);
+    } else if (ann.k === 'txt') {
+      ctx.fillStyle = ann.c;
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.fillText(ann.v, ann.x * W, ann.y * H);
+    }
+  }
+}
+
+function getCanvasPos(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) / rect.width,
+    y: (e.clientY - rect.top) / rect.height
+  };
+}
+
+function attachAnnCanvas(wrapper, pageNum, width, height) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.className = 'ann-canvas';
+  canvas.dataset.page = pageNum;
+  canvas.style.pointerEvents = 'none';
+  wrapper.appendChild(canvas);
+  annCanvases.set(pageNum, canvas);
+  redrawPage(pageNum);
+  canvas.addEventListener('mousedown', e => onAnnMouseDown(e, pageNum), { passive: false });
+  canvas.addEventListener('mousemove', e => onAnnMouseMove(e, pageNum), { passive: false });
+  canvas.addEventListener('mouseup', e => onAnnMouseUp(e, pageNum), { passive: false });
+  canvas.addEventListener('mouseleave', e => onAnnMouseUp(e, pageNum), { passive: false });
+}
+
+function onAnnMouseDown(e, pageNum) {
+  if (annTool === 'cursor') return;
+  e.preventDefault();
+  const canvas = annCanvases.get(pageNum);
+  const pos = getCanvasPos(canvas, e);
+  if (annTool === 'pen') {
+    annDrawing = true;
+    annCurrentPoints = [pos];
+  } else if (annTool === 'hl') {
+    annDrawing = true;
+    annHlStart = pos;
+  } else if (annTool === 'txt') {
+    placeTxtInput(canvas, pageNum, pos, e.clientX, e.clientY);
+  } else if (annTool === 'erase') {
+    eraseAt(pageNum, pos);
+  }
+}
+
+function onAnnMouseMove(e, pageNum) {
+  if (!annDrawing) return;
+  e.preventDefault();
+  const canvas = annCanvases.get(pageNum);
+  const pos = getCanvasPos(canvas, e);
+  const W = canvas.width;
+  const H = canvas.height;
+  if (annTool === 'pen') {
+    annCurrentPoints.push(pos);
+    if (annCurrentPoints.length >= 2) {
+      const ctx = canvas.getContext('2d');
+      const pts = annCurrentPoints;
+      ctx.beginPath();
+      ctx.strokeStyle = annColor;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.moveTo(pts[pts.length - 2].x * W, pts[pts.length - 2].y * H);
+      ctx.lineTo(pts[pts.length - 1].x * W, pts[pts.length - 1].y * H);
+      ctx.stroke();
+    }
+  } else if (annTool === 'hl' && annHlStart) {
+    redrawPage(pageNum);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = annColor + '55';
+    ctx.fillRect(
+      Math.min(annHlStart.x, pos.x) * W,
+      Math.min(annHlStart.y, pos.y) * H,
+      Math.abs(pos.x - annHlStart.x) * W,
+      Math.abs(pos.y - annHlStart.y) * H
+    );
+  }
+}
+
+function onAnnMouseUp(e, pageNum) {
+  if (!annDrawing) return;
+  annDrawing = false;
+  const canvas = annCanvases.get(pageNum);
+  const pos = getCanvasPos(canvas, e);
+  if (annTool === 'pen' && annCurrentPoints.length > 1) {
+    annData.push({ k: 'stroke', p: pageNum, c: annColor, lw: 3, pts: [...annCurrentPoints] });
+    annCurrentPoints = [];
+    scheduleSave();
+  } else if (annTool === 'hl' && annHlStart) {
+    const x = Math.min(annHlStart.x, pos.x);
+    const y = Math.min(annHlStart.y, pos.y);
+    const w = Math.abs(pos.x - annHlStart.x);
+    const h = Math.abs(pos.y - annHlStart.y);
+    if (w > 0.005 && h > 0.002) {
+      annData.push({ k: 'hl', p: pageNum, c: annColor, x, y, w, h });
+      scheduleSave();
+    }
+    annHlStart = null;
+    redrawPage(pageNum);
+  }
+}
+
+function placeTxtInput(canvas, pageNum, normPos, clientX, clientY) {
+  document.querySelectorAll('.ann-text-input').forEach(el => el.remove());
+  const wrapper = canvas.parentElement;
+  const canvasRect = canvas.getBoundingClientRect();
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'ann-text-input';
+  input.placeholder = 'Type note…';
+  input.style.left = (clientX - canvasRect.left) + 'px';
+  input.style.top = Math.max(0, clientY - canvasRect.top - 28) + 'px';
+  wrapper.appendChild(input);
+  input.focus();
+  const commit = () => {
+    const val = input.value.trim();
+    if (val) {
+      annData.push({ k: 'txt', p: pageNum, c: annColor, x: normPos.x, y: normPos.y, v: val });
+      redrawPage(pageNum);
+      scheduleSave();
+    }
+    input.remove();
+  };
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { e.preventDefault(); input.remove(); }
+    e.stopPropagation();
+  });
+  input.addEventListener('blur', commit);
+}
+
+function eraseAt(pageNum, pos) {
+  const canvas = annCanvases.get(pageNum);
+  if (!canvas) return;
+  const W = canvas.width;
+  const H = canvas.height;
+  const px = pos.x * W;
+  const py = pos.y * H;
+  const RADIUS = 20;
+  let closest = -1;
+  let minDist = Infinity;
+  for (let i = annData.length - 1; i >= 0; i--) {
+    const ann = annData[i];
+    if (ann.p !== pageNum) continue;
+    let dist = Infinity;
+    if (ann.k === 'stroke') {
+      for (const pt of ann.pts) {
+        const d = Math.hypot(pt.x * W - px, pt.y * H - py);
+        if (d < dist) dist = d;
+      }
+    } else if (ann.k === 'hl') {
+      dist = Math.hypot((ann.x + ann.w / 2) * W - px, (ann.y + ann.h / 2) * H - py);
+    } else if (ann.k === 'txt') {
+      dist = Math.hypot(ann.x * W - px, ann.y * H - py);
+    }
+    if (dist < RADIUS && dist < minDist) { minDist = dist; closest = i; }
+  }
+  if (closest >= 0) {
+    annData.splice(closest, 1);
+    redrawPage(pageNum);
+    scheduleSave();
+  }
+}
+
+function annUndoOne() {
+  if (!annEnabled || annData.length === 0) return;
+  annData.pop();
+  annCanvases.forEach((_, pn) => redrawPage(pn));
+  scheduleSave();
+}
+
+function clearPageAnnotations(pageNum) {
+  const before = annData.length;
+  annData = annData.filter(a => a.p !== pageNum);
+  if (annData.length !== before) {
+    redrawPage(pageNum);
+    scheduleSave();
+  }
+}
+
+function initAnnToolbar() {
+  document.querySelectorAll('.ann-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => setAnnTool(btn.dataset.tool));
+  });
+  const colorInput = $('ann-color-input');
+  const colorDot = $('ann-color-dot');
+  if (colorInput && colorDot) {
+    colorDot.style.background = annColor;
+    colorInput.value = annColor;
+    colorInput.addEventListener('input', e => {
+      annColor = e.target.value;
+      colorDot.style.background = annColor;
+    });
+  }
+  $('ann-undo')?.addEventListener('click', annUndoOne);
+  $('ann-clear')?.addEventListener('click', () => {
+    const cur = parseInt($('page-num')?.value || '1');
+    clearPageAnnotations(cur);
+  });
+}
+
+function showAnnToolbar() {
+  $('ann-toolbar')?.classList.remove('hidden');
+}
+
+// ── ghost link ────────────────────────────────────────────────────────────────
+function showGhostModal(url) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'delete-modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="delete-modal-card">
+      <div class="delete-modal-icon" style="background:rgba(139,92,246,0.12);border-color:rgba(139,92,246,0.25);color:#a78bfa">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2C8.68 2 6 4.68 6 8v10l2.5-2.5 2.5 2.5 2.5-2.5 2.5 2.5 2.5-2.5V8c0-3.32-2.68-6-6-6z"/>
+          <circle cx="9.5" cy="9.5" r="0.5" fill="currentColor"/>
+          <circle cx="14.5" cy="9.5" r="0.5" fill="currentColor"/>
+        </svg>
+      </div>
+      <p class="delete-modal-title">Ghost link ready</p>
+      <p class="delete-modal-sub">Owner trail deleted. This URL has no account association in the database — safe to share anywhere.</p>
+      <div style="display:flex;gap:8px;align-items:center;background:rgba(0,0,0,0.35);border:1px solid rgba(139,92,246,0.2);border-radius:10px;padding:10px 12px;margin:4px 0;width:100%">
+        <span id="ghost-url-text" style="flex:1;font-size:0.78rem;color:#c4b5fd;font-family:monospace;word-break:break-all">${url}</span>
+        <button class="share-copy-btn" id="ghost-copy-btn" style="flex-shrink:0">Copy</button>
+      </div>
+      <button class="delete-modal-cancel" id="ghost-done-btn" style="width:100%;margin-top:4px">Done</button>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  backdrop.querySelector('#ghost-copy-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = backdrop.querySelector('#ghost-copy-btn');
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  });
+
+  const close = () => {
+    backdrop.style.animation = 'backdropIn 0.15s ease reverse';
+    setTimeout(() => { if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop); }, 150);
+  };
+  backdrop.querySelector('#ghost-done-btn').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+}
+
+async function ghostLinkify() {
+  const btn = $('ghost-link-btn');
+  if (!btn || !myDeleteToken) return;
+  btn.disabled = true;
+
+  try {
+    const reshareRes = await fetch(`/api/reshare/${myShortId}`, { method: 'POST' });
+    if (!reshareRes.ok) throw new Error('reshare failed');
+    const reshareData = await reshareRes.json();
+    if (!reshareData.shortId) throw new Error('no shortId');
+
+    // delete the original to break the DB trail
+    await fetch(`/api/delete/${myShortId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteToken: myDeleteToken })
+    });
+
+    // clean up old owner token
+    localStorage.removeItem('owner_' + myShortId);
+
+    // migrate to ghost identity
+    myShortId = reshareData.shortId;
+    myDeleteToken = reshareData.deleteToken;
+    localStorage.setItem('owner_' + myShortId, myDeleteToken);
+    history.replaceState(null, '', `/r/${myShortId}`);
+
+    ghostLinkGenerated = true;
+    updateOwnershipDisplay();
+    showGhostModal(reshareData.shortUrl);
+  } catch {
+    btn.disabled = false;
+  }
+}
+
 // ── share panel ───────────────────────────────────────────────────────────────
 function makeQR(divEl, url) {
   divEl.innerHTML = '';
@@ -952,6 +1336,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
   $('share-overlay').addEventListener('click', closeSharePanel);
+  $('ghost-link-btn').addEventListener('click', ghostLinkify);
 
   $('download-btn')?.addEventListener('click', async () => {
     const btn = $('download-btn');
@@ -1006,8 +1391,15 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
   const rawUrl = `/api/raw/${myShortId}`;
 
-  if (mimeType === 'application/pdf') { await loadPDF(rawUrl); }
-  else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
+  if (mimeType === 'application/pdf') {
+    if (fileInfo.allowAnnotations !== 0) await fetchAnnotations();
+    await loadPDF(rawUrl);
+    if (annEnabled && !isMobile()) {
+      initAnnToolbar();
+      showAnnToolbar();
+      setAnnStatus('saved');
+    }
+  } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
   else if (mimeType.startsWith('image/')) { loadImage(rawUrl); }
   else if (mimeType.startsWith('video/')) { loadVideo(rawUrl); }
   else if (mimeType.startsWith('audio/')) { loadAudio(rawUrl, filename); }
