@@ -273,6 +273,23 @@ function clearSelection() {
   if (nameInput) nameInput.value = '';
 }
 
+async function ghostUpload(shortId, deleteToken) {
+  try {
+    const reshareRes = await fetch(`/api/reshare/${shortId}`, { method: 'POST' });
+    if (!reshareRes.ok) return null;
+    const reshareData = await reshareRes.json();
+    if (!reshareData.shortId) return null;
+    await fetch(`/api/delete/${shortId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteToken })
+    });
+    return reshareData;
+  } catch {
+    return null;
+  }
+}
+
 // drag & drop
 dropZone.addEventListener('dragover', e => {
   e.preventDefault();
@@ -331,11 +348,15 @@ uploadBtn.addEventListener('click', async () => {
       }
     });
 
-    xhr.onload = () => {
+    xhr.onload = async () => {
       if (xhr.status === 200) {
-        const data = JSON.parse(xhr.responseText);
+        let data = JSON.parse(xhr.responseText);
+        const ghost = await ghostUpload(data.shortId, data.deleteToken);
+        if (ghost) {
+          data = { ...data, shortId: ghost.shortId, shortUrl: ghost.shortUrl, deleteToken: ghost.deleteToken };
+        }
         showResult(data, selectedFile);
-        showToast('File uploaded successfully!', 'success');
+        showToast('File shared anonymously.', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
       } else if (xhr.status === 429) {
@@ -498,63 +519,6 @@ deleteBtn.addEventListener('click', async () => {
   }
 });
 
-// ghost link — reshare + delete original to erase owner trail
-document.getElementById('ghost-link-btn').addEventListener('click', async () => {
-  if (!currentShortId || !currentDeleteToken) return;
-
-  const btn = document.getElementById('ghost-link-btn');
-  btn.disabled = true;
-  btn.textContent = 'Working...';
-
-  try {
-    const reshareRes = await fetch(`/api/reshare/${currentShortId}`, { method: 'POST' });
-    if (!reshareRes.ok) throw new Error('reshare failed');
-    const reshareData = await reshareRes.json();
-    if (!reshareData.shortId) throw new Error('no shortId');
-
-    // delete original to break the DB trail
-    await fetch(`/api/delete/${currentShortId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deleteToken: currentDeleteToken })
-    });
-
-    // clean up old localStorage owner token
-    localStorage.removeItem('owner_' + currentShortId);
-    removeFromHistory(currentShortId);
-
-    // update state to ghost identity
-    currentShortId = reshareData.shortId;
-    currentDeleteToken = reshareData.deleteToken;
-    localStorage.setItem('owner_' + currentShortId, currentDeleteToken);
-
-    if (currentHistoryRecord) {
-      currentHistoryRecord = { ...currentHistoryRecord, short_id: currentShortId, delete_token: currentDeleteToken };
-      saveUploadToHistory(currentHistoryRecord);
-    }
-
-    // update UI
-    shortLink.textContent = reshareData.shortUrl;
-    document.getElementById('view-btn').href = reshareData.shortUrl;
-
-    qrCanvasEl.innerHTML = '';
-    qrInstance = new QRCode(qrCanvasEl, {
-      text: reshareData.shortUrl, width: 200, height: 200,
-      colorDark: '#000000', colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.M
-    });
-
-    btn.textContent = 'Ghost Active';
-    btn.style.background = 'rgba(139,92,246,0.25)';
-    btn.style.borderColor = 'rgba(139,92,246,0.6)';
-    showToast('Ghost link active — owner trail erased from database.', 'success', 4000);
-  } catch {
-    btn.disabled = false;
-    btn.textContent = 'Ghost Link';
-    showToast('Ghost link failed. Try again.', 'error');
-  }
-});
-
 // new upload
 newUploadBtn.addEventListener('click', () => {
   if (countdownInterval) clearInterval(countdownInterval);
@@ -664,8 +628,7 @@ async function updateDashboard() {
   const cached = loadUploadHistory();
   renderFileList(cached);
 
-  // Fetch authoritative file list from server — works across devices since uploads
-  // are linked to the account via a server-held HMAC pseudonym (user_tag).
+  // Fetch upload count from server (file list stays in localStorage — all uploads are auto-ghosted).
   try {
     const res = await fetch('/api/auth/user/files', {
       headers: { 'Authorization': `Bearer ${userToken}` }
@@ -674,20 +637,7 @@ async function updateDashboard() {
     if (!res.ok) return;
 
     const data = await res.json();
-    const serverFiles = (data.files || []).map(f => ({
-      short_id:          f.short_id,
-      original_filename: f.original_filename,
-      mime_type:         f.mime_type,
-      size_bytes:        f.size_bytes,
-      uploaded_at:       f.uploaded_at,
-      expires_at:        f.expires_at,
-      delete_token:      f.delete_token || null
-    }));
-
-    // Refresh local cache so offline reloads show the latest list
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(serverFiles.slice(0, 50))); } catch {}
-
-    renderFileList(serverFiles);
+    // All uploads are auto-ghosted (no user_tag stored) — localStorage is authoritative for file list
     uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
   } catch { /* network error — keep showing cached list */ }
 }
