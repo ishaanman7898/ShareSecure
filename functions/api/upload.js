@@ -7,6 +7,7 @@ import {
   encryptStr,
   getUserTag
 } from '../_turso.js';
+import { verifyProof as zkVerifyProof } from '../_zk.js';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -59,6 +60,23 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
   }
 
+  // ZK-auth path: if X-ZK-* headers are present, verify the proof and accept
+  // the upload WITHOUT any user identifier (no user_tag, no user_id) — the
+  // server confirms the uploader is a registered user but cannot tell which one.
+  const zkProof     = request.headers.get('X-ZK-Proof');
+  const zkNullifier = request.headers.get('X-ZK-Nullifier');
+  const zkNonce     = request.headers.get('X-ZK-Nonce');
+  const usingZK     = Boolean(zkProof && zkNullifier && zkNonce);
+
+  let zkValidated = false;
+  if (usingZK) {
+    const result = await zkVerifyProof({ proof: zkProof, nullifier: zkNullifier, nonce: zkNonce }, env);
+    if (!result.valid) {
+      return Response.json({ error: `ZK proof rejected: ${result.error}` }, { status: 401 });
+    }
+    zkValidated = true;
+  }
+
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   const client = getFilesClient(env);
 
@@ -69,9 +87,11 @@ export async function onRequestPost(context) {
     'ALTER TABLE files ADD COLUMN user_tag TEXT'
   ]) { try { await client.execute({ sql: col, args: [] }); } catch {} }
 
-  const userTag = auth ? await getUserTag(auth.userId, env) : null;
+  // When ZK-authenticated, we DON'T store user_tag — the nullifier already
+  // proved the uploader is a registered user, and we want zero identity link.
+  const userTag = (zkValidated || !auth) ? null : await getUserTag(auth.userId, env);
 
-  if (auth) {
+  if (auth && !zkValidated) {
     // count by both user_tag (new) and user_id (legacy rows) so the limit holds across the migration
     const recentUploads = await client.execute({
       sql: `SELECT COUNT(*) as count FROM files
@@ -85,7 +105,7 @@ export async function onRequestPost(context) {
   }
 
   const rawHours = parseFloat(formData.get('expires_hours')) || 1;
-  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 72);
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 720);
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = formData.get('allow_annotations') === '1' ? 1 : 0;

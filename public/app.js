@@ -1,3 +1,5 @@
+import * as ZK from '/zk-client.js';
+
 // ── toast notification system ─────────────────────────────────────────────────
 function showToast(message, type = 'info', durationMs = 4000) {
   let container = document.getElementById('toast-container');
@@ -335,10 +337,27 @@ uploadBtn.addEventListener('click', async () => {
   progressWrap.classList.remove('hidden');
   progressBar.style.width = '0%';
 
+  // Prepare ZK auth headers if the user has enrolled credentials.
+  // When ZK headers are sent, we intentionally OMIT the Authorization header
+  // so the server (and any logging in the request chain) cannot link the
+  // upload to a specific user_id.
+  let zkHeaders = null;
+  if (userToken && ZK.hasZKCredentials()) {
+    try {
+      zkHeaders = await ZK.prepareUploadHeaders(userToken);
+    } catch {
+      // ZK prep failed (e.g. challenge limit reached or network) — fall through
+      // to Bearer auth, which is still auto-ghosted post-upload.
+      zkHeaders = null;
+    }
+  }
+
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
-    if (userToken) {
+    if (zkHeaders) {
+      Object.entries(zkHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    } else if (userToken) {
       xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
     }
 
@@ -799,10 +818,27 @@ authForm.addEventListener('submit', async (e) => {
   authSubmit.textContent = 'Processing...';
 
   try {
+    // For registration: generate ZK credentials in the browser before sending.
+    // The server stores ONLY the commitment, never the secret.
+    let zk_commitment = null;
+    if (!isLoginMode) {
+      try {
+        const creds = await ZK.generateCredentials();
+        zk_commitment = creds.commitment;
+      } catch {
+        // Non-fatal: registration proceeds without ZK enrollment if generation fails.
+        // User can re-enroll later by re-registering or via a future settings flow.
+      }
+    }
+
+    const body = isLoginMode
+      ? { username, access_code }
+      : { username, access_code, zk_commitment };
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, access_code })
+      body: JSON.stringify(body)
     });
     const data = await res.json();
 
@@ -825,9 +861,12 @@ authForm.addEventListener('submit', async (e) => {
         toggleAuth.textContent = 'Sign Up';
       }
     } else {
+      // Roll back the ZK credentials we just generated if registration failed
+      if (!isLoginMode) ZK.clearCredentials();
       showToast(data.error || 'Operation failed', 'error');
     }
   } catch (err) {
+    if (!isLoginMode) ZK.clearCredentials();
     showToast('An error occurred. Please try again.', 'error');
   } finally {
     authSubmit.disabled = false;
