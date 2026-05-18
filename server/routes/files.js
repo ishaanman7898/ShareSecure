@@ -97,7 +97,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   }
 
   const rawHours = parseFloat(req.body.expires_hours) || 1;
-  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 72); // min 1 min, max 3 days
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 720); // min 1 min, max 30 days
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = req.body.allow_annotations === '1' ? 1 : 0;
@@ -362,13 +362,13 @@ router.post('/reshare/:shortId', (req, res) => {
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, expires_at, delete_token,
-      cluster_id, uploaded_at, allow_annotations, allow_download
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cluster_id, uploaded_at, allow_annotations, allow_download, wrapped_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newShortId, file.original_filename, file.mime_type, file.size_bytes, file.stored_filename,
     newIntegrity, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
     newClusterId, reshareUploadAt,
-    file.allow_annotations, file.allow_download
+    file.allow_annotations, file.allow_download, file.wrapped_key || null
   );
 
   res.json({

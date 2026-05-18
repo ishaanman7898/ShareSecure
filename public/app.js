@@ -275,22 +275,6 @@ function clearSelection() {
   if (nameInput) nameInput.value = '';
 }
 
-async function ghostUpload(shortId, deleteToken) {
-  try {
-    const reshareRes = await fetch(`/api/reshare/${shortId}`, { method: 'POST' });
-    if (!reshareRes.ok) return null;
-    const reshareData = await reshareRes.json();
-    if (!reshareData.shortId) return null;
-    await fetch(`/api/delete/${shortId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deleteToken })
-    });
-    return reshareData;
-  } catch {
-    return null;
-  }
-}
 
 // drag & drop
 dropZone.addEventListener('dragover', e => {
@@ -324,7 +308,6 @@ uploadBtn.addEventListener('click', async () => {
   const formData = new FormData();
   formData.append('file', selectedFile);
   formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
-  formData.append('allow_annotations', document.getElementById('allow-annotations').checked ? '1' : '0');
   formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
 
   // Send custom display name if the user changed it
@@ -350,7 +333,6 @@ uploadBtn.addEventListener('click', async () => {
       formData.append('zk_nonce',     zkFields.zk_nonce);
     } catch {
       // ZK prep failed (challenge limit, network, etc.) — fall back to Bearer
-      // auth, which is still auto-ghosted post-upload.
       zkFields = null;
     }
   }
@@ -370,13 +352,9 @@ uploadBtn.addEventListener('click', async () => {
 
     xhr.onload = async () => {
       if (xhr.status === 200) {
-        let data = JSON.parse(xhr.responseText);
-        const ghost = await ghostUpload(data.shortId, data.deleteToken);
-        if (ghost) {
-          data = { ...data, shortId: ghost.shortId, shortUrl: ghost.shortUrl, deleteToken: ghost.deleteToken };
-        }
+        const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
-        showToast('File shared anonymously.', 'success');
+        showToast('File uploaded securely.', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
       } else if (xhr.status === 429) {
@@ -648,7 +626,7 @@ async function updateDashboard() {
   const cached = loadUploadHistory();
   renderFileList(cached);
 
-  // Fetch upload count from server (file list stays in localStorage — all uploads are auto-ghosted).
+  // Fetch upload count from server (file list stays in localStorage — no server-side user→file link).
   try {
     const res = await fetch('/api/auth/user/files', {
       headers: { 'Authorization': `Bearer ${userToken}` }
@@ -657,7 +635,6 @@ async function updateDashboard() {
     if (!res.ok) return;
 
     const data = await res.json();
-    // All uploads are auto-ghosted (no user_tag stored) — localStorage is authoritative for file list
     uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
   } catch { /* network error — keep showing cached list */ }
 }
