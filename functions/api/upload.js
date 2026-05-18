@@ -60,17 +60,27 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
   }
 
-  // ZK-auth path: if X-ZK-* headers are present, verify the proof and accept
-  // the upload WITHOUT any user identifier (no user_tag, no user_id) — the
-  // server confirms the uploader is a registered user but cannot tell which one.
-  const zkProof     = request.headers.get('X-ZK-Proof');
-  const zkNullifier = request.headers.get('X-ZK-Nullifier');
-  const zkNonce     = request.headers.get('X-ZK-Nonce');
-  const usingZK     = Boolean(zkProof && zkNullifier && zkNonce);
+  // ZK-auth path: if zk_proof/zk_nullifier/zk_nonce form fields are present,
+  // verify the UniGroth proof and accept the upload WITHOUT any user identifier
+  // (no user_tag, no user_id). The server confirms the uploader is a registered
+  // user but cannot tell which one.
+  const zkProofRaw  = formData.get('zk_proof');
+  const zkNullifier = formData.get('zk_nullifier');
+  const zkNonce     = formData.get('zk_nonce');
+  const usingZK     = Boolean(zkProofRaw && zkNullifier && zkNonce);
 
   let zkValidated = false;
   if (usingZK) {
-    const result = await zkVerifyProof({ proof: zkProof, nullifier: zkNullifier, nonce: zkNonce }, env);
+    let zkProof;
+    try {
+      zkProof = JSON.parse(zkProofRaw.toString());
+    } catch {
+      return Response.json({ error: 'ZK proof malformed (invalid JSON)' }, { status: 400 });
+    }
+    const result = await zkVerifyProof(
+      { proof: zkProof, nullifier: zkNullifier.toString(), nonce: zkNonce.toString() },
+      env
+    );
     if (!result.valid) {
       return Response.json({ error: `ZK proof rejected: ${result.error}` }, { status: 401 });
     }

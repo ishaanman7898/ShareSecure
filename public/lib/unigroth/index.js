@@ -1,66 +1,122 @@
-// UniGroth ESM adapter for ShareSecure
-// Wraps the UniGroth API (github.com/MeridianAlgo/UniGroth) for browser/Worker use.
+// UniGroth orchestrator for ShareSecure
+// Builds the auth circuit, runs prove/verify, derives commitment + nullifier.
 //
-// CURRENT STATE: Integration scaffold with a placeholder prove/verify.
-// The placeholder uses hash-based commitments + nullifiers but is NOT a ZK proof.
-// To enable real zero-knowledge: drop the full UniGroth ESM bundle in this dir
-// and replace the `prove`/`verify` bodies below to call UniGroth.prove / .verify.
-// See docs/ZK-INTEGRATION.md for the full porting checklist.
+// Auth circuit:
+//   private: secret
+//   public:  commitment, nonce, nullifier
+//   asserts:
+//     MIMC(secret)            == commitment
+//     MIMC(commitment + nonce) == nullifier
+//
+// The verifier learns: "the prover knows some `s` whose MIMC hash equals
+// `commitment`, and `nullifier` is bound to `s` and `nonce`." Without `s`,
+// the verifier cannot link `nullifier` back to `commitment` across uses.
 
 import * as F from './field.js';
+import { Circuit, MIMC_CONSTANTS, MIMC_ROUNDS } from './circuit.js';
+import { prove as uniProve } from './prover.js';
+import { verify as uniVerify } from './verifier.js';
 
-// Domain separators
-const DS_COMMIT     = 'commit';
-const DS_PROOF      = 'proof';
-const DS_NULLIFIER  = 'nullifier';
-
-// Compute commitment = H(DS_COMMIT, secret) in the bn254 scalar field.
-// At registration, the user computes this and uploads it. The server stores it.
-// The server NEVER sees `secret`.
-export async function commit(secret) {
-  const field = await F.hashToField(DS_COMMIT, secret);
-  return field.toString();
+// In-circuit MIMC == out-of-circuit MIMC. Used to compute commitment + nullifier
+// values BEFORE we run the prover (the prover needs them as inputs).
+export function mimcHash(input) {
+  let x = F.toBigInt(input);
+  for (let i = 0; i < MIMC_ROUNDS; i++) {
+    x = F.add(x, MIMC_CONSTANTS[i]);
+    x = F.mul(F.mul(x, x), x);
+  }
+  return x;
 }
 
-// Generate a proof that the prover knows `secret` such that commit(secret) === commitment,
-// bound to the server-issued `nonce`. Also derives a unique nullifier per (secret, nonce)
-// so the server can reject replays.
-//
-// Returns { proof, nullifier } — both decimal strings of bn254 field elements.
-//
-// PLACEHOLDER: the proof here is `H(DS_PROOF, secret, nonce)`. A real Groth16 proof
-// would prove knowledge of `secret` without revealing it AND without the verifier
-// recomputing `H(secret, nonce)`. The verify() below mirrors the placeholder.
+let _authCircuit = null;
+function getAuthCircuit() {
+  if (_authCircuit) return _authCircuit;
+  const c = new Circuit('sharesecure_auth');
+  const secret     = c.privateInput('secret');
+  const commitment = c.publicInput('commitment');
+  const nonce      = c.publicInput('nonce');
+  const nullifier  = c.publicInput('nullifier');
+
+  const h1 = c.hash(secret);
+  c.assertEqual(h1, commitment);
+
+  const combined = c.add(h1, nonce);
+  const h2 = c.hash(combined);
+  c.assertEqual(h2, nullifier);
+
+  _authCircuit = c;
+  return c;
+}
+
+// Compute the commitment for a fresh secret. Run once at registration.
+// Returns a decimal string of a bn254 field element.
+export async function commit(secret) {
+  return mimcHash(secret).toString();
+}
+
+// Generate a proof of knowledge of the secret behind `commitment`, bound to `nonce`.
+// Returns { proof, nullifier } — proof is a serializable object, nullifier is a string.
 export async function prove({ secret, commitment, nonce }) {
-  const secretField = F.toBigInt(secret);
-  const expectedCommit = await commit(secret);
-  if (expectedCommit !== commitment) {
-    throw new Error('commit(secret) does not match commitment — secret/commitment mismatch');
+  const secretField     = F.toBigInt(secret);
+  const commitmentField = F.toBigInt(commitment);
+  const nonceField      = F.toBigInt(nonce);
+
+  const expected = mimcHash(secretField);
+  if (!F.eq(expected, commitmentField)) {
+    throw new Error('commit(secret) does not match stored commitment');
   }
 
-  const proofField     = await F.hashToField(DS_PROOF, secretField, nonce);
-  const nullifierField = await F.hashToField(DS_NULLIFIER, secretField, nonce);
+  const nullifierField = mimcHash(F.add(expected, nonceField));
+
+  const circuit = getAuthCircuit();
+  const witness = circuit.computeWitness({
+    secret:     secretField,
+    commitment: commitmentField,
+    nonce:      nonceField,
+    nullifier:  nullifierField,
+  });
+
+  const fullProof = await uniProve(circuit, witness, {
+    commitment: commitmentField.toString(),
+    nonce:      nonceField.toString(),
+    nullifier:  nullifierField.toString(),
+  });
+
+  // Strip parts the verifier never reads (blindedEvals is unused; metadata is
+  // informational). Saves ~80% of wire size on a 547-constraint circuit.
+  const wireProof = {
+    protocol:           fullProof.protocol,
+    curve:              fullProof.curve,
+    witnessCommitment:  fullProof.witnessCommitment,
+    blindingCommitment: fullProof.blindingCommitment,
+    aggregatedCheck:    fullProof.aggregatedCheck,
+    spotChecks:         fullProof.spotChecks,
+    publicInputs:       fullProof.publicInputs,
+  };
 
   return {
-    proof:      proofField.toString(),
-    nullifier:  nullifierField.toString(),
+    proof:     wireProof,
+    nullifier: nullifierField.toString(),
   };
 }
 
-// Verify a proof was generated by someone who knows the preimage of `commitment`.
-// PLACEHOLDER: returns true iff inputs are well-formed. A real verifier would
-// check the Groth16 proof against the verification key + public inputs.
+// Verify a wire-format proof against expected public inputs.
 export async function verify({ proof, nullifier, commitment, nonce }) {
   if (!proof || !nullifier || !commitment || !nonce) return false;
+
+  // 1. Sanity-check the proof claims the right public inputs
+  if (proof.publicInputs?.nullifier  !== nullifier)  return false;
+  if (proof.publicInputs?.commitment !== commitment) return false;
+  if (proof.publicInputs?.nonce      !== nonce)      return false;
+
+  // 2. Run UniGroth verifier
   try {
-    F.toBigInt(proof);
-    F.toBigInt(nullifier);
-    F.toBigInt(commitment);
-    F.toBigInt(nonce);
-    return true;
+    const circuit = getAuthCircuit();
+    const result = await uniVerify(circuit, proof);
+    return result.passed === true;
   } catch {
     return false;
   }
 }
 
-export { F as Field };
+export { F as Field, getAuthCircuit };

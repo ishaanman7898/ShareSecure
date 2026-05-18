@@ -337,27 +337,28 @@ uploadBtn.addEventListener('click', async () => {
   progressWrap.classList.remove('hidden');
   progressBar.style.width = '0%';
 
-  // Prepare ZK auth headers if the user has enrolled credentials.
-  // When ZK headers are sent, we intentionally OMIT the Authorization header
-  // so the server (and any logging in the request chain) cannot link the
-  // upload to a specific user_id.
-  let zkHeaders = null;
+  // Prepare ZK auth fields if the user has enrolled credentials.
+  // When using ZK, we OMIT the Authorization header so the server (and any
+  // logging in the request chain) cannot link the upload to a specific user_id.
+  // The proof is multi-KB so it goes in the form data, not headers.
+  let zkFields = null;
   if (userToken && ZK.hasZKCredentials()) {
     try {
-      zkHeaders = await ZK.prepareUploadHeaders(userToken);
+      zkFields = await ZK.prepareUploadFields(userToken);
+      formData.append('zk_proof',     zkFields.zk_proof);
+      formData.append('zk_nullifier', zkFields.zk_nullifier);
+      formData.append('zk_nonce',     zkFields.zk_nonce);
     } catch {
-      // ZK prep failed (e.g. challenge limit reached or network) — fall through
-      // to Bearer auth, which is still auto-ghosted post-upload.
-      zkHeaders = null;
+      // ZK prep failed (challenge limit, network, etc.) — fall back to Bearer
+      // auth, which is still auto-ghosted post-upload.
+      zkFields = null;
     }
   }
 
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
-    if (zkHeaders) {
-      Object.entries(zkHeaders).forEach(([k, v]) => xhr.setRequestHeader(k, v));
-    } else if (userToken) {
+    if (!zkFields && userToken) {
       xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
     }
 

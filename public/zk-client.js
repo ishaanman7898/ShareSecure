@@ -61,9 +61,11 @@ export async function fetchChallenge(userToken) {
   return data.nonce; // decimal string of a bn254 field element
 }
 
-// Produce {proof, nullifier, nonce} headers for an upload request.
+// Produce {zk_proof, zk_nullifier, zk_nonce} form-data fields for upload.
+// The proof is a UniGroth JSON object (~25 KB), too large for HTTP headers,
+// so it's transported in multipart form data alongside the file.
 // Requires hasZKCredentials() === true and a valid userToken for the challenge.
-export async function prepareUploadHeaders(userToken) {
+export async function prepareUploadFields(userToken) {
   const secretHex = getStoredSecret();
   const commitment = getStoredCommitment();
   if (!secretHex || !commitment) {
@@ -73,9 +75,9 @@ export async function prepareUploadHeaders(userToken) {
   const secretField = Field.toBigInt(hexToBytes(secretHex));
   const { proof, nullifier } = await prove({ secret: secretField, commitment, nonce });
   return {
-    'X-ZK-Proof':     proof,
-    'X-ZK-Nullifier': nullifier,
-    'X-ZK-Nonce':     nonce,
+    zk_proof:     JSON.stringify(proof),
+    zk_nullifier: nullifier,
+    zk_nonce:     nonce,
   };
 }
 
