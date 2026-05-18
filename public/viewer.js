@@ -104,13 +104,6 @@ document.addEventListener('keydown', e => {
 
   if (inInput) return;
 
-  // Open search
-  if ((e.ctrlKey || e.metaKey) && key === 'f') {
-    e.preventDefault();
-    openSearch();
-    return;
-  }
-
   // Fullscreen
   if (e.key === 'F11') {
     e.preventDefault();
@@ -118,12 +111,8 @@ document.addEventListener('keydown', e => {
     return;
   }
 
-  // Escape: close search, share panel, or exit fullscreen
+  // Escape: close share panel or exit fullscreen
   if (e.key === 'Escape') {
-    if (!document.getElementById('search-bar')?.classList.contains('hidden')) {
-      closeSearch();
-      return;
-    }
     if (!document.getElementById('share-panel')?.classList.contains('hidden')) {
       closeSharePanel();
       return;
@@ -333,123 +322,6 @@ async function applyFitToWidth() {
   } catch (_) {}
 }
 
-// ── PDF text search ────────────────────────────────────────────────────────────
-let searchMatches = [];
-let searchCurrentIdx = -1;
-let searchActive = false;
-
-function openSearch() {
-  if (!pdfDoc) return;
-  const bar = $('search-bar');
-  if (bar) bar.classList.remove('hidden');
-  const inp = $('search-input');
-  if (inp) { inp.focus(); inp.select(); }
-  searchActive = true;
-}
-
-function closeSearch() {
-  const bar = $('search-bar');
-  if (bar) bar.classList.add('hidden');
-  clearSearchHighlights();
-  searchMatches = [];
-  searchCurrentIdx = -1;
-  searchActive = false;
-  if ($('search-count')) $('search-count').textContent = '';
-}
-
-function clearSearchHighlights() {
-  document.querySelectorAll('.search-highlight').forEach(el => el.remove());
-}
-
-async function runSearch(query) {
-  clearSearchHighlights();
-  searchMatches = [];
-  searchCurrentIdx = -1;
-  if (!query || !pdfDoc) {
-    if ($('search-count')) $('search-count').textContent = '';
-    return;
-  }
-  if ($('search-count')) $('search-count').textContent = '…';
-
-  for (let n = 1; n <= pdfDoc.numPages; n++) {
-    const page = await pdfDoc.getPage(n);
-    const textContent = await page.getTextContent();
-    const vp = page.getViewport({ scale: zoomScale, rotation: currentRotation });
-    const wrapper = $('page-wrapper-' + n);
-    if (!wrapper) continue;
-
-    const fullText = textContent.items.map(i => i.str).join('');
-    const queryLower = query.toLowerCase();
-    let searchStr = fullText.toLowerCase();
-    let offset = 0;
-    let charCount = 0;
-
-    const charMap = [];
-    for (const item of textContent.items) {
-      for (let ci = 0; ci < item.str.length; ci++) {
-        charMap.push({ item, charOffset: ci });
-      }
-    }
-
-    while ((offset = searchStr.indexOf(queryLower, charCount)) !== -1) {
-      const matchChar = charMap[offset];
-      if (matchChar) {
-        const item = matchChar.item;
-        const tx = pdfjsLib.Util.transform(vp.transform, item.transform);
-        const x = tx[4];
-        const y = tx[5];
-        const charWidth = item.width ? (item.width * zoomScale / Math.max(1, item.str.length)) : 8;
-        const charHeight = Math.abs(item.transform[3]) * zoomScale || 14;
-
-        const highlight = document.createElement('div');
-        highlight.className = 'search-highlight';
-        highlight.style.left = (x) + 'px';
-        highlight.style.top = (y - charHeight) + 'px';
-        highlight.style.width = (charWidth * query.length) + 'px';
-        highlight.style.height = charHeight + 'px';
-        wrapper.appendChild(highlight);
-        searchMatches.push({ el: highlight, pageNum: n });
-      }
-      charCount = offset + 1;
-      if (charCount >= searchStr.length) break;
-    }
-  }
-
-  if ($('search-count')) {
-    $('search-count').textContent = searchMatches.length > 0
-      ? `1 / ${searchMatches.length}`
-      : 'No results';
-  }
-
-  if (searchMatches.length > 0) {
-    searchCurrentIdx = 0;
-    highlightSearchCurrent();
-  }
-}
-
-function highlightSearchCurrent() {
-  searchMatches.forEach((m, i) => m.el.classList.toggle('current', i === searchCurrentIdx));
-  const cur = searchMatches[searchCurrentIdx];
-  if (cur) {
-    cur.el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    if ($('search-count')) {
-      $('search-count').textContent = `${searchCurrentIdx + 1} / ${searchMatches.length}`;
-    }
-  }
-}
-
-function searchNext() {
-  if (!searchMatches.length) return;
-  searchCurrentIdx = (searchCurrentIdx + 1) % searchMatches.length;
-  highlightSearchCurrent();
-}
-
-function searchPrev() {
-  if (!searchMatches.length) return;
-  searchCurrentIdx = (searchCurrentIdx - 1 + searchMatches.length) % searchMatches.length;
-  highlightSearchCurrent();
-}
-
 // ── theme management ────────────────────────────────────────────────────────
 function initTheme() {
   const saved = localStorage.getItem('viewer_theme') || 'dark';
@@ -538,11 +410,20 @@ function startCountdown(expiresAt) {
       return;
     }
     const s = Math.floor(rem / 1000);
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    text.textContent = h > 0
-      ? `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`
-      : m > 0 ? `${m}m ${String(sec).padStart(2, '0')}s` : `${sec}s`;
-    wrap.className = 'countdown-wrap' + (rem < 60000 ? ' critical' : rem < 300000 ? ' warn' : '');
+    const days = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (days > 0) {
+      text.textContent = `${days}d ${h}h`;
+    } else if (h > 0) {
+      text.textContent = `${h}h ${String(m).padStart(2, '0')}m`;
+    } else if (m > 0) {
+      text.textContent = `${m}m ${String(sec).padStart(2, '0')}s`;
+    } else {
+      text.textContent = `${sec}s`;
+    }
+    wrap.className = 'countdown-wrap desktop-only' + (rem < 60000 ? ' critical' : rem < 300000 ? ' warn' : '');
     setTimeout(tick, 1000);
   }
   tick();
@@ -635,6 +516,7 @@ async function renderAllPages() {
     container.appendChild(wrapper);
 
     await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+    if (annEnabled) attachAnnCanvas(wrapper, n);
   }
 
   hide('loader');
@@ -677,7 +559,6 @@ function setupMobileToolbar() {
 
   $('m-zoom-in')?.addEventListener('click', () => adjustZoom(+0.2));
   $('m-zoom-out')?.addEventListener('click', () => adjustZoom(-0.2));
-  $('m-search-btn')?.addEventListener('click', openSearch);
   $('m-share-btn')?.addEventListener('click', openSharePanel);
 }
 
@@ -765,26 +646,6 @@ $('zoom-in-btn')?.addEventListener('click', () => adjustZoom(+0.25));
 $('zoom-out-btn')?.addEventListener('click', () => adjustZoom(-0.25));
 $('fit-btn')?.addEventListener('click', toggleFitToWidth);
 $('fullscreen-btn')?.addEventListener('click', toggleFullscreen);
-
-// Search bar events
-$('search-btn')?.addEventListener('click', openSearch);
-$('search-close')?.addEventListener('click', closeSearch);
-$('search-next')?.addEventListener('click', searchNext);
-$('search-prev')?.addEventListener('click', searchPrev);
-
-let searchDebounce = null;
-$('search-input')?.addEventListener('input', e => {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => runSearch(e.target.value.trim()), 350);
-});
-
-$('search-input')?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    if (e.shiftKey) searchPrev(); else searchNext();
-  }
-  if (e.key === 'Escape') { e.preventDefault(); closeSearch(); }
-});
 
 // ── image ─────────────────────────────────────────────────────────────────────
 function loadImage(url) {
@@ -888,7 +749,7 @@ function showSendDialog() {
     confirmBtn.textContent = 'Sending…';
     sub.style.color = '';
 
-    const token = localStorage.getItem('user_token');
+    const token = sessionStorage.getItem('user_token');
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -985,6 +846,184 @@ function openSharePanel() {
 
 function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
+// ── annotations ───────────────────────────────────────────────────────────────
+let annEnabled = false;
+let annTool = 'pen';
+let annColor = '#ef4444';
+let annStrokes = {};
+let annSaveTimer = null;
+
+function isMobile() { return window.innerWidth <= 800; }
+
+async function fetchAnnotations() {
+  try {
+    const res = await fetch(`/api/annotations/${myShortId}`);
+    const data = await res.json();
+    return data.annotations || [];
+  } catch { return []; }
+}
+
+function setAnnStatus(msg, isError) {
+  const el = $('ann-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? 'var(--danger,#ef4444)' : 'var(--text-muted,#8892a4)';
+}
+
+function scheduleSave() {
+  clearTimeout(annSaveTimer);
+  annSaveTimer = setTimeout(saveAnnotations, 1500);
+}
+
+async function saveAnnotations() {
+  const flat = [];
+  Object.entries(annStrokes).forEach(([page, strokes]) => {
+    strokes.forEach(s => flat.push({ page: parseInt(page), ...s }));
+  });
+  try {
+    setAnnStatus('Saving…');
+    await fetch(`/api/annotations/${myShortId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ annotations: flat }),
+    });
+    setAnnStatus('Saved');
+    setTimeout(() => setAnnStatus(''), 2000);
+  } catch {
+    setAnnStatus('Save failed', true);
+  }
+}
+
+function setAnnTool(tool) {
+  annTool = tool;
+  $('ann-pen')?.classList.toggle('active', tool === 'pen');
+  $('ann-eraser')?.classList.toggle('active', tool === 'eraser');
+  document.querySelectorAll('.ann-canvas').forEach(c => {
+    c.classList.toggle('drawing-mode', tool === 'pen');
+    c.classList.toggle('eraser-mode', tool === 'eraser');
+  });
+}
+
+function redrawPage(n) {
+  const canvas = document.getElementById(`ann-canvas-${n}`);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const strokes = annStrokes[n] || [];
+  strokes.forEach(stroke => {
+    if (!stroke.points || stroke.points.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
+    ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+    for (let i = 1; i < stroke.points.length; i++) {
+      ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+    }
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  });
+}
+
+function getCanvasPos(canvas, e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const src = e.touches ? e.touches[0] : e;
+  return { x: (src.clientX - rect.left) * scaleX, y: (src.clientY - rect.top) * scaleY };
+}
+
+function attachAnnCanvas(wrapper, n) {
+  const existing = document.getElementById(`ann-canvas-${n}`);
+  if (existing) existing.remove();
+
+  const canvas = document.createElement('canvas');
+  canvas.id = `ann-canvas-${n}`;
+  canvas.className = 'ann-canvas' + (annTool === 'pen' ? ' drawing-mode' : ' eraser-mode');
+
+  const pdfCanvas = wrapper.querySelector('.pdf-page-canvas');
+  if (pdfCanvas) { canvas.width = pdfCanvas.width; canvas.height = pdfCanvas.height; }
+  wrapper.appendChild(canvas);
+  redrawPage(n);
+
+  let drawing = false;
+  let currentStroke = null;
+
+  const startDraw = e => {
+    e.preventDefault();
+    drawing = true;
+    const pos = getCanvasPos(canvas, e);
+    currentStroke = {
+      color: annTool === 'eraser' ? 'rgba(0,0,0,1)' : annColor,
+      width: annTool === 'eraser' ? 24 : 3,
+      eraser: annTool === 'eraser',
+      points: [pos],
+    };
+    if (!annStrokes[n]) annStrokes[n] = [];
+    annStrokes[n].push(currentStroke);
+    redrawPage(n);
+  };
+
+  const moveDraw = e => {
+    if (!drawing || !currentStroke) return;
+    e.preventDefault();
+    currentStroke.points.push(getCanvasPos(canvas, e));
+    redrawPage(n);
+  };
+
+  const endDraw = () => {
+    if (drawing) { drawing = false; scheduleSave(); }
+  };
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', moveDraw);
+  canvas.addEventListener('mouseup', endDraw);
+  canvas.addEventListener('mouseleave', endDraw);
+  canvas.addEventListener('touchstart', startDraw, { passive: false });
+  canvas.addEventListener('touchmove', moveDraw, { passive: false });
+  canvas.addEventListener('touchend', endDraw, { passive: false });
+}
+
+function annUndoOne() {
+  const n = parseInt($('page-num')?.value || '1');
+  if (annStrokes[n]?.length > 0) {
+    annStrokes[n].pop();
+    redrawPage(n);
+    scheduleSave();
+  }
+}
+
+function clearPageAnnotations() {
+  const n = parseInt($('page-num')?.value || '1');
+  annStrokes[n] = [];
+  redrawPage(n);
+  scheduleSave();
+}
+
+function initAnnToolbar() {
+  $('ann-pen')?.addEventListener('click', () => setAnnTool('pen'));
+  $('ann-eraser')?.addEventListener('click', () => setAnnTool('eraser'));
+  $('ann-undo')?.addEventListener('click', annUndoOne);
+  $('ann-clear')?.addEventListener('click', clearPageAnnotations);
+
+  document.querySelectorAll('.ann-color').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.ann-color').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      annColor = btn.dataset.color;
+      setAnnTool('pen');
+    });
+  });
+}
+
+function showAnnToolbar(allowAnnotations) {
+  annEnabled = !!allowAnnotations;
+  if (annEnabled) { show('ann-toolbar'); initAnnToolbar(); }
+  else { hide('ann-toolbar'); }
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 (async () => {
   // Check terms
@@ -1012,10 +1051,20 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
-  const { filename, size, mimeType, expiresAt, integrityHash, allowDownload } = fileInfo;
+  const { filename, size, mimeType, expiresAt, integrityHash, allowDownload, allowAnnotations } = fileInfo;
   document.title = filename + ' — ShareSecure';
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
+
+  showAnnToolbar(mimeType === 'application/pdf' && allowAnnotations);
+  if (mimeType === 'application/pdf' && allowAnnotations) {
+    const saved = await fetchAnnotations();
+    annStrokes = {};
+    saved.forEach(a => {
+      if (!annStrokes[a.page]) annStrokes[a.page] = [];
+      annStrokes[a.page].push(a);
+    });
+  }
   $('doc-title').textContent = filename;
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);

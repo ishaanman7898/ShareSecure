@@ -74,7 +74,8 @@
       <button class="tb-btn desktop-only" id="zoom-in-btn" title="Zoom in (+)">&#x2b;</button>
       <button class="tb-btn desktop-only" id="fit-btn" title="Fit to width (F)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+          <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
         </svg>
       </button>
       <div class="divider desktop-only"></div>
@@ -102,13 +103,6 @@
           stroke-linecap="round" stroke-linejoin="round" class="theme-moon hidden">
           <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
-      </button>
-      <button class="tb-btn desktop-only" id="search-btn" title="Search in document (Ctrl+F)">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        </svg>
-        <span class="desktop-only">Search</span>
       </button>
       <button class="tb-btn" id="fullscreen-btn" title="Fullscreen (F11)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="fs-expand">
@@ -162,22 +156,29 @@
   </div>
   </div>
 
-  <!-- search bar -->
-  <div class="search-bar hidden" id="search-bar">
-    <div class="search-inner">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;opacity:0.5">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <input type="text" id="search-input" placeholder="Search in document…" autocomplete="off" spellcheck="false" />
-      <span class="search-count" id="search-count"></span>
-      <button class="search-nav-btn" id="search-prev" title="Previous match">&#x25B2;</button>
-      <button class="search-nav-btn" id="search-next" title="Next match">&#x25BC;</button>
-      <button class="search-close-btn" id="search-close" title="Close (Esc)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
+  <!-- annotation toolbar (shown only when allow_annotations=1) -->
+  <div class="ann-toolbar hidden" id="ann-toolbar">
+    <button class="ann-btn active" id="ann-pen" title="Pen">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+    </button>
+    <button class="ann-btn" id="ann-eraser" title="Eraser">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l10-10 7 7-3 3.5"/><path d="M6.5 17.5L3 14"/></svg>
+    </button>
+    <div class="ann-color-row">
+      <button class="ann-color active" data-color="#ef4444" style="background:#ef4444" title="Red"></button>
+      <button class="ann-color" data-color="#f59e0b" style="background:#f59e0b" title="Yellow"></button>
+      <button class="ann-color" data-color="#10b981" style="background:#10b981" title="Green"></button>
+      <button class="ann-color" data-color="#3b82f6" style="background:#3b82f6" title="Blue"></button>
+      <button class="ann-color" data-color="#f0f0ff" style="background:#f0f0ff" title="White"></button>
     </div>
+    <div class="ann-sep"></div>
+    <button class="ann-btn" id="ann-undo" title="Undo last stroke">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+    </button>
+    <button class="ann-btn" id="ann-clear" title="Clear annotations on this page">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    </button>
+    <span class="ann-status" id="ann-status"></span>
   </div>
 
   <!-- main area -->
@@ -331,11 +332,6 @@
       </svg>
     </button>
     <div class="m-divider"></div>
-    <button class="m-btn" id="m-search-btn" title="Search" aria-label="Search">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-    </button>
     <button class="m-btn m-btn-share" id="m-share-btn" title="Share" aria-label="Share">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>

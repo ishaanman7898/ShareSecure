@@ -153,8 +153,8 @@
         <p class="drop-label">Drop your file here</p>
         <p class="drop-sub">or</p>
         <label class="btn btn-primary">Choose File</label>
-        <input type="file" id="file-input" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
-        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF and DOCX only</p>
+        <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
+        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, DOCX, PNG, JPG</p>
       </div>
 
       <div class="file-preview hidden" id="file-preview">
@@ -191,21 +191,15 @@
         <label class="option-label">
           Expire link after
           <select id="expires-select">
-            <option value="0.0167">1 minute</option>
-            <option value="0.0833">5 minutes</option>
-            <option value="0.25">15 minutes</option>
-            <option value="0.5">30 minutes</option>
-            <option value="1" selected>1 hour</option>
-            <option value="3">3 hours</option>
+            <option value="1">1 hour</option>
             <option value="6">6 hours</option>
             <option value="12">12 hours</option>
-            <option value="24">1 day</option>
+            <option value="24" selected>1 day</option>
             <option value="48">2 days</option>
             <option value="72">3 days</option>
             <option value="168">7 days</option>
-            <option value="336">14 days</option>
-            <option value="720">30 days</option>
-            <option value="custom">Custom...</option>
+            <option value="240">10 days</option>
+            <option value="custom">Custom (up to 10 days)...</option>
           </select>
         </label>
         <div id="custom-expiry-wrap" class="hidden">
@@ -215,6 +209,10 @@
           </label>
           <span id="custom-expiry-err" class="custom-expiry-err"></span>
         </div>
+        <label class="option-label option-toggle">
+          <input type="checkbox" id="allow-annotations" />
+          Allow annotations on this document
+        </label>
         <label class="option-label option-toggle">
           <input type="checkbox" id="allow-download" />
           Allow users to download files within share links

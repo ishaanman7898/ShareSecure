@@ -57,6 +57,14 @@ function detectFileType(buf) {
     if (!isValidDocxZip(buf)) return null; // valid ZIP but not a Word document
     return { type: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
   }
+  // PNG: 0x89 0x50 0x4E 0x47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+    return { type: 'image', mime: 'image/png' };
+  }
+  // JPEG: 0xFF 0xD8 0xFF
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
+    return { type: 'image', mime: 'image/jpeg' };
+  }
   return null;
 }
 
@@ -74,7 +82,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const detected = detectFileType(req.file.buffer);
   if (!detected) {
     return res.status(415).json({
-      error: 'Only PDF (.pdf) and Word (.docx) files are accepted. File type is determined by content, not filename.',
+      error: 'Only PDF (.pdf), Word (.docx), PNG (.png), and JPEG (.jpg/.jpeg) files are accepted. File type is determined by content, not filename.',
     });
   }
   // Override user-supplied MIME with content-derived MIME — prevents spoofing
@@ -97,7 +105,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   }
 
   const rawHours = parseFloat(req.body.expires_hours) || 1;
-  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 720); // min 1 min, max 30 days
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = req.body.allow_annotations === '1' ? 1 : 0;
@@ -106,7 +114,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
   // Optional custom display name — sanitise and preserve correct extension
   let displayName = (req.body.display_name || '').toString().trim();
   if (displayName) {
-    const ext = detected.type === 'pdf' ? '.pdf' : '.docx';
+    const ext = detected.type === 'pdf' ? '.pdf' : detected.type === 'docx' ? '.docx' : detected.mime === 'image/png' ? '.png' : '.jpg';
     // Strip any extension the user typed so we always enforce the correct one
     displayName = displayName.replace(/\.[^.]+$/, '') + ext;
     // Remove filesystem-unsafe characters

@@ -78,7 +78,7 @@ let qrInstance = null;
 let currentShortId = null;
 let currentDeleteToken = null;
 let currentHistoryRecord = null;
-let userToken = localStorage.getItem('user_token');
+let userToken = sessionStorage.getItem('user_token');
 let isLoginMode = true;
 let customExpiryHours = null;
 let selfHostMode = false;
@@ -145,7 +145,7 @@ expiresSelect.addEventListener('change', () => {
   if (expiresSelect.value === 'custom') {
     customExpiryWrap.classList.remove('hidden');
     const now = new Date();
-    const max = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000 - 60 * 1000);
+    const max = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000 - 60 * 1000);
     customExpiryInput.min = toLocalDatetimeString(now);
     customExpiryInput.max = toLocalDatetimeString(max);
     if (!customExpiryInput.value) {
@@ -166,8 +166,8 @@ customExpiryInput.addEventListener('change', () => {
   if (diffMs <= 0) {
     customExpiryErr.textContent = 'Please select a future time.';
     customExpiryHours = null;
-  } else if (diffMs >= 30 * 24 * 60 * 60 * 1000) {
-    customExpiryErr.textContent = 'Must be less than 30 days from now.';
+  } else if (diffMs >= 10 * 24 * 60 * 60 * 1000) {
+    customExpiryErr.textContent = 'Must be less than 10 days from now.';
     customExpiryHours = null;
   } else {
     customExpiryHours = diffMs / (1000 * 3600);
@@ -187,10 +187,12 @@ function formatSize(bytes) {
 function formatCountdown(ms) {
   if (ms <= 0) return 'Expired';
   const s = Math.floor(ms / 1000);
-  const h = Math.floor(s / 3600);
+  const days = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (days > 0) return `${days}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${sec}s`;
   return `${sec}s`;
 }
@@ -228,10 +230,12 @@ function getFileIcon(mime) {
   return `<svg ${iconProps}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 }
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
 const ALLOWED_MIMES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
 ];
 
 function setFile(file) {
@@ -241,7 +245,7 @@ function setFile(file) {
   }
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_MIMES.includes(file.type)) {
-    showToast('Only PDF (.pdf) and Word (.docx) files are accepted.', 'error');
+    showToast('Only PDF, DOCX, PNG, and JPG files are accepted.', 'error');
     return;
   }
   selectedFile = file;
@@ -308,6 +312,7 @@ uploadBtn.addEventListener('click', async () => {
   const formData = new FormData();
   formData.append('file', selectedFile);
   formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
+  formData.append('allow_annotations', document.getElementById('allow-annotations')?.checked ? '1' : '0');
   formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
 
   // Send custom display name if the user changed it
@@ -535,7 +540,7 @@ newUploadBtn.addEventListener('click', () => {
 function initAuth() {
   if (userToken) {
     // Prefer username stored at login time (avoids needing to decode token)
-    let username = localStorage.getItem('user_name') || 'User';
+    let username = sessionStorage.getItem('user_name') || 'User';
     if (username === 'User') {
       try {
         if (userToken.includes('.')) {
@@ -768,8 +773,8 @@ function renderFileList(files) {
 
 function logout() {
   userToken = null;
-  localStorage.removeItem('user_token');
-  localStorage.removeItem('user_name');
+  sessionStorage.removeItem('user_token');
+  sessionStorage.removeItem('user_name');
   initAuth();
 }
 
@@ -823,14 +828,14 @@ authForm.addEventListener('submit', async (e) => {
     if (data.success) {
       if (isLoginMode) {
         userToken = data.token;
-        localStorage.setItem('user_token', userToken);
+        sessionStorage.setItem('user_token', userToken);
         // Store username separately so initAuth never needs to decode the token
-        if (data.username) localStorage.setItem('user_name', data.username);
+        if (data.username) sessionStorage.setItem('user_name', data.username);
         authModal.classList.add('hidden');
         initAuth();
       } else {
         // clear potential stale sessions on new account
-        localStorage.removeItem('user_token');
+        sessionStorage.removeItem('user_token');
         userToken = null;
         showToast('Account created! You can now sign in.', 'success');
         isLoginMode = true;
