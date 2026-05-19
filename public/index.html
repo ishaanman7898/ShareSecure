@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,9 +9,8 @@
   <link rel="icon" type="image/x-icon" href="/icon.ico" />
   <link rel="stylesheet" href="/style.css" />
 </head>
-
 <body>
-  <!-- terms modal (blocks app until accepted) -->
+  <!-- terms modal -->
   <div class="modal hidden" id="tc-modal" style="z-index: 9999; display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);">
     <div class="modal-content card" style="max-width: 600px; max-height: 80vh; overflow-y: auto; background: var(--bg-card, #1c1c1e); padding: 30px; border-radius: 12px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
       <div class="modal-header" style="justify-content: center; margin-bottom: 20px;">
@@ -26,7 +24,8 @@
       <button id="accept-tc-btn" class="btn btn-primary btn-full" style="padding: 15px; font-size: 1.1em;">I Accept and Agree to the Terms</button>
     </div>
   </div>
-  <div class="container">
+
+  <div class="container" id="app-container">
     <div class="header">
       <div class="header-top">
         <h1>ShareSecure</h1>
@@ -36,42 +35,27 @@
       </div>
     </div>
 
-    <!-- landing page -->
+    <!-- landing page (not logged in) -->
     <div id="landing-page" class="landing hidden" style="display: flex; flex-direction: column; align-items: center; text-align: center; margin: 0 auto; width: 100%;">
       <div class="landing-content card" style="text-align: center; width: 100%; max-width: 600px; margin: 0 auto;">
         <h1 style="text-align: center;">Private. Fast. Secure.</h1>
-        <p>ShareSecure is a zero-knowledge file sharing platform. Upload files and get encrypted, short-lived links. No
-          tracking, no data mining.</p>
+        <p>ShareSecure is a zero-knowledge file sharing platform. Upload files and get encrypted, short-lived links. No tracking, no data mining.</p>
         <div class="landing-features">
           <div class="feature">
             <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             </span>
             <span>Secure Hashing</span>
           </div>
           <div class="feature">
             <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </span>
             <span>Timed Expiry</span>
           </div>
           <div class="feature">
             <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 3v18h18" />
-                <path d="M18 17V9" />
-                <path d="M13 17V5" />
-                <path d="M8 17v-3" />
-              </svg>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
             </span>
             <span>Personal Dashboard</span>
           </div>
@@ -79,11 +63,7 @@
         <div class="landing-actions" style="display: flex; justify-content: center; gap: 15px; margin-top: 30px;">
           <button class="btn btn-primary" id="landing-start">Get Started</button>
           <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost" style="text-decoration:none;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Self-Host
           </a>
         </div>
@@ -96,11 +76,7 @@
         <div class="modal-header">
           <h2 id="modal-title">Sign In</h2>
           <button class="btn-icon" id="close-modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <form id="auth-form">
@@ -120,128 +96,123 @@
       </div>
     </div>
 
-    <!-- dashboard -->
-    <div class="card hidden" id="dashboard-card">
-      <div class="dashboard-header">
-        <h2>My Shared Documents</h2>
-        <span class="upload-limit" id="upload-count">Used 0/5 today</span>
-      </div>
-      <div id="file-list" class="file-list">
-        <p class="empty-msg">You haven't uploaded any files today.</p>
-      </div>
-      <div id="inbox-section" style="border-top:1px solid var(--border,#1e1e28);margin-top:20px;padding-top:16px;">
-        <div class="dashboard-header" style="margin-bottom:10px;">
-          <h2>Inbox <span style="font-size:0.75rem;font-weight:500;color:var(--text-muted,#8892a4);font-family:'Inter',sans-serif;">(files sent to you)</span></h2>
-          <span class="upload-limit" id="inbox-count"></span>
+    <!-- two-col app grid (logged in) -->
+    <div class="app-grid hidden" id="app-grid">
+      <div class="app-col-upload">
+        <div class="card" id="upload-card">
+          <div class="drop-zone" id="drop-zone">
+            <div class="drop-icon">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <p class="drop-label">Drop your file here</p>
+            <p class="drop-sub">or</p>
+            <label class="btn btn-primary">Choose File</label>
+            <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
+            <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, DOCX, PNG, JPG</p>
+          </div>
+
+          <div class="file-preview hidden" id="file-preview">
+            <div class="file-icon" id="file-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            </div>
+            <div class="file-meta">
+              <span class="file-name" id="file-name"></span>
+              <span class="file-size" id="file-size"></span>
+            </div>
+            <button class="btn-icon" id="clear-file" title="Remove">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div id="display-name-wrap" class="hidden" style="margin-top: 12px;">
+            <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+              <span>Document name <span style="color: var(--text-muted, #888); font-size: 0.8rem; font-weight: normal;">(optional)</span></span>
+              <input type="text" id="display-name-input" placeholder="Enter a custom name" maxlength="200"
+                style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#333);border-radius:6px;background:var(--surface2,#1c1c1e);color:var(--text,#f1f1f1);font-size:0.9rem;font-family:inherit;" />
+            </label>
+          </div>
+
+          <div class="options">
+            <label class="option-label">
+              Expire link after
+              <select id="expires-select">
+                <option value="1">1 hour</option>
+                <option value="6">6 hours</option>
+                <option value="12">12 hours</option>
+                <option value="24" selected>1 day</option>
+                <option value="48">2 days</option>
+                <option value="72">3 days</option>
+                <option value="168">7 days</option>
+                <option value="240">10 days</option>
+                <option value="custom">Custom (up to 10 days)...</option>
+              </select>
+            </label>
+            <div id="custom-expiry-wrap" class="hidden">
+              <label class="option-label custom-expiry-label">
+                Expire at
+                <input type="datetime-local" id="custom-expiry-input" />
+              </label>
+              <span id="custom-expiry-err" class="custom-expiry-err"></span>
+            </div>
+            <label class="option-label option-toggle">
+              <input type="checkbox" id="allow-annotations" />
+              Allow annotations on this document
+            </label>
+            <label class="option-label option-toggle">
+              <input type="checkbox" id="allow-download" />
+              Allow users to download files within share links
+            </label>
+          </div>
+
+          <button class="btn btn-primary btn-full" id="upload-btn" disabled>Upload &amp; Get Link</button>
+
+          <div class="progress-wrap hidden" id="progress-wrap">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
         </div>
-        <div id="inbox-list" class="file-list">
-          <p class="empty-msg">No files received.</p>
+      </div>
+
+      <div class="app-col-dash">
+        <div class="card" id="dashboard-card">
+          <div class="dashboard-header">
+            <h2>My Files</h2>
+            <span class="upload-limit" id="upload-count">0/5 today</span>
+          </div>
+          <div id="file-list" class="file-list">
+            <p class="empty-msg">No uploads yet.</p>
+          </div>
+          <div id="inbox-section" style="border-top:1px solid var(--border,#1e1e28);margin-top:20px;padding-top:16px;">
+            <div class="dashboard-header" style="margin-bottom:10px;">
+              <h2>Inbox <span style="font-size:0.72rem;font-weight:500;color:var(--text-muted,#8892a4);">(received)</span></h2>
+              <span class="upload-limit" id="inbox-count"></span>
+            </div>
+            <div id="inbox-list" class="file-list">
+              <p class="empty-msg">No files received.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="card hidden" id="upload-card">
-      <div class="drop-zone" id="drop-zone">
-        <div class="drop-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-        </div>
-        <p class="drop-label">Drop your file here</p>
-        <p class="drop-sub">or</p>
-        <label class="btn btn-primary">Choose File</label>
-        <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
-        <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, DOCX, PNG, JPG</p>
-      </div>
+  <!-- upload result modal (shown after successful upload) -->
+  <div class="result-modal hidden" id="result-card">
+    <div class="result-modal-backdrop" id="result-modal-backdrop"></div>
+    <div class="result-modal-inner card result">
+      <button class="result-close-btn" id="result-close-btn" title="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
 
-      <div class="file-preview hidden" id="file-preview">
-        <div class="file-icon" id="file-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-            <polyline points="13 2 13 9 20 9" />
-          </svg>
-        </div>
-        <div class="file-meta">
-          <span class="file-name" id="file-name"></span>
-          <span class="file-size" id="file-size"></span>
-        </div>
-        <button class="btn-icon" id="clear-file" title="Remove">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- document rename field — shown once a file is selected -->
-      <div id="display-name-wrap" class="hidden" style="margin-top: 12px;">
-        <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 6px;">
-          <span>Document name <span style="color: var(--text-muted, #888); font-size: 0.8rem; font-weight: normal;">(optional — leave blank to use original filename)</span></span>
-          <input type="text" id="display-name-input" placeholder="Enter a custom name for this document" maxlength="200"
-            style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#333);border-radius:6px;background:var(--bg-card,#1c1c1e);color:var(--text-color,#f1f1f1);font-size:0.9rem;font-family:inherit;" />
-        </label>
-      </div>
-
-      <div class="options">
-        <label class="option-label">
-          Expire link after
-          <select id="expires-select">
-            <option value="1">1 hour</option>
-            <option value="6">6 hours</option>
-            <option value="12">12 hours</option>
-            <option value="24" selected>1 day</option>
-            <option value="48">2 days</option>
-            <option value="72">3 days</option>
-            <option value="168">7 days</option>
-            <option value="240">10 days</option>
-            <option value="custom">Custom (up to 10 days)...</option>
-          </select>
-        </label>
-        <div id="custom-expiry-wrap" class="hidden">
-          <label class="option-label custom-expiry-label">
-            Expire at
-            <input type="datetime-local" id="custom-expiry-input" />
-          </label>
-          <span id="custom-expiry-err" class="custom-expiry-err"></span>
-        </div>
-        <label class="option-label option-toggle">
-          <input type="checkbox" id="allow-annotations" />
-          Allow annotations on this document
-        </label>
-        <label class="option-label option-toggle">
-          <input type="checkbox" id="allow-download" />
-          Allow users to download files within share links
-        </label>
-      </div>
-
-      <button class="btn btn-primary btn-full" id="upload-btn" disabled>Upload & Get Link</button>
-
-      <div class="progress-wrap hidden" id="progress-wrap">
-        <div class="progress-bar" id="progress-bar"></div>
-      </div>
-    </div>
-
-    <div class="card result hidden" id="result-card">
       <div class="result-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
-          stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
       <p class="result-label">Your link is ready</p>
 
-      <!-- short link row -->
       <div class="link-box">
         <span id="short-link"></span>
         <button class="btn btn-copy" id="copy-btn">Copy</button>
       </div>
 
-      <!-- qr code section -->
       <div class="qr-section">
         <p class="qr-label">Scan to open on any device</p>
         <div class="qr-wrap">
@@ -258,7 +229,7 @@
       <div class="result-actions">
         <a class="btn btn-primary" id="view-btn" target="_blank" rel="noopener noreferrer">Open in Viewer</a>
         <button class="btn btn-secondary" id="new-upload-btn">Upload Another</button>
-<button class="btn btn-danger" id="delete-btn">Delete File</button>
+        <button class="btn btn-danger" id="delete-btn">Delete File</button>
       </div>
     </div>
   </div>
@@ -278,5 +249,4 @@
   <script src="/qrcode.min.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
-
 </html>

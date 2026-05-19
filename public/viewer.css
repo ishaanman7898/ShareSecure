@@ -1541,6 +1541,8 @@ body {
   align-items: center;
   gap: 5px;
   margin: 0 4px;
+  flex-wrap: wrap;
+  max-width: 140px;
 }
 
 .ann-color {
@@ -1585,6 +1587,7 @@ body {
   height: 100%;
   z-index: 5;
   touch-action: none;
+  cursor: default;
 }
 
 .ann-canvas.drawing-mode {
@@ -1593,5 +1596,40 @@ body {
 
 .ann-canvas.eraser-mode {
   cursor: cell;
+}
+
+.ann-canvas.cursor-mode {
+  pointer-events: none;
+  cursor: default;
+}
+
+.ann-canvas.highlight-mode {
+  cursor: cell;
+}
+
+.ann-tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ann-key {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 0.52rem;
+  font-weight: 700;
+  background: var(--border);
+  color: var(--text-muted);
+  border-radius: 3px;
+  padding: 0 2px;
+  line-height: 1.4;
+  pointer-events: none;
+  font-family: monospace;
+}
+
+.ann-btn {
+  /* keep existing styles but add position: relative */
+  position: relative;
 }
 

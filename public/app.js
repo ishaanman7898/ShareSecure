@@ -457,7 +457,6 @@ function showResult(data, file) {
     a.href = url; a.download = 'sharesecure-qr.png'; a.click();
   };
 
-  uploadCard.classList.add('hidden');
   resultCard.classList.remove('hidden');
 }
 
@@ -509,7 +508,6 @@ deleteBtn.addEventListener('click', async () => {
       customExpiryWrap.classList.add('hidden');
       customExpiryHours = null;
       resultCard.classList.add('hidden');
-      uploadCard.classList.remove('hidden');
     } else {
       showToast('Delete failed. You may not have permission.', 'error');
       deleteBtn.textContent = 'Delete File';
@@ -532,7 +530,16 @@ newUploadBtn.addEventListener('click', () => {
   customExpiryWrap.classList.add('hidden');
   customExpiryHours = null;
   resultCard.classList.add('hidden');
-  uploadCard.classList.remove('hidden');
+});
+
+document.getElementById('result-close-btn')?.addEventListener('click', () => {
+  if (countdownInterval) clearInterval(countdownInterval);
+  resultCard.classList.add('hidden');
+});
+
+document.getElementById('result-modal-backdrop')?.addEventListener('click', () => {
+  if (countdownInterval) clearInterval(countdownInterval);
+  resultCard.classList.add('hidden');
 });
 
 // --- auth & dashboard logic ---
@@ -564,19 +571,19 @@ function initAuth() {
     `;
     document.getElementById('logout-btn').addEventListener('click', logout);
 
-    // auth-only view
+    document.body.classList.add('is-logged-in');
     landingPage.classList.add('hidden');
-    dashboardCard.classList.remove('hidden');
-    uploadCard.classList.remove('hidden');
+    const appGrid = document.getElementById('app-grid');
+    if (appGrid) appGrid.classList.remove('hidden');
     updateDashboard();
     updateInbox();
   } else {
     authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
 
-    // public/landing view
+    document.body.classList.remove('is-logged-in');
     landingPage.classList.remove('hidden');
-    dashboardCard.classList.add('hidden');
-    uploadCard.classList.add('hidden');
+    const appGrid = document.getElementById('app-grid');
+    if (appGrid) appGrid.classList.add('hidden');
   }
 }
 
@@ -592,9 +599,10 @@ function initSelfHost() {
   }
 
   // Skip landing page, show upload card and dashboard immediately
+  document.body.classList.add('is-logged-in');
   if (landingPage) landingPage.classList.add('hidden');
-  if (dashboardCard) dashboardCard.classList.remove('hidden');
-  if (uploadCard) uploadCard.classList.remove('hidden');
+  const appGrid = document.getElementById('app-grid');
+  if (appGrid) appGrid.classList.remove('hidden');
 
   // Show upload count as unlimited
   if (uploadCount) uploadCount.textContent = 'No limit';

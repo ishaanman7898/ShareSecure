@@ -40,20 +40,60 @@
 
     <div class="timeline">
 
-      <!-- v1.1.0 -->
+      <!-- v1.2.0 -->
       <section class="release latest">
         <div class="release-header">
-          <span class="release-version">v1.1.0</span>
-          <span class="release-date">March 2026</span>
+          <span class="release-version">v1.2.0</span>
+          <span class="release-date">May 2026</span>
           <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
-          <h3>Security & Privacy</h3>
+          <h3>New Features</h3>
+          <ul class="change-list">
+            <li><strong>Image uploads</strong> — PNG and JPEG files now accepted alongside PDF and DOCX. Magic byte validation ensures content integrity.</li>
+            <li><strong>Annotation system restored</strong> — Per-document drawing toolbar with pen, highlighter, eraser, cursor and 10 colours. Annotations saved server-side, per-link isolated.</li>
+            <li><strong>Annotation keyboard shortcuts</strong> — C=cursor, P=pen, H=highlight, E=eraser, Z=undo, X=clear page, 1–0 cycle colours.</li>
+            <li><strong>Two-column dashboard layout</strong> — Upload form and file dashboard shown side-by-side after login on desktop.</li>
+            <li><strong>Upload result modal</strong> — Success state shown as a popup overlay with link, QR code and actions. Upload form stays accessible behind it.</li>
+            <li><strong>Anonymous file inbox</strong> — Send files to registered users without revealing your identity.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Privacy &amp; Security</h3>
+          <ul class="change-list">
+            <li><strong>Session-only auth</strong> — Auth token moved to <code>sessionStorage</code>. Sessions no longer persist across browser restarts.</li>
+            <li><strong>10-day expiry cap</strong> — Maximum link lifetime reduced to 10 days. Expiry options cleaned up (removed 1 min, 5 min, 14-day, 30-day).</li>
+            <li><strong>No user-file association</strong> — Server never stores a user ID next to a file. Dashboard data lives in <code>localStorage</code> only.</li>
+            <li><strong>ZK anonymous uploads</strong> — Groth16 zero-knowledge proofs used for rate-limit enforcement without revealing identity.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Viewer Polish</h3>
+          <ul class="change-list">
+            <li><strong>Search removed</strong> — PDF text search removed to prevent content extraction via search queries.</li>
+            <li><strong>Compact countdown</strong> — Timer now shows "4d 2h" / "3h 45m" / "12m 30s" instead of verbose "70h 23m 14s".</li>
+            <li><strong>Fit-to-width icon</strong> — Fixed duplicate fullscreen/fit icon. Fit button now uses a distinct expand-diagonal icon.</li>
+            <li><strong>Title truncation</strong> — Document title truncated more aggressively to prevent overlap with the countdown timer.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.1.0 -->
+      <section class="release">
+        <div class="release-header">
+          <span class="release-version">v1.1.0</span>
+          <span class="release-date">March 2026</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Security &amp; Privacy</h3>
           <ul class="change-list">
             <li><strong>In-file metadata stripping</strong> — Automatic scrubbing of PDF and DOCX metadata (Author, computer, revision info).</li>
             <li><strong>HMAC integrity hashes</strong> — HMAC-SHA256 keyed with a secret salt prevents correlation with public file databases.</li>
-            <li><strong>Security headers added</strong> — Full suite of Referrer-Policy, nosniff, Frame-Options, and Permissions-Policy.</li>
+            <li><strong>Security headers</strong> — Full suite of Referrer-Policy, nosniff, Frame-Options, and Permissions-Policy.</li>
             <li><strong>Reduced database footprint</strong> — Removed <code>short_id</code> from upload logs to break user→file association.</li>
           </ul>
         </div>
@@ -63,7 +103,7 @@
           <ul class="change-list">
             <li><strong>Upload quota bypass closed</strong> — Quotas now persist even if a file is immediately deleted.</li>
             <li><strong>DOCX Viewer</strong> — Fixed rendering of Word documents using Mammoth.js for client-side HTML conversion.</li>
-            <li><strong>Memory leaks fixed</strong> — Resolved various <code>TypeError</code> crashes related to DOM replacement.</li>
+            <li><strong>Memory leaks</strong> — Resolved various <code>TypeError</code> crashes related to DOM replacement.</li>
           </ul>
         </div>
       </section>

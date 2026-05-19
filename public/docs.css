@@ -328,7 +328,7 @@ h2 .section-num {
 
 .release {
   position: relative;
-  margin-bottom: 80px;
+  margin-bottom: 96px;
 }
 
 .release::before {
@@ -358,7 +358,7 @@ h2 .section-num {
 .release-date { color: var(--text-muted); font-size: 0.9rem; }
 
 .change-group {
-  margin-bottom: 32px;
+  margin-bottom: 40px;
 }
 
 .change-group h3 {
@@ -371,7 +371,7 @@ h2 .section-num {
 
 .change-list {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   list-style: none;
 }
 

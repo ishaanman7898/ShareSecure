@@ -104,6 +104,25 @@ document.addEventListener('keydown', e => {
 
   if (inInput) return;
 
+  // Annotation shortcuts (when annotations are enabled)
+  if (annEnabled && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const keyMap = { c: 'cursor', p: 'pen', h: 'highlight', e: 'eraser' };
+    const colorKeys = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '0': 9 };
+    const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#f0f0ff','#64748b','#0f172a'];
+    if (keyMap[key]) { setAnnTool(keyMap[key]); showKbToast(keyMap[key][0].toUpperCase() + keyMap[key].slice(1)); return; }
+    if (key in colorKeys) {
+      const idx = colorKeys[key];
+      annColor = colors[idx];
+      const btns = document.querySelectorAll('.ann-color');
+      btns.forEach((b, i) => b.classList.toggle('active', i === idx));
+      if (annTool === 'cursor' || annTool === 'eraser') setAnnTool('pen');
+      showKbToast('Color ' + (idx + 1));
+      return;
+    }
+    if (key === 'z') { annUndoOne(); showKbToast('Undo'); return; }
+    if (key === 'x') { clearPageAnnotations(); showKbToast('Cleared'); return; }
+  }
+
   // Fullscreen
   if (e.key === 'F11') {
     e.preventDefault();
@@ -848,7 +867,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 
 // ── annotations ───────────────────────────────────────────────────────────────
 let annEnabled = false;
-let annTool = 'pen';
+let annTool = 'cursor';
 let annColor = '#ef4444';
 let annStrokes = {};
 let annSaveTimer = null;
@@ -896,11 +915,12 @@ async function saveAnnotations() {
 
 function setAnnTool(tool) {
   annTool = tool;
-  $('ann-pen')?.classList.toggle('active', tool === 'pen');
-  $('ann-eraser')?.classList.toggle('active', tool === 'eraser');
+  ['ann-cursor', 'ann-pen', 'ann-highlight', 'ann-eraser'].forEach(id => {
+    $(`${id}`)?.classList.toggle('active', id === `ann-${tool}`);
+  });
   document.querySelectorAll('.ann-canvas').forEach(c => {
-    c.classList.toggle('drawing-mode', tool === 'pen');
-    c.classList.toggle('eraser-mode', tool === 'eraser');
+    c.style.pointerEvents = tool === 'cursor' ? 'none' : 'auto';
+    c.className = 'ann-canvas ' + (tool === 'cursor' ? 'cursor-mode' : tool === 'pen' ? 'drawing-mode' : tool === 'highlight' ? 'highlight-mode' : 'eraser-mode');
   });
 }
 
@@ -917,12 +937,14 @@ function redrawPage(n) {
     ctx.lineWidth = stroke.width;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+    ctx.globalAlpha = stroke.highlight ? 0.35 : 1;
     ctx.globalCompositeOperation = stroke.eraser ? 'destination-out' : 'source-over';
     ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
     for (let i = 1; i < stroke.points.length; i++) {
       ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
     }
     ctx.stroke();
+    ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
   });
 }
@@ -941,7 +963,8 @@ function attachAnnCanvas(wrapper, n) {
 
   const canvas = document.createElement('canvas');
   canvas.id = `ann-canvas-${n}`;
-  canvas.className = 'ann-canvas' + (annTool === 'pen' ? ' drawing-mode' : ' eraser-mode');
+  canvas.className = 'ann-canvas ' + (annTool === 'cursor' ? 'cursor-mode' : annTool === 'pen' ? 'drawing-mode' : annTool === 'highlight' ? 'highlight-mode' : 'eraser-mode');
+  if (annTool === 'cursor') canvas.style.pointerEvents = 'none';
 
   const pdfCanvas = wrapper.querySelector('.pdf-page-canvas');
   if (pdfCanvas) { canvas.width = pdfCanvas.width; canvas.height = pdfCanvas.height; }
@@ -955,10 +978,12 @@ function attachAnnCanvas(wrapper, n) {
     e.preventDefault();
     drawing = true;
     const pos = getCanvasPos(canvas, e);
+    if (annTool === 'cursor') { drawing = false; return; }
     currentStroke = {
       color: annTool === 'eraser' ? 'rgba(0,0,0,1)' : annColor,
-      width: annTool === 'eraser' ? 24 : 3,
+      width: annTool === 'eraser' ? 24 : annTool === 'highlight' ? 18 : 3,
       eraser: annTool === 'eraser',
+      highlight: annTool === 'highlight',
       points: [pos],
     };
     if (!annStrokes[n]) annStrokes[n] = [];
@@ -1003,25 +1028,33 @@ function clearPageAnnotations() {
 }
 
 function initAnnToolbar() {
+  $('ann-cursor')?.addEventListener('click', () => setAnnTool('cursor'));
   $('ann-pen')?.addEventListener('click', () => setAnnTool('pen'));
+  $('ann-highlight')?.addEventListener('click', () => setAnnTool('highlight'));
   $('ann-eraser')?.addEventListener('click', () => setAnnTool('eraser'));
   $('ann-undo')?.addEventListener('click', annUndoOne);
   $('ann-clear')?.addEventListener('click', clearPageAnnotations);
 
-  document.querySelectorAll('.ann-color').forEach(btn => {
+  const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#f0f0ff','#64748b','#0f172a'];
+  document.querySelectorAll('.ann-color').forEach((btn, i) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.ann-color').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       annColor = btn.dataset.color;
-      setAnnTool('pen');
+      if (annTool === 'cursor' || annTool === 'eraser') setAnnTool('pen');
     });
   });
 }
 
 function showAnnToolbar(allowAnnotations) {
   annEnabled = !!allowAnnotations;
-  if (annEnabled) { show('ann-toolbar'); initAnnToolbar(); }
-  else { hide('ann-toolbar'); }
+  if (annEnabled) {
+    show('ann-toolbar');
+    initAnnToolbar();
+    setAnnTool('cursor');
+  } else {
+    hide('ann-toolbar');
+  }
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
