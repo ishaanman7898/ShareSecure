@@ -413,6 +413,8 @@ body {
 .result-icon {
   width: 64px;
   height: 64px;
+  min-width: 64px;
+  min-height: 64px;
   background: var(--success-glow);
   color: var(--success);
   border-radius: 50%;
@@ -420,7 +422,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto;
+  margin: 20px auto 0;
   box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
 }
 

@@ -47,8 +47,6 @@ const copyBtn = document.getElementById('copy-btn');
 const resultFilename = document.getElementById('result-filename');
 const resultSize = document.getElementById('result-size');
 const resultExpires = document.getElementById('result-expires');
-const newUploadBtn = document.getElementById('new-upload-btn');
-const deleteBtn = document.getElementById('delete-btn');
 const expiresSelect = document.getElementById('expires-select');
 const customExpiryWrap = document.getElementById('custom-expiry-wrap');
 const customExpiryInput = document.getElementById('custom-expiry-input');
@@ -390,9 +388,6 @@ uploadBtn.addEventListener('click', async () => {
 function showResult(data, file) {
   currentShortId = data.shortId;
   currentDeleteToken = data.deleteToken || null;
-  deleteBtn.disabled = false;
-  deleteBtn.textContent = 'Delete File';
-  deleteBtn.classList.remove('deleted');
 
   // Determine the display name (custom name takes precedence over original filename)
   const displayNameInput = document.getElementById('display-name-input');
@@ -417,7 +412,9 @@ function showResult(data, file) {
     }
   }
 
-  document.getElementById('view-btn').href = ownerUrl;
+  // auto-open the file in a new tab
+  window.open(ownerUrl, '_blank', 'noopener,noreferrer');
+
   // store delete token so the viewer tab recognizes this browser as the owner
   if (data.deleteToken) {
     localStorage.setItem('owner_' + data.shortId, data.deleteToken);
@@ -475,62 +472,6 @@ copyBtn.addEventListener('click', () => {
   });
 });
 
-// delete file
-deleteBtn.addEventListener('click', async () => {
-  if (!currentShortId) return;
-  if (!confirm('Delete this file? This cannot be undone.')) return;
-
-  deleteBtn.disabled = true;
-  deleteBtn.textContent = 'Deleting...';
-
-  try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
-
-    const res = await fetch(`/api/delete/${currentShortId}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ deleteToken: currentDeleteToken }),
-    });
-    const data = await res.json();
-    if (data.deleted) {
-      showToast('File deleted successfully.', 'success');
-      if (countdownInterval) clearInterval(countdownInterval);
-      removeFromHistory(currentShortId);
-      currentShortId = null;
-      currentDeleteToken = null;
-      if (userToken) updateDashboard();
-      if (selfHostMode) renderFileList(loadUploadHistory());
-      clearSelection();
-      progressWrap.classList.add('hidden');
-      progressBar.style.width = '0%';
-      expiresSelect.value = '1';
-      customExpiryWrap.classList.add('hidden');
-      customExpiryHours = null;
-      resultCard.classList.add('hidden');
-    } else {
-      showToast('Delete failed. You may not have permission.', 'error');
-      deleteBtn.textContent = 'Delete File';
-      deleteBtn.disabled = false;
-    }
-  } catch {
-    showToast('Network error during delete.', 'error');
-    deleteBtn.textContent = 'Delete File';
-    deleteBtn.disabled = false;
-  }
-});
-
-// new upload
-newUploadBtn.addEventListener('click', () => {
-  if (countdownInterval) clearInterval(countdownInterval);
-  clearSelection();
-  progressWrap.classList.add('hidden');
-  progressBar.style.width = '0%';
-  expiresSelect.value = '1';
-  customExpiryWrap.classList.add('hidden');
-  customExpiryHours = null;
-  resultCard.classList.add('hidden');
-});
 
 document.getElementById('result-close-btn')?.addEventListener('click', () => {
   if (countdownInterval) clearInterval(countdownInterval);
