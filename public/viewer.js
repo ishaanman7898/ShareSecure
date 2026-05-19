@@ -670,7 +670,19 @@ $('fullscreen-btn')?.addEventListener('click', toggleFullscreen);
 function loadImage(url) {
   const img = $('img-viewer');
   img.src = url;
-  img.onload = () => { hide('loader'); show('img-container'); };
+  img.onload = () => {
+    hide('loader');
+    show('img-container');
+    if (annEnabled) {
+      const container = $('img-container');
+      const wrapper = document.createElement('div');
+      wrapper.id = 'page-wrapper-1';
+      wrapper.style.cssText = 'position:relative;display:inline-block;line-height:0;max-width:100%';
+      img.parentNode.insertBefore(wrapper, img);
+      wrapper.appendChild(img);
+      attachAnnCanvas(wrapper, 1);
+    }
+  };
   img.onerror = () => showUnsupported();
   hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
@@ -967,7 +979,14 @@ function attachAnnCanvas(wrapper, n) {
   if (annTool === 'cursor') canvas.style.pointerEvents = 'none';
 
   const pdfCanvas = wrapper.querySelector('.pdf-page-canvas');
-  if (pdfCanvas) { canvas.width = pdfCanvas.width; canvas.height = pdfCanvas.height; }
+  const imgEl = wrapper.querySelector('img');
+  if (pdfCanvas) {
+    canvas.width = pdfCanvas.width;
+    canvas.height = pdfCanvas.height;
+  } else if (imgEl) {
+    canvas.width = imgEl.naturalWidth || imgEl.offsetWidth;
+    canvas.height = imgEl.naturalHeight || imgEl.offsetHeight;
+  }
   wrapper.appendChild(canvas);
   redrawPage(n);
 
@@ -1089,8 +1108,8 @@ function showAnnToolbar(allowAnnotations) {
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
 
-  showAnnToolbar(mimeType === 'application/pdf' && allowAnnotations);
-  if (mimeType === 'application/pdf' && allowAnnotations) {
+  showAnnToolbar(allowAnnotations);
+  if (allowAnnotations) {
     const saved = await fetchAnnotations();
     annStrokes = {};
     saved.forEach(a => {
