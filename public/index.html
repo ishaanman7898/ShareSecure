@@ -11,24 +11,32 @@
 </head>
 <body>
   <!-- terms modal -->
-  <div class="modal hidden" id="tc-modal" style="z-index: 9999; display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; align-items: center; justify-content: center; background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);">
-    <div class="modal-content card" style="max-width: 600px; max-height: 80vh; overflow-y: auto; background: var(--bg-card, #1c1c1e); padding: 30px; border-radius: 12px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-      <div class="modal-header" style="justify-content: center; margin-bottom: 20px;">
-        <h2>Terms and Conditions & Liability Disclaimer</h2>
+  <div class="modal hidden tc-modal" id="tc-modal">
+    <div class="modal-content card tc-modal-content">
+      <div class="tc-icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       </div>
-      <div class="tc-content" style="font-size: 0.95em; margin-bottom: 30px; color: var(--text-color); line-height: 1.6; text-align: left;">
-        <p><strong>IMPORTANT:</strong> By clicking "I Accept", you unconditionally agree to the <a href="/terms" target="_blank" style="color: var(--primary-color);">Terms and Conditions</a> and the AI Scraping Policy.</p>
+      <div class="modal-header tc-modal-header">
+        <h2>Terms and Conditions &amp; Liability Disclaimer</h2>
+      </div>
+      <div class="tc-content">
+        <p><strong>IMPORTANT:</strong> By clicking "I Accept", you unconditionally agree to the <a href="/terms" target="_blank">Terms and Conditions</a> and the AI Scraping Policy.</p>
         <p>The Operator bears absolutely <strong>ZERO LIABILITY</strong> in any form for any content uploaded, transmitted, shared, or reshared. You are solely responsible for ensuring you have all rights to share content and that it complies with all laws.</p>
         <p>You cannot use this application or any content to train AI models.</p>
       </div>
-      <button id="accept-tc-btn" class="btn btn-primary btn-full" style="padding: 15px; font-size: 1.1em;">I Accept and Agree to the Terms</button>
+      <button id="accept-tc-btn" class="btn btn-primary btn-full tc-accept-btn">I Accept and Agree to the Terms</button>
     </div>
   </div>
 
   <div class="container" id="app-container">
     <div class="header">
       <div class="header-top">
-        <h1>ShareSecure</h1>
+        <div class="brand">
+          <span class="brand-mark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </span>
+          <h1>ShareSecure</h1>
+        </div>
         <div id="auth-status">
           <button class="btn btn-ghost" id="show-login">Sign In</button>
         </div>
@@ -36,9 +44,9 @@
     </div>
 
     <!-- landing page (not logged in) -->
-    <div id="landing-page" class="landing hidden" style="display: flex; flex-direction: column; align-items: center; text-align: center; margin: 0 auto; width: 100%;">
-      <div class="landing-content card" style="text-align: center; width: 100%; max-width: 600px; margin: 0 auto;">
-        <h1 style="text-align: center;">Private. Fast. Secure.</h1>
+    <div id="landing-page" class="landing hidden">
+      <div class="landing-content card">
+        <h1 class="landing-headline">Private. Fast. Secure.</h1>
         <p>ShareSecure is a zero-knowledge file sharing platform. Upload files and get encrypted, short-lived links. No tracking, no data mining.</p>
         <div class="landing-features">
           <div class="feature">
@@ -60,9 +68,9 @@
             <span>Personal Dashboard</span>
           </div>
         </div>
-        <div class="landing-actions" style="display: flex; justify-content: center; gap: 15px; margin-top: 30px;">
+        <div class="landing-actions">
           <button class="btn btn-primary" id="landing-start">Get Started</button>
-          <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost" style="text-decoration:none;">
+          <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost btn-link">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Self-Host
           </a>
@@ -124,11 +132,10 @@
             </button>
           </div>
 
-          <div id="display-name-wrap" class="hidden" style="margin-top: 12px;">
-            <label class="option-label" style="flex-direction: column; align-items: flex-start; gap: 6px;">
-              <span>Document name <span style="color: var(--text-muted, #888); font-size: 0.8rem; font-weight: normal;">(optional)</span></span>
-              <input type="text" id="display-name-input" placeholder="Enter a custom name" maxlength="200"
-                style="width:100%;padding:8px 12px;border:1px solid var(--border-color,#333);border-radius:6px;background:var(--surface2,#1c1c1e);color:var(--text,#f1f1f1);font-size:0.9rem;font-family:inherit;" />
+          <div id="display-name-wrap" class="hidden field-block">
+            <label class="option-label option-label-stacked">
+              <span>Document name <span class="label-optional">(optional)</span></span>
+              <input type="text" id="display-name-input" class="text-input" placeholder="Enter a custom name" maxlength="200" />
             </label>
           </div>
 
@@ -181,9 +188,9 @@
           <div id="file-list" class="file-list">
             <p class="empty-msg">No uploads yet.</p>
           </div>
-          <div id="inbox-section" style="border-top:1px solid var(--border,#1e1e28);margin-top:20px;padding-top:16px;">
-            <div class="dashboard-header" style="margin-bottom:10px;">
-              <h2>Inbox <span style="font-size:0.72rem;font-weight:500;color:var(--text-muted,#8892a4);">(received)</span></h2>
+          <div id="inbox-section" class="inbox-section">
+            <div class="dashboard-header inbox-header">
+              <h2>Inbox <span class="inbox-subtitle">(received)</span></h2>
               <span class="upload-limit" id="inbox-count"></span>
             </div>
             <div id="inbox-list" class="file-list">

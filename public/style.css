@@ -41,11 +41,21 @@ h1, h2, h3 {
 
 .landing {
   margin-bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 .landing-content {
   text-align: center;
-  padding: 40px 20px;
+  padding: 44px 32px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .landing h1 {
@@ -53,6 +63,14 @@ h1, h2, h3 {
   font-weight: 800;
   margin-bottom: 16px;
   color: #fff;
+}
+
+.landing-headline {
+  text-align: center;
+  background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .landing p {
@@ -104,7 +122,23 @@ body {
   scroll-behavior: smooth;
   /* subtle radial glow behind everything */
   background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(79, 127, 255, 0.07) 0%, transparent 70%);
+  animation: bodyFadeIn 0.4s ease;
 }
+
+@keyframes bodyFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hover) transparent;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ── Modern Footer ── */
 .app-footer {
@@ -166,6 +200,36 @@ body {
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.5px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), #7c5cff);
+  box-shadow: 0 4px 14px rgba(79, 127, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.is-logged-in .brand-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.is-logged-in .brand-mark svg {
+  width: 16px;
+  height: 16px;
 }
 
 .header p {
@@ -528,6 +592,10 @@ body {
 .btn-ghost:hover {
   border-color: var(--accent);
   color: var(--text);
+}
+
+.btn-link {
+  text-decoration: none;
 }
 
 .result-actions {
@@ -1104,6 +1172,113 @@ select:focus {
   color: #ef4444;
   display: block;
   margin-top: -4px;
+}
+
+/* ── generic field styling (used outside .form-group) ── */
+.field-block {
+  margin-top: 12px;
+}
+
+.option-label-stacked {
+  flex-direction: column;
+  align-items: flex-start !important;
+  gap: 6px !important;
+}
+
+.label-optional {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+.text-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.text-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 127, 255, 0.12);
+}
+
+/* ── inbox section ── */
+.inbox-section {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.inbox-header {
+  margin-bottom: 10px;
+}
+
+.inbox-subtitle {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* ── terms & conditions modal ── */
+.tc-modal-content {
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  text-align: center;
+  gap: 20px;
+}
+
+.tc-icon {
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  background: var(--accent-glow);
+  color: var(--accent);
+  border-radius: 50%;
+  border: 1px solid rgba(79, 127, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px auto 0;
+}
+
+.tc-modal-header {
+  justify-content: center;
+}
+
+.tc-modal-header h2 {
+  font-size: 1.15rem;
+}
+
+.tc-content {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tc-content strong {
+  color: var(--text);
+}
+
+.tc-content a {
+  color: var(--accent);
+}
+
+.tc-accept-btn {
+  padding: 15px;
+  font-size: 1.05rem;
 }
 
 /* ── Two-column logged-in layout ── */
