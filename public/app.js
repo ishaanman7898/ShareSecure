@@ -845,6 +845,8 @@ function initApp() {
 acceptTcBtn?.addEventListener('click', () => {
   localStorage.setItem('tc_accepted', 'true');
   tcModal.classList.add('hidden');
+  dashboardCard.classList.remove('hidden');
+  uploadCard.classList.remove('hidden');
   startApp();
 });
 
