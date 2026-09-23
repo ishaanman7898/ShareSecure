@@ -5,100 +5,78 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
+  <meta name="color-scheme" content="light dark" />
   <title>ShareSecure</title>
   <link rel="icon" type="image/x-icon" href="/icon.ico" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <!-- terms modal -->
-  <div class="modal hidden tc-modal" id="tc-modal">
-    <div class="modal-content card tc-modal-content">
-      <div class="tc-icon">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      </div>
-      <div class="modal-header tc-modal-header">
-        <h2>Terms and Conditions &amp; Liability Disclaimer</h2>
-      </div>
+  <div class="modal hidden tc-modal" id="tc-modal" role="dialog" aria-modal="true" aria-labelledby="tc-title">
+    <div class="modal-content tc-modal-content">
+      <img class="tc-mark" src="/mark.svg" alt="" width="40" height="40" />
+      <h2 id="tc-title">Before you continue</h2>
       <div class="tc-content">
-        <p><strong>IMPORTANT:</strong> By clicking "I Accept", you unconditionally agree to the <a href="/terms" target="_blank">Terms and Conditions</a> and the AI Scraping Policy.</p>
-        <p>The Operator bears absolutely <strong>ZERO LIABILITY</strong> in any form for any content uploaded, transmitted, shared, or reshared. You are solely responsible for ensuring you have all rights to share content and that it complies with all laws.</p>
-        <p>You cannot use this application or any content to train AI models.</p>
+        <p>By selecting “I accept”, you agree to the <a href="/terms" target="_blank">Terms and Conditions</a> and the AI Scraping Policy.</p>
+        <p>The operator bears <strong>zero liability</strong> in any form for content uploaded, transmitted, shared, or reshared. You are solely responsible for having the rights to share your content and for making sure it complies with the law.</p>
+        <p>You may not use this application or any content on it to train AI models.</p>
       </div>
-      <button id="accept-tc-btn" class="btn btn-primary btn-full tc-accept-btn">I Accept and Agree to the Terms</button>
+      <button id="accept-tc-btn" class="btn btn-primary btn-full">I accept</button>
     </div>
   </div>
 
-  <div class="container" id="app-container">
-    <div class="header">
-      <div class="header-top">
-        <div class="brand">
-          <span class="brand-mark">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </span>
-          <h1>ShareSecure</h1>
-        </div>
-        <div id="auth-status">
-          <button class="btn btn-ghost" id="show-login">Sign In</button>
-        </div>
-      </div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/mark.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <div id="auth-status">
+      <button class="btn btn-ghost" id="show-login">Sign in</button>
     </div>
+  </header>
 
+  <main class="container" id="app-container">
     <!-- landing page (not logged in) -->
-    <div id="landing-page" class="landing hidden">
-      <div class="landing-content card">
-        <h1 class="landing-headline">Private. Fast. Secure.</h1>
-        <p>ShareSecure is a zero-knowledge file sharing platform. Upload files and get encrypted, short-lived links. No tracking, no data mining.</p>
-        <div class="landing-features">
-          <div class="feature">
-            <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </span>
-            <span>Secure Hashing</span>
-          </div>
-          <div class="feature">
-            <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            </span>
-            <span>Timed Expiry</span>
-          </div>
-          <div class="feature">
-            <span class="feature-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-            </span>
-            <span>Personal Dashboard</span>
-          </div>
-        </div>
+    <section id="landing-page" class="landing hidden">
+      <div class="landing-copy">
+        <h1 class="landing-headline">Share a file.<br />Choose when it disappears.</h1>
+        <p class="landing-lede">Upload a PDF, Word document or image and get a private link that stops working at the time you set. Files are encrypted at rest, never indexed, and never used to train AI.</p>
         <div class="landing-actions">
-          <button class="btn btn-primary" id="landing-start">Get Started</button>
-          <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost btn-link">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Self-Host
-          </a>
+          <button class="btn btn-primary btn-lg" id="landing-start">Create an account</button>
+          <a href="https://github.com/ishaanman7898/ShareSecure?tab=readme-ov-file#self-hosting" class="btn btn-ghost btn-lg" target="_blank" rel="noopener noreferrer">Host it yourself</a>
         </div>
+        <ul class="landing-facts">
+          <li><strong>1 hour to 10 days</strong><span>Links expire on your schedule</span></li>
+          <li><strong>Encrypted storage</strong><span>No trackers or analytics</span></li>
+          <li><strong>Your call</strong><span>Allow annotations or downloads per file</span></li>
+        </ul>
       </div>
-    </div>
+      <div class="landing-art" aria-hidden="true">
+        <svg id="rosette" viewBox="0 0 400 400"></svg>
+      </div>
+    </section>
 
     <!-- auth modal -->
-    <div class="modal hidden" id="auth-modal">
-      <div class="modal-content card">
+    <div class="modal hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-content">
         <div class="modal-header">
-          <h2 id="modal-title">Sign In</h2>
-          <button class="btn-icon" id="close-modal">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <h2 id="modal-title">Sign in</h2>
+          <button class="btn-icon" id="close-modal" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
         <form id="auth-form">
           <div class="form-group">
-            <label>Username</label>
-            <input type="text" id="auth-username" required placeholder="Pick a username" />
+            <label for="auth-username">Username</label>
+            <input type="text" id="auth-username" required autocomplete="username" placeholder="Pick a username" />
           </div>
           <div class="form-group">
-            <label>Access Code</label>
-            <input type="password" id="auth-password" required placeholder="Enter secure code" />
+            <label for="auth-password">Access code</label>
+            <input type="password" id="auth-password" required autocomplete="current-password" placeholder="Enter your access code" />
           </div>
-          <button type="submit" class="btn btn-primary btn-full" id="auth-submit">Sign In</button>
+          <button type="submit" class="btn btn-primary btn-full" id="auth-submit">Sign in</button>
           <p class="auth-toggle">
-            <span id="auth-prompt-text">Don't have an account? </span><a href="#" id="toggle-auth">Sign Up</a>
+            <span id="auth-prompt-text">Don't have an account? </span><a href="#" id="toggle-auth">Sign up</a>
           </p>
         </form>
       </div>
@@ -106,146 +84,132 @@
 
     <!-- two-col app grid (logged in) -->
     <div class="app-grid hidden" id="app-grid">
-      <div class="app-col-upload">
-        <div class="card" id="upload-card">
-          <div class="drop-zone" id="drop-zone">
-            <div class="drop-icon">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            </div>
-            <p class="drop-label">Drop your file here</p>
-            <p class="drop-sub">or</p>
-            <label class="btn btn-primary">Choose File</label>
-            <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
-            <p class="drop-limit">Max 10 MB &nbsp;·&nbsp; PDF, DOCX, PNG, JPG</p>
+      <section class="panel" id="upload-card" aria-labelledby="upload-title">
+        <h2 class="panel-title" id="upload-title">New share</h2>
+
+        <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose a file to share">
+          <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <p class="drop-label">Drop a file here, or <span class="drop-browse">browse</span></p>
+          <p class="drop-limit">PDF, DOCX, PNG or JPG, up to 10 MB</p>
+          <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
+        </div>
+
+        <div class="file-preview hidden" id="file-preview">
+          <div class="file-icon" id="file-icon"></div>
+          <div class="file-meta">
+            <span class="file-name" id="file-name"></span>
+            <span class="file-size" id="file-size"></span>
+          </div>
+          <button class="btn-icon" id="clear-file" title="Remove file" aria-label="Remove file">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="fields">
+          <div id="display-name-wrap" class="field hidden">
+            <label for="display-name-input">Name <span class="label-optional">optional</span></label>
+            <input type="text" id="display-name-input" class="text-input" placeholder="Shown to people who open the link" maxlength="200" />
           </div>
 
-          <div class="file-preview hidden" id="file-preview">
-            <div class="file-icon" id="file-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
-            </div>
-            <div class="file-meta">
-              <span class="file-name" id="file-name"></span>
-              <span class="file-size" id="file-size"></span>
-            </div>
-            <button class="btn-icon" id="clear-file" title="Remove">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
+          <div class="field">
+            <label for="expires-select">Link expires after</label>
+            <select id="expires-select">
+              <option value="1">1 hour</option>
+              <option value="6">6 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24" selected>1 day</option>
+              <option value="48">2 days</option>
+              <option value="72">3 days</option>
+              <option value="168">7 days</option>
+              <option value="240">10 days</option>
+              <option value="custom">Pick a date and time…</option>
+            </select>
           </div>
 
-          <div id="display-name-wrap" class="hidden field-block">
-            <label class="option-label option-label-stacked">
-              <span>Document name <span class="label-optional">(optional)</span></span>
-              <input type="text" id="display-name-input" class="text-input" placeholder="Enter a custom name" maxlength="200" />
-            </label>
+          <div id="custom-expiry-wrap" class="field hidden">
+            <label for="custom-expiry-input">Expires at</label>
+            <input type="datetime-local" id="custom-expiry-input" class="text-input" />
+            <span id="custom-expiry-err" class="field-error" role="alert"></span>
           </div>
 
-          <div class="options">
-            <label class="option-label">
-              Expire link after
-              <select id="expires-select">
-                <option value="1">1 hour</option>
-                <option value="6">6 hours</option>
-                <option value="12">12 hours</option>
-                <option value="24" selected>1 day</option>
-                <option value="48">2 days</option>
-                <option value="72">3 days</option>
-                <option value="168">7 days</option>
-                <option value="240">10 days</option>
-                <option value="custom">Custom (up to 10 days)...</option>
-              </select>
-            </label>
-            <div id="custom-expiry-wrap" class="hidden">
-              <label class="option-label custom-expiry-label">
-                Expire at
-                <input type="datetime-local" id="custom-expiry-input" />
-              </label>
-              <span id="custom-expiry-err" class="custom-expiry-err"></span>
-            </div>
-            <label class="option-label option-toggle">
-              <input type="checkbox" id="allow-annotations" />
-              Allow annotations on this document
-            </label>
-            <label class="option-label option-toggle">
-              <input type="checkbox" id="allow-download" />
-              Allow users to download files within share links
-            </label>
+          <label class="switch">
+            <input type="checkbox" id="allow-annotations" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Let viewers annotate</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="allow-download" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Let viewers download the file</span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary btn-full btn-lg" id="upload-btn" disabled>Create link</button>
+
+        <div class="progress-wrap hidden" id="progress-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </section>
+
+      <aside class="panel panel-side" id="dashboard-card" aria-labelledby="files-title">
+        <div class="list-header">
+          <h2 class="panel-title" id="files-title">Your shares</h2>
+          <span class="pill" id="upload-count">0/5 today</span>
+        </div>
+        <div id="file-list" class="file-list">
+          <p class="empty-msg">Nothing shared yet.</p>
+        </div>
+
+        <div id="inbox-section" class="inbox-section">
+          <div class="list-header">
+            <h2 class="panel-title">Sent to you</h2>
+            <span class="pill pill-quiet" id="inbox-count"></span>
           </div>
-
-          <button class="btn btn-primary btn-full" id="upload-btn" disabled>Upload &amp; Get Link</button>
-
-          <div class="progress-wrap hidden" id="progress-wrap">
-            <div class="progress-bar" id="progress-bar"></div>
+          <div id="inbox-list" class="file-list">
+            <p class="empty-msg">No files received.</p>
           </div>
         </div>
-      </div>
-
-      <div class="app-col-dash">
-        <div class="card" id="dashboard-card">
-          <div class="dashboard-header">
-            <h2>My Files</h2>
-            <span class="upload-limit" id="upload-count">0/5 today</span>
-          </div>
-          <div id="file-list" class="file-list">
-            <p class="empty-msg">No uploads yet.</p>
-          </div>
-          <div id="inbox-section" class="inbox-section">
-            <div class="dashboard-header inbox-header">
-              <h2>Inbox <span class="inbox-subtitle">(received)</span></h2>
-              <span class="upload-limit" id="inbox-count"></span>
-            </div>
-            <div id="inbox-list" class="file-list">
-              <p class="empty-msg">No files received.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      </aside>
     </div>
-  </div>
+  </main>
 
   <!-- upload result modal (shown after successful upload) -->
-  <div class="result-modal hidden" id="result-card">
+  <div class="result-modal hidden" id="result-card" role="dialog" aria-modal="true" aria-labelledby="result-title">
     <div class="result-modal-backdrop" id="result-modal-backdrop"></div>
-    <div class="result-modal-inner card result">
-      <button class="result-close-btn" id="result-close-btn" title="Close">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    <div class="result-modal-inner">
+      <button class="btn-icon result-close-btn" id="result-close-btn" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
 
-      <div class="result-icon">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
-      <p class="result-label">Your link is ready</p>
+      <h2 class="result-title" id="result-title">Link created</h2>
+      <p class="result-sub"><span id="result-filename"></span><span id="result-size"></span></p>
 
       <div class="link-box">
         <span id="short-link"></span>
-        <button class="btn btn-copy" id="copy-btn">Copy</button>
+        <button class="btn btn-primary btn-copy" id="copy-btn">Copy</button>
       </div>
+      <p class="result-expires" id="result-expires"></p>
 
       <div class="qr-section">
-        <p class="qr-label">Scan to open on any device</p>
         <div class="qr-wrap">
           <div id="qr-canvas"></div>
         </div>
-        <button class="btn btn-ghost" id="save-qr-btn">Save QR Image</button>
-      </div>
-
-      <div class="result-meta">
-        <span id="result-filename"></span>
-        <span id="result-size"></span>
-        <span id="result-expires"></span>
+        <div class="qr-side">
+          <p>Scan to open the link on another device.</p>
+          <button class="btn btn-ghost" id="save-qr-btn">Save QR code</button>
+        </div>
       </div>
     </div>
   </div>
 
   <footer class="app-footer">
-    <span>Agree to <a href="/terms" target="_blank">Terms</a></span>
-    <span>&middot;</span>
-    <a href="/security" target="_blank">Security Policy</a>
-    <span>&middot;</span>
-    <a href="/changelog" target="_blank">Changelog</a>
-    <span>&middot;</span>
-    <span><strong>IP Notice:</strong> Anonymity requires Tor/VPN.</span>
-    <span>&middot;</span>
-    <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report Issue</a>
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms" target="_blank">Terms</a>
+      <a href="/security" target="_blank">Security</a>
+      <a href="/changelog" target="_blank">Changelog</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">Your IP address is visible to the server. Use Tor or a VPN if you need anonymity.</p>
   </footer>
 
   <script src="/qrcode.min.js"></script>

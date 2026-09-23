@@ -1,5 +1,42 @@
 import * as ZK from '/zk-client.js';
 
+// ── html escaping for user-supplied strings (filenames, usernames) ──────────
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── landing rosette: guilloché bands like the ones printed on banknotes ───────
+function drawRosette() {
+  const svg = document.getElementById('rosette');
+  if (!svg || svg.childElementCount) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const C = 200, STEPS = 480;
+  // each band is a set of phase-shifted sine rings woven around a base radius
+  const bands = [
+    { base: 172, amp: 12, k: 24, n: 9,  cls: 'band-1' },
+    { base: 132, amp: 18, k: 16, n: 10, cls: 'band-2' },
+    { base: 88,  amp: 20, k: 12, n: 9,  cls: 'band-3' },
+    { base: 44,  amp: 16, k: 8,  n: 7,  cls: 'band-4' },
+  ];
+  bands.forEach((b, bi) => {
+    for (let i = 0; i < b.n; i++) {
+      const phase = (i / b.n) * Math.PI * 2;
+      let d = '';
+      for (let s = 0; s <= STEPS; s++) {
+        const t = (s / STEPS) * Math.PI * 2;
+        const r = b.base + b.amp * Math.sin(b.k * t + phase) * Math.cos(t * 2 + phase / 3);
+        d += (s ? 'L' : 'M') + (C + r * Math.cos(t)).toFixed(2) + ' ' + (C + r * Math.sin(t)).toFixed(2);
+      }
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', d + 'Z');
+      path.setAttribute('pathLength', '1');
+      path.setAttribute('class', b.cls);
+      path.style.setProperty('--d', (bi * 0.18 + i * 0.05).toFixed(2) + 's');
+      svg.appendChild(path);
+    }
+  });
+}
+
 // ── toast notification system ─────────────────────────────────────────────────
 function showToast(message, type = 'info', durationMs = 4000) {
   let container = document.getElementById('toast-container');
@@ -19,7 +56,8 @@ function showToast(message, type = 'info', durationMs = 4000) {
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
+  toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  toast.innerHTML = `${icons[type] || icons.info}<span>${escapeHtml(message)}</span>`;
   container.appendChild(toast);
 
   const remove = () => {
@@ -205,12 +243,12 @@ function startResultCountdown(expiresAt) {
     const remaining = expiry - Date.now();
     if (remaining <= 0) {
       el.textContent = 'Expired';
-      el.style.color = '#ef4444';
+      el.style.color = 'var(--danger)';
       clearInterval(countdownInterval);
       return;
     }
     el.textContent = 'Expires in ' + formatCountdown(remaining);
-    el.style.color = remaining < 60000 ? '#ef4444' : remaining < 300000 ? '#f59e0b' : '';
+    el.style.color = remaining < 60000 ? 'var(--danger)' : remaining < 300000 ? 'var(--warn)' : '';
   }
 
   tick();
@@ -291,6 +329,9 @@ dropZone.addEventListener('drop', e => {
   if (file) setFile(file);
 });
 dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+});
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) setFile(fileInput.files[0]);
 });
@@ -302,7 +343,7 @@ uploadBtn.addEventListener('click', async () => {
 
   if (expiresSelect.value === 'custom') {
     if (!customExpiryHours) {
-      showToast('Please select a valid custom expiry time (within the next 3 days).', 'warn');
+      showToast('Pick an expiry time within the next 10 days.', 'warn');
       return;
     }
   }
@@ -357,7 +398,7 @@ uploadBtn.addEventListener('click', async () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
         showResult(data, selectedFile);
-        showToast('File uploaded securely.', 'success');
+        showToast('Link created.', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
       } else if (xhr.status === 429) {
@@ -365,21 +406,21 @@ uploadBtn.addEventListener('click', async () => {
         uploadBtn.disabled = false;
         progressWrap.classList.add('hidden');
       } else {
-        showToast('Upload failed. Please try again.', 'error');
+        showToast('Upload failed. Try again.', 'error');
         uploadBtn.disabled = false;
         progressWrap.classList.add('hidden');
       }
     };
 
     xhr.onerror = () => {
-      showToast('Network error. Check your connection and try again.', 'error');
+      showToast('Couldn’t reach the server. Check your connection and try again.', 'error');
       uploadBtn.disabled = false;
       progressWrap.classList.add('hidden');
     };
 
     xhr.send(formData);
   } catch (err) {
-    showToast('Upload failed. Please try again.', 'error');
+    showToast('Upload failed. Try again.', 'error');
     uploadBtn.disabled = false;
     progressWrap.classList.add('hidden');
   }
@@ -404,10 +445,10 @@ function showResult(data, file) {
     if (!warningText) {
       warningText = document.createElement('div');
       warningText.id = 'localhost-warn';
-      warningText.style.color = '#f59e0b';
-      warningText.style.fontSize = '0.8rem';
-      warningText.style.marginTop = '0.5rem';
-      warningText.textContent = 'Warning: This link is pointing to your localhost. This means it cannot be opened by people on other devices. Use your local network IP (e.g. 192.168.x.x) or use a tunnel to share it remotely.';
+      warningText.style.color = 'var(--warn)';
+      warningText.style.fontSize = '0.82rem';
+      warningText.style.padding = '4px 0 2px';
+      warningText.textContent = 'This link points to localhost, so other devices can’t open it. Use your local network IP (e.g. 192.168.x.x) or a tunnel to share it.';
       shortLink.parentNode.appendChild(warningText);
     }
   }
@@ -460,15 +501,15 @@ function showResult(data, file) {
 // copy
 copyBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(shortLink.textContent).then(() => {
-    copyBtn.textContent = 'Copied!';
+    copyBtn.textContent = 'Copied';
     copyBtn.classList.add('copied');
-    showToast('Link copied to clipboard!', 'success', 2500);
+    showToast('Link copied.', 'success', 2500);
     setTimeout(() => {
       copyBtn.textContent = 'Copy';
       copyBtn.classList.remove('copied');
     }, 2000);
   }).catch(() => {
-    showToast('Could not copy — try manually selecting the link.', 'warn');
+    showToast('Couldn’t copy. Select the link and copy it manually.', 'warn');
   });
 });
 
@@ -507,8 +548,8 @@ function initAuth() {
       }
     }
     authStatus.innerHTML = `
-      <span class="user-name">Hi, ${username}</span>
-      <button class="btn btn-ghost" id="logout-btn">Sign Out</button>
+      <span class="user-name">Signed in as <strong>${escapeHtml(username)}</strong></span>
+      <button class="btn btn-ghost" id="logout-btn">Sign out</button>
     `;
     document.getElementById('logout-btn').addEventListener('click', logout);
 
@@ -519,10 +560,11 @@ function initAuth() {
     updateDashboard();
     updateInbox();
   } else {
-    authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign In</button>`;
+    authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign in</button>`;
 
     document.body.classList.remove('is-logged-in');
     landingPage.classList.remove('hidden');
+    drawRosette();
     const appGrid = document.getElementById('app-grid');
     if (appGrid) appGrid.classList.add('hidden');
   }
@@ -534,9 +576,7 @@ function initSelfHost() {
 
   // Replace auth button with admin badge
   if (authStatus) {
-    authStatus.innerHTML = `
-      <span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:4px 12px;font-size:0.82rem;font-weight:600;letter-spacing:0.03em;">Admin</span>
-    `;
+    authStatus.innerHTML = `<span class="badge-admin">Admin</span>`;
   }
 
   // Skip landing page, show upload card and dashboard immediately
@@ -553,20 +593,22 @@ function initSelfHost() {
 }
 
 function updateAuthUI() {
-  modalTitle.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
-  toggleAuth.textContent = isLoginMode ? 'Sign Up' : 'Sign In';
+  modalTitle.textContent = isLoginMode ? 'Sign in' : 'Create an account';
+  authSubmit.textContent = isLoginMode ? 'Sign in' : 'Create account';
+  toggleAuth.textContent = isLoginMode ? 'Sign up' : 'Sign in';
   document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
 
   // update placeholders/labels if needed
-  authUsername.placeholder = isLoginMode ? "Enter username" : "Pick a username";
-  authPassword.placeholder = isLoginMode ? "Enter secure code" : "Create secure code";
+  authUsername.placeholder = isLoginMode ? "Your username" : "Pick a username";
+  authPassword.placeholder = isLoginMode ? "Your access code" : "Create an access code";
+  authPassword.autocomplete = isLoginMode ? 'current-password' : 'new-password';
 }
 
 function openAuthModal(loginMode) {
   isLoginMode = loginMode;
   updateAuthUI();
   authModal.classList.remove('hidden');
+  setTimeout(() => authUsername.focus(), 50);
 }
 
 landingStartBtn.addEventListener('click', () => {
@@ -589,7 +631,7 @@ async function updateDashboard() {
     if (!res.ok) return;
 
     const data = await res.json();
-    uploadCount.textContent = `Used ${data.dailyUploadCount ?? 0}/5 today`;
+    uploadCount.textContent = `${data.dailyUploadCount ?? 0}/5 today`;
   } catch { /* network error — keep showing cached list */ }
 }
 
@@ -619,21 +661,19 @@ function renderInbox(files) {
     const expiryMs = f.expires_at ? new Date(f.expires_at) - Date.now() : null;
     const expired = expiryMs !== null && expiryMs <= 0;
     const expiryStr = expired
-      ? '<span style="color:#ef4444">Expired</span>'
+      ? '<span class="is-expired-text">Expired</span>'
       : expiryMs !== null
-        ? `<span style="color:var(--text-muted)">Expires ${new Date(f.expires_at).toLocaleString()}</span>`
-        : '<span style="color:var(--text-muted)">No expiry</span>';
-    const sizeStr = f.size_bytes < 1024 ? f.size_bytes + ' B'
-      : f.size_bytes < 1048576 ? (f.size_bytes / 1024).toFixed(1) + ' KB'
-      : (f.size_bytes / 1048576).toFixed(1) + ' MB';
+        ? `${formatCountdown(expiryMs)} left`
+        : 'No expiry';
     return `
-      <div class="file-item" style="opacity:${expired ? '0.5' : '1'}">
+      <div class="file-item${expired ? ' is-expired' : ''}">
+        <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
         <div class="file-item-info">
-          <span class="file-item-name">${f.original_filename || 'Unknown'}</span>
-          <span class="file-item-meta">${sizeStr} · ${expiryStr}</span>
+          <span class="file-item-name">${escapeHtml(f.original_filename || 'Untitled')}</span>
+          <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, ${expiryStr}</span>
         </div>
         <div class="file-item-actions">
-          ${!expired ? `<a class="btn btn-primary" href="/r/${f.short_id}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;padding:6px 14px;font-size:0.8rem">Open</a>` : ''}
+          ${!expired ? `<a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -641,7 +681,7 @@ function renderInbox(files) {
 
 function renderFileList(files) {
   if (!files || files.length === 0) {
-    fileList.innerHTML = `<p class="empty-msg">No uploaded files.</p>`;
+    fileList.innerHTML = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
     return;
   }
 
@@ -649,14 +689,14 @@ function renderFileList(files) {
     <div class="file-item" data-short-id="${f.short_id}">
       <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
       <div class="file-item-info">
-        <span class="file-item-name">${f.original_filename}</span>
+        <span class="file-item-name">${escapeHtml(f.original_filename)}</span>
         <span class="file-item-time" data-expires="${f.expires_at}"></span>
       </div>
       <div class="file-item-actions">
-        <a href="/r/${f.short_id}" target="_blank" class="btn-icon" title="View">
+        <a href="/r/${encodeURIComponent(f.short_id)}" target="_blank" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </a>
-        <button class="btn-icon delete-file-btn" data-id="${f.short_id}" title="Delete">
+        <button class="btn-icon delete-file-btn" data-id="${escapeHtml(f.short_id)}" title="Delete" aria-label="Delete ${escapeHtml(f.original_filename)}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
       </div>
@@ -686,15 +726,15 @@ function renderFileList(files) {
           removeFromHistory(shortId);
           btn.closest('.file-item').remove();
           const remaining = fileList.querySelectorAll('.file-item').length;
-          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">No uploaded files.</p>`;
+          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
           if (userToken) updateDashboard();
         } else {
-          showToast('Delete failed.', 'error');
+          showToast('Couldn’t delete the file. Try again.', 'error');
           btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
           btn.disabled = false;
         }
       } catch {
-        showToast('Network error.', 'error');
+        showToast('Couldn’t reach the server. Try again.', 'error');
         btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         btn.disabled = false;
       }
@@ -733,6 +773,16 @@ document.addEventListener('click', (e) => {
   }
 });
 closeModal.addEventListener('click', () => authModal.classList.add('hidden'));
+authModal.addEventListener('click', (e) => { if (e.target === authModal) authModal.classList.add('hidden'); });
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!authModal.classList.contains('hidden')) authModal.classList.add('hidden');
+  if (!resultCard.classList.contains('hidden')) {
+    if (countdownInterval) clearInterval(countdownInterval);
+    resultCard.classList.add('hidden');
+  }
+});
 
 toggleAuth.addEventListener('click', (e) => {
   e.preventDefault();
@@ -747,7 +797,7 @@ authForm.addEventListener('submit', async (e) => {
   const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
 
   authSubmit.disabled = true;
-  authSubmit.textContent = 'Processing...';
+  authSubmit.textContent = isLoginMode ? 'Signing in…' : 'Creating account…';
 
   try {
     // For registration: generate ZK credentials in the browser before sending.
@@ -786,23 +836,21 @@ authForm.addEventListener('submit', async (e) => {
         // clear potential stale sessions on new account
         sessionStorage.removeItem('user_token');
         userToken = null;
-        showToast('Account created! You can now sign in.', 'success');
+        showToast('Account created. Sign in to continue.', 'success');
         isLoginMode = true;
-        modalTitle.textContent = 'Sign In';
-        authSubmit.textContent = 'Sign In';
-        toggleAuth.textContent = 'Sign Up';
+        updateAuthUI();
       }
     } else {
       // Roll back the ZK credentials we just generated if registration failed
       if (!isLoginMode) ZK.clearCredentials();
-      showToast(data.error || 'Operation failed', 'error');
+      showToast(data.error || 'Something went wrong. Try again.', 'error');
     }
   } catch (err) {
     if (!isLoginMode) ZK.clearCredentials();
-    showToast('An error occurred. Please try again.', 'error');
+    showToast('Something went wrong. Try again.', 'error');
   } finally {
     authSubmit.disabled = false;
-    authSubmit.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
+    authSubmit.textContent = isLoginMode ? 'Sign in' : 'Create account';
   }
 });
 

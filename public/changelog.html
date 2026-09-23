@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
@@ -15,11 +16,7 @@
 
   <header class="topbar">
     <a class="topbar-brand" href="/">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </svg>
+      <img src="/mark.svg" alt="" width="26" height="26" />
       ShareSecure
     </a>
     <a class="topbar-back" href="/">
@@ -40,12 +37,38 @@
 
     <div class="timeline">
 
-      <!-- v1.2.0 -->
+      <!-- v1.4.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.4.0</span>
+          <span class="release-date">September 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Redesign</h3>
+          <ul class="change-list">
+            <li><strong>New look</strong> — Rebuilt interface with a security-printing palette, a new rosette mark and a single typeface across the app, docs and viewer.</li>
+            <li><strong>Light and dark mode</strong> — The app and docs pages follow your system setting.</li>
+            <li><strong>Cleaner upload flow</strong> — Simpler form with switches for annotations and downloads, a calmer file list and a redesigned link modal.</li>
+            <li><strong>Accessibility</strong> — Keyboard-operable drop zone, Escape closes dialogs, visible focus rings and labelled controls.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Filename escaping</strong> — File and user names are now HTML-escaped in the dashboard and inbox.</li>
+            <li><strong>Custom expiry message</strong> — The warning now states the correct 10-day limit.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.2.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.2.0</span>
           <span class="release-date">May 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
