@@ -26,6 +26,12 @@ export async function onRequest(context) {
   // prevent content sniffing
   h.set('X-Content-Type-Options', 'nosniff');
 
+  // install scripts must be served as UTF-8 text so `irm | iex` and `curl | bash` read them correctly
+  const { pathname } = new URL(context.request.url);
+  if (pathname === '/install.sh' || pathname === '/install.ps1') {
+    h.set('Content-Type', 'text/plain; charset=utf-8');
+  }
+
   // strict transport security — force https always
   h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
 

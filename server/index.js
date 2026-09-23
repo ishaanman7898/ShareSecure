@@ -3,8 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const envPath = path.join(__dirname, '../.env');
+// ENV_FILE lets Docker keep .env (and its encryption key) inside the data volume
+const envPath = process.env.ENV_FILE
+  ? path.resolve(process.env.ENV_FILE)
+  : path.join(__dirname, '../.env');
 if (!fs.existsSync(envPath)) {
+  fs.mkdirSync(path.dirname(envPath), { recursive: true });
   console.log('--- FIRST TIME SETUP ---');
   console.log('Creating .env configuration file...');
   const examplePath = path.join(__dirname, '../.env.example');
@@ -120,6 +124,12 @@ app.get('/security', (req, res) => {
 app.get('/changelog', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'changelog.html'));
 });
+
+// ── self-host guide ───────────────────────────────────────────────────────────
+app.get('/self-host', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'self-host.html'));
+});
+app.get('/download', (req, res) => res.redirect(301, '/self-host'));
 
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));

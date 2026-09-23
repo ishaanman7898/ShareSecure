@@ -91,33 +91,39 @@ sharesecure/
 
 ## Self-Hosting
 
-Run your own private ShareSecure instance. You own the data, you control the encryption key.
+Run your own private ShareSecure instance. You own the data, you control the encryption key. Full guide: **[sharesecure-du8.pages.dev/self-host](https://sharesecure-du8.pages.dev/self-host)**
 
-### Prerequisites
+### One command
 
-- **Node.js 18+**
-- **Git**
+**macOS / Linux**
+```bash
+curl -fsSL https://sharesecure-du8.pages.dev/install.sh | bash
+```
 
-### Installation
+**Windows (PowerShell)**
+```powershell
+irm https://sharesecure-du8.pages.dev/install.ps1 | iex
+```
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/ishaanman7898/ShareSecure.git
-   cd ShareSecure
-   ```
+**Docker** (builds straight from GitHub, nothing to clone)
+```bash
+docker run -d --name sharesecure --restart unless-stopped -p 3000:3000   -v sharesecure-data:/app/data $(docker build -q https://github.com/ishaanman7898/ShareSecure.git)
+```
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+The installers set up Node.js if needed, download ShareSecure to `~/sharesecure`, generate an encryption key and start the server at `http://localhost:3000`. Run the same command again to update; your files and settings are kept.
 
-3. **Start the server** (auto-generates `.env` with a secure encryption key on first run):
-   ```bash
-   npm start
-   ```
-   The app is available at `http://localhost:3000`.
+### Manual install
 
-   To use a custom key, run `npm run generate-key`, then paste the output into `.env` before starting.
+Requires Node.js 18+ and Git.
+
+```bash
+git clone https://github.com/ishaanman7898/ShareSecure.git
+cd ShareSecure
+npm install
+npm start
+```
+
+The first start creates `.env` with a secure encryption key. With a clone you can also run `docker compose up -d`.
 
 ### Configuration (`.env`)
 
@@ -126,6 +132,7 @@ Run your own private ShareSecure instance. You own the data, you control the enc
 | `ENCRYPTION_KEY` | auto-generated | 64-char hex key for AES-256-GCM. Rotate with care — files encrypted under the old key become unreadable. |
 | `PORT` | `3000` | HTTP port. |
 | `BASE_URL` | `http://localhost:PORT` | Public-facing URL used in share links. Set this to your domain in production. |
+| `DATA_DIR` | `./data` | Where the database and uploaded files are stored. |
 | `USE_LOCAL_TUNNEL` | `true` | Auto-start a public localtunnel for easy testing. Set `false` in production. |
 
 ---

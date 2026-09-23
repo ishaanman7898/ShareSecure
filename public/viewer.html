@@ -18,7 +18,7 @@
 
   <!-- terms modal -->
   <div class="modal hidden" id="tc-modal" style="z-index: 9999; display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; align-items: center; justify-content: center; background: rgba(0,0,0,0.75); backdrop-filter: blur(12px);">
-    <div class="modal-content card" style="max-width: 520px; max-height: 80vh; overflow-y: auto; background: #16161f; border: 1px solid #2a2a38; padding: 32px; border-radius: 16px;">
+    <div class="modal-content card" style="max-width: 520px; max-height: 80vh; overflow-y: auto; background: var(--topbar); border: 1px solid var(--border); padding: 32px; border-radius: 16px;">
       <div class="modal-header">
         <h2 style="font-family:'Outfit',sans-serif;font-weight:700;font-size:1.2rem;letter-spacing:-0.02em;">Terms & Liability Disclaimer</h2>
       </div>
@@ -315,14 +315,14 @@
 
   <div id="screenshot-shield" class="hidden"></div>
 
-  <footer style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 7px 16px; background: var(--bg-top, #141417); border-top: 1px solid var(--border-color, #2a2a2e); color: var(--text-muted, #6b7280); font-size: 0.72rem; z-index: 100; pointer-events: auto;">
-    <a href="/terms" target="_blank" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Terms &amp; Conditions</a>
+  <footer style="position: fixed; bottom: 0; left: 0; right: 0; text-align: center; padding: 7px 16px; background: var(--bg); border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.72rem; z-index: 100; pointer-events: auto;">
+    <a href="/terms" target="_blank" style="color: var(--text); text-decoration: underline; text-underline-offset: 2px;">Terms &amp; Conditions</a>
     &nbsp;·&nbsp;
-    <a href="/changelog" target="_blank" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Changelog</a>
+    <a href="/changelog" target="_blank" style="color: var(--text); text-decoration: underline; text-underline-offset: 2px;">Changelog</a>
     &nbsp;·&nbsp;
     <strong>IP Notice:</strong> Your IP address is visible to the server and network infrastructure. ShareSecure does not log IPs, but this may vary by deployment. Use Tor or a VPN for IP anonymity.
     &nbsp;·&nbsp;
-    <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color, #3b82f6); text-decoration: none;">Report an Issue</a>
+    <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer" style="color: var(--text); text-decoration: underline; text-underline-offset: 2px;">Report an Issue</a>
   </footer>
 
   <!-- mobile bottom toolbar (PDF only) -->

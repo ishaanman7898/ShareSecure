@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Host ShareSecure yourself</title>
+  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/mark.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
+  </header>
+
+  <main class="container sh">
+    <section class="sh-hero">
+      <h1 class="sh-title">Run your own ShareSecure</h1>
+      <p class="sh-lede">One command installs it on your computer or server. You get a private instance with no account, no daily upload limit, and files stored only on your machine.</p>
+    </section>
+
+    <section class="sh-install" aria-label="Install command">
+      <div class="sh-tabs" role="tablist" aria-label="Platform">
+        <button class="sh-tab" role="tab" id="tab-unix" aria-controls="sh-panel" data-os="unix">macOS / Linux</button>
+        <button class="sh-tab" role="tab" id="tab-windows" aria-controls="sh-panel" data-os="windows">Windows</button>
+        <button class="sh-tab" role="tab" id="tab-docker" aria-controls="sh-panel" data-os="docker">Docker</button>
+      </div>
+
+      <div class="sh-panel" id="sh-panel" role="tabpanel">
+        <div class="sh-command">
+          <code id="sh-cmd"></code>
+          <button class="btn btn-primary sh-copy" id="sh-copy">Copy</button>
+        </div>
+        <p class="sh-hint" id="sh-hint"></p>
+      </div>
+    </section>
+
+    <section class="sh-section" aria-labelledby="sh-what">
+      <h2 class="sh-h2" id="sh-what">What the command does</h2>
+      <ol class="sh-steps" id="sh-steps"></ol>
+    </section>
+
+    <section class="sh-section" aria-labelledby="sh-after">
+      <h2 class="sh-h2" id="sh-after">After it’s installed</h2>
+      <dl class="sh-facts" id="sh-facts"></dl>
+    </section>
+
+    <section class="sh-section" aria-labelledby="sh-settings">
+      <h2 class="sh-h2" id="sh-settings">Settings</h2>
+      <p class="sh-text">Settings live in the <code>.env</code> file inside the install folder. Restart the server after changing them.</p>
+      <div class="sh-table-wrap">
+        <table class="sh-table">
+          <thead>
+            <tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it does</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>PORT</code></td><td>3000</td><td>Port the server listens on.</td></tr>
+            <tr><td><code>BASE_URL</code></td><td>localhost</td><td>Address used in share links. Set it to your domain if you run it on a server.</td></tr>
+            <tr><td><code>USE_LOCAL_TUNNEL</code></td><td>true</td><td>Creates a temporary public link so other devices can open your shares. Turn off if you have your own domain.</td></tr>
+            <tr><td><code>ENCRYPTION_KEY</code></td><td>Generated</td><td>Encrypts every file on disk. Changing it makes existing files unreadable.</td></tr>
+            <tr><td><code>DATA_DIR</code></td><td>./data</td><td>Where the database and uploaded files are stored.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sh-section" aria-labelledby="sh-manual">
+      <details class="sh-details">
+        <summary><h2 class="sh-h2" id="sh-manual">Install manually instead</h2></summary>
+        <p class="sh-text">Requires Node.js 18 or newer and Git.</p>
+        <pre class="sh-pre"><code>git clone https://github.com/ishaanman7898/ShareSecure.git
+cd ShareSecure
+npm install
+npm start</code></pre>
+        <p class="sh-text">The first start creates <code>.env</code> with a fresh encryption key. Source code and issues are on <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms" target="_blank">Terms</a>
+      <a href="/security" target="_blank">Security</a>
+      <a href="/changelog" target="_blank">Changelog</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">Open source. You own your data and your encryption key.</p>
+  </footer>
+
+  <script src="/self-host.js"></script>
+</body>
+</html>

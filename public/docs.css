@@ -1,25 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #f2f4f1;
+  --bg: #ffffff;
   --bg-gradient: none;
   --surface: #ffffff;
-  --surface-hover: #f7f9f7;
-  --border: #d9dfda;
-  --border-bright: #bcc6bf;
-  --text: #13201c;
-  --heading: #13201c;
-  --text-muted: #5d6c66;
-  --accent: #0f6b5a;
+  --surface-hover: #f7f7f7;
+  --border: #e4e4e4;
+  --border-bright: #c9c9c9;
+  --text: #000000;
+  --heading: #000000;
+  --text-muted: #6b6b6b;
+  --accent: #000000;
   --accent-glow: transparent;
-  --accent-soft: #dcebe6;
-  --code-bg: #e9ede9;
-  --success: #0f6b5a;
-  --warning: #8a5a00;
-  --danger: #a33a2e;
-  --info-text: #0a5446;
-  --warn-text: #6b4600;
-  --danger-text: #7f2a20;
+  --accent-soft: #f1f1f1;
+  --code-bg: #f4f4f4;
+  --success: #000000;
+  --warning: #6b6b6b;
+  --danger: #c4231b;
+  --info-text: #000000;
+  --warn-text: #2b2b2b;
+  --danger-text: #8e1a14;
   --radius: 16px;
   --radius-sm: 8px;
   --glass: none;
@@ -29,23 +29,23 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c1411;
-    --surface: #121c18;
-    --surface-hover: #16221d;
-    --border: #22302a;
-    --border-bright: #33453d;
-    --text: #e4ece8;
-    --heading: #e4ece8;
-    --text-muted: #8fa39a;
-    --accent: #6bcfb3;
-    --accent-soft: #173229;
-    --code-bg: #0f1814;
-    --success: #6bcfb3;
-    --warning: #e0b35c;
-    --danger: #ec8677;
-    --info-text: #a9e3d2;
-    --warn-text: #f0d49a;
-    --danger-text: #f5b3a9;
+    --bg: #000000;
+    --surface: #000000;
+    --surface-hover: #0e0e0e;
+    --border: #1f1f1f;
+    --border-bright: #333333;
+    --text: #ffffff;
+    --heading: #ffffff;
+    --text-muted: #8c8c8c;
+    --accent: #ffffff;
+    --accent-soft: #141414;
+    --code-bg: #0e0e0e;
+    --success: #ffffff;
+    --warning: #a3a3a3;
+    --danger: #ff6b61;
+    --info-text: #ffffff;
+    --warn-text: #d6d6d6;
+    --danger-text: #ffb3ad;
     color-scheme: dark;
   }
 }
@@ -81,7 +81,9 @@ h1, h2, h3, h4 {
 
 a {
   color: var(--accent);
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border-bright);
   transition: var(--transition);
   position: relative;
 }

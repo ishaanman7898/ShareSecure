@@ -746,7 +746,7 @@ function showSendDialog() {
   backdrop.className = 'delete-modal-backdrop';
   backdrop.innerHTML = `
     <div class="delete-modal-card">
-      <div class="delete-modal-icon" style="background:rgba(16,185,129,0.12);border-color:rgba(16,185,129,0.25);color:#10b981">
+      <div class="delete-modal-icon" style="background:var(--accent-glow);border-color:var(--border-hover);color:var(--text)">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
         </svg>

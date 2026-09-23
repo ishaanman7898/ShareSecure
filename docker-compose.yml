@@ -1,0 +1,12 @@
+services:
+  sharesecure:
+    build: .
+    container_name: sharesecure
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - sharesecure-data:/app/data
+
+volumes:
+  sharesecure-data:

@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  ShareSecure — One-Line Self-Hosted Installer
 #  Supports: macOS, Ubuntu/Debian, Fedora/RHEL, Arch
-#  Usage:  curl -fsSL https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public/install.sh | bash
+#  Usage:  curl -fsSL https://sharesecure-du8.pages.dev/install.sh | bash
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -42,7 +42,7 @@ case "$OS" in
     elif [ -f /etc/arch-release    ]; then PLATFORM="arch"
     else PLATFORM="linux"
     fi ;;
-  *) err "Unsupported OS: $OS. Use the Docker method instead." ;;
+  *) err "Unsupported OS: $OS. Use the Docker method instead: https://sharesecure-du8.pages.dev/self-host" ;;
 esac
 ok "Detected platform: $OS ($PLATFORM)"
 
@@ -171,9 +171,10 @@ echo -e "  ${DIM}Your files are stored in $INSTALL_DIR/data/${RESET}"
 echo -e "  ${DIM}Edit .env to change the port, base URL, or encryption key.${RESET}"
 echo ""
 
-# auto-start if running interactively
-if [ -t 1 ]; then
-  read -rp "  Start ShareSecure now? [Y/n] " yn
+# auto-start if running interactively. Read from /dev/tty: under `curl | bash`
+# stdin is the script itself, so a plain `read` would swallow script text.
+if [ -t 1 ] && [ -r /dev/tty ]; then
+  read -rp "  Start ShareSecure now? [Y/n] " yn </dev/tty
   case "${yn:-Y}" in
     [Yy]*|"")
       echo ""

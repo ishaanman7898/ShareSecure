@@ -37,18 +37,44 @@
 
     <div class="timeline">
 
-      <!-- v1.4.0 -->
+      <!-- v1.5.0 -->
       <section class="release latest">
         <div class="release-header">
-          <span class="release-version">v1.4.0</span>
+          <span class="release-version">v1.5.0</span>
           <span class="release-date">September 2026</span>
           <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
+          <h3>Self-hosting</h3>
+          <ul class="change-list">
+            <li><strong>New self-host page</strong> — One-command install for macOS, Linux, Windows and Docker, with the right command picked for your system. Linked from the home page.</li>
+            <li><strong>Docker support</strong> — Added a Dockerfile and compose file. The image builds straight from GitHub, and the encryption key lives in the data volume so it survives updates.</li>
+            <li><strong>Installer fixes</strong> — Re-running the Windows installer without Git no longer deletes your files, errors no longer close the PowerShell window, and the “start now?” prompt works under <code>curl | bash</code>.</li>
+            <li><strong>Correct share links</strong> — Links follow your <code>PORT</code> setting instead of always pointing at port 3000.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Design</h3>
+          <ul class="change-list">
+            <li><strong>Black and white</strong> — The app, docs and viewer are now pure monochrome.</li>
+            <li><strong>One-screen home page</strong> — The landing page fits the window without scrolling on desktop and phones.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.4.0 -->
+      <section class="release">
+        <div class="release-header">
+          <span class="release-version">v1.4.0</span>
+          <span class="release-date">September 2026</span>
+        </div>
+
+        <div class="change-group">
           <h3>Redesign</h3>
           <ul class="change-list">
-            <li><strong>New look</strong> — Rebuilt interface with a security-printing palette, a new rosette mark and a single typeface across the app, docs and viewer.</li>
+            <li><strong>New look</strong> — Rebuilt interface with a new rosette mark and a single typeface across the app, docs and viewer.</li>
             <li><strong>Light and dark mode</strong> — The app and docs pages follow your system setting.</li>
             <li><strong>Cleaner upload flow</strong> — Simpler form with switches for annotations and downloads, a calmer file list and a redesigned link modal.</li>
             <li><strong>Accessibility</strong> — Keyboard-operable drop zone, Escape closes dialogs, visible focus rings and labelled controls.</li>

@@ -576,8 +576,11 @@ function initSelfHost() {
 
   // Replace auth button with admin badge
   if (authStatus) {
-    authStatus.innerHTML = `<span class="badge-admin">Admin</span>`;
+    authStatus.innerHTML = `<span class="badge-admin">Self-hosted</span>`;
   }
+
+  // no accounts on a self-hosted instance, so nobody can send you files
+  document.getElementById('inbox-section')?.classList.add('hidden');
 
   // Skip landing page, show upload card and dashboard immediately
   document.body.classList.add('is-logged-in');
