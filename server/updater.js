@@ -142,8 +142,9 @@ async function installFromTarball(tag) {
     fs.writeFileSync(archive, Buffer.from(await res.arrayBuffer()));
     const src = path.join(tmp, 'src');
     fs.mkdirSync(src);
-    // tar ships with Windows 10+, macOS and Linux
-    await run('tar', ['-xzf', archive, '-C', src, '--strip-components=1'], tmp);
+    // tar ships with Windows 10+, macOS and Linux. Paths are relative on purpose:
+    // GNU tar (e.g. from Git for Windows) reads "C:\..." as a remote host.
+    await run('tar', ['-xzf', path.basename(archive), '-C', path.basename(src), '--strip-components=1'], tmp);
     // install dependencies in the temp copy first, so a broken release never touches the running copy
     await run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], src);
     // copy program files only: the loaded SQLite driver in node_modules is locked on Windows
