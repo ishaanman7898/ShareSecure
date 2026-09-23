@@ -135,12 +135,17 @@ export async function storeCommitment(userId, commitment, env) {
 }
 
 // Best-effort purge of expired challenges. Call from waitUntil().
+// Issuance log rows only matter for the 24h rate limit, and a nullifier can only
+// be replayed with its nonce (single-use, 5-minute lifetime), so both are dropped
+// after a day instead of piling up as a record of activity.
 export async function purgeExpiredChallenges(env) {
   const client = getAuthClient(env);
-  try {
-    await client.execute({
-      sql: "DELETE FROM zk_challenges WHERE expires_at < datetime('now')",
-      args: []
-    });
-  } catch {}
+  const statements = [
+    "DELETE FROM zk_challenges WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
+    "DELETE FROM zk_challenge_log WHERE issued_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
+    "DELETE FROM zk_nullifiers WHERE used_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
+  ];
+  for (const sql of statements) {
+    try { await client.execute({ sql, args: [] }); } catch {}
+  }
 }

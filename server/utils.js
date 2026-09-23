@@ -92,22 +92,11 @@ function decryptString(stored, key) {
 }
 
 /**
- * Decode a Bearer token (base64 "username:userId") → { username, userId } or null.
+ * Verify a signed Bearer session token → { username, userId } or null.
+ * (Replaces the old unsigned base64 "username:userId" tokens, which could be forged.)
  */
 function decodeToken(authHeader) {
-  if (!authHeader) return null;
-  try {
-    const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-    const decoded = Buffer.from(tokenPart, 'base64').toString('utf8');
-    const parts = decoded.split(':');
-    if (parts.length < 2) return null;
-    const userId = parseInt(parts[parts.length - 1], 10);
-    if (isNaN(userId)) return null;
-    const username = parts.slice(0, -1).join(':');
-    return { username, userId };
-  } catch {
-    return null;
-  }
+  return require('./session').verifyToken(authHeader);
 }
 
 /**

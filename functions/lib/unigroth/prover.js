@@ -90,6 +90,16 @@ export async function prove(circuit, witness, publicInputs) {
     spotChecks.push({ constraintIndex: ci, openings });
   }
 
+  // Open the constant-one signal and every public input so the verifier can
+  // bind the committed witness to the claimed public values.
+  const publicOpenings = {};
+  for (const idx of [0, ...circuit.publicInputs.map(pi => pi.index)]) {
+    publicOpenings[idx] = {
+      value: witness[idx].toString(),
+      proof: witnessTree.proof(idx).map(p => ({ hash: bytesToHex(p.hash), position: p.position })),
+    };
+  }
+
   const t1 = (typeof performance !== 'undefined') ? performance.now() : Date.now();
   const proveTime = t1 - t0;
 
@@ -115,6 +125,7 @@ export async function prove(circuit, witness, publicInputs) {
       ),
     })),
     publicInputs,
+    publicOpenings,
     metadata: {
       circuit: circuit.name,
       constraints: circuit.constraints.length,

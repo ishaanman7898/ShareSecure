@@ -92,6 +92,7 @@ export async function prove({ secret, commitment, nonce }) {
     aggregatedCheck:    fullProof.aggregatedCheck,
     spotChecks:         fullProof.spotChecks,
     publicInputs:       fullProof.publicInputs,
+    publicOpenings:     fullProof.publicOpenings,
   };
 
   return {

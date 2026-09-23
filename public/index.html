@@ -31,7 +31,7 @@
       <span>ShareSecure</span>
     </a>
     <div id="auth-status">
-      <button class="btn btn-ghost" id="show-login">Sign in</button>
+      <a class="btn btn-ghost" href="/signin">Sign in</a>
     </div>
   </header>
 
@@ -42,7 +42,7 @@
         <h1 class="landing-headline">Share a file.<br />Choose when it disappears.</h1>
         <p class="landing-lede">Upload a PDF, Word document or image and get a private link that stops working at the time you set. Files are encrypted at rest, never indexed, and never used to train AI.</p>
         <div class="landing-actions">
-          <button class="btn btn-primary btn-lg" id="landing-start">Create an account</button>
+          <a class="btn btn-primary btn-lg" href="/signin?new=1">Create an account</a>
           <a href="/self-host" class="btn btn-ghost btn-lg">Host it yourself</a>
         </div>
         <ul class="landing-facts">
@@ -55,32 +55,6 @@
         <svg id="rosette" viewBox="0 0 400 400"></svg>
       </div>
     </section>
-
-    <!-- auth modal -->
-    <div class="modal hidden" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h2 id="modal-title">Sign in</h2>
-          <button class="btn-icon" id="close-modal" aria-label="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-        <form id="auth-form">
-          <div class="form-group">
-            <label for="auth-username">Username</label>
-            <input type="text" id="auth-username" required autocomplete="username" placeholder="Pick a username" />
-          </div>
-          <div class="form-group">
-            <label for="auth-password">Access code</label>
-            <input type="password" id="auth-password" required autocomplete="current-password" placeholder="Enter your access code" />
-          </div>
-          <button type="submit" class="btn btn-primary btn-full" id="auth-submit">Sign in</button>
-          <p class="auth-toggle">
-            <span id="auth-prompt-text">Don't have an account? </span><a href="#" id="toggle-auth">Sign up</a>
-          </p>
-        </form>
-      </div>
-    </div>
 
     <!-- two-col app grid (logged in) -->
     <div class="app-grid hidden" id="app-grid">
@@ -168,6 +142,23 @@
           <div id="inbox-list" class="file-list">
             <p class="empty-msg">No files received.</p>
           </div>
+        </div>
+
+        <div id="updates-section" class="updates-section hidden">
+          <div class="list-header">
+            <h2 class="panel-title">Updates</h2>
+            <span class="pill pill-quiet" id="update-version"></span>
+          </div>
+          <p class="update-status" id="update-status" aria-live="polite"></p>
+          <div class="update-actions">
+            <button class="btn btn-primary hidden" id="update-btn"></button>
+            <button class="btn btn-ghost" id="update-check-btn">Check now</button>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="auto-update" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Install updates automatically</span>
+          </label>
         </div>
       </aside>
     </div>

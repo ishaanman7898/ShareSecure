@@ -93,29 +93,18 @@ const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
 // --- auth & dashboard elements ---
-const showLoginBtn = document.getElementById('show-login');
 const authStatus = document.getElementById('auth-status');
-const authModal = document.getElementById('auth-modal');
-const closeModal = document.getElementById('close-modal');
-const authForm = document.getElementById('auth-form');
-const authUsername = document.getElementById('auth-username');
-const authPassword = document.getElementById('auth-password');
-const authSubmit = document.getElementById('auth-submit');
-const toggleAuth = document.getElementById('toggle-auth');
-const modalTitle = document.getElementById('modal-title');
 const dashboardCard = document.getElementById('dashboard-card');
 const fileList = document.getElementById('file-list');
 const uploadCount = document.getElementById('upload-count');
 
 const landingPage = document.getElementById('landing-page');
-const landingStartBtn = document.getElementById('landing-start');
 
 let qrInstance = null;
 let currentShortId = null;
 let currentDeleteToken = null;
 let currentHistoryRecord = null;
 let userToken = sessionStorage.getItem('user_token');
-let isLoginMode = true;
 let customExpiryHours = null;
 let selfHostMode = false;
 
@@ -131,7 +120,7 @@ function loadUploadHistory() {
     const items = JSON.parse(raw);
     if (!Array.isArray(items)) return [];
     const now = Date.now();
-    return items.filter(f => {
+    const live = items.filter(f => {
       // Remove if the link has expired
       if (f.expires_at && new Date(f.expires_at).getTime() <= now) return false;
       // Remove if the entry is older than 30 days regardless of expiry
@@ -139,6 +128,9 @@ function loadUploadHistory() {
       if (f.uploaded_at && now - new Date(f.uploaded_at).getTime() > HISTORY_MAX_AGE_MS) return false;
       return true;
     });
+    // write the pruned list back so expired entries don't linger in storage
+    if (live.length !== items.length) localStorage.setItem(HISTORY_KEY, JSON.stringify(live));
+    return live;
   } catch { return []; }
 }
 
@@ -401,6 +393,9 @@ uploadBtn.addEventListener('click', async () => {
         showToast('Link created.', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
+      } else if (xhr.status === 401) {
+        showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
+        logout();
       } else if (xhr.status === 429) {
         showToast('Upload limit reached (5 files per 24h). Try again tomorrow.', 'warn', 6000);
         uploadBtn.disabled = false;
@@ -526,124 +521,82 @@ document.getElementById('result-modal-backdrop')?.addEventListener('click', () =
 
 // --- auth & dashboard logic ---
 
-function initAuth() {
-  if (userToken) {
-    // Prefer username stored at login time (avoids needing to decode token)
-    let username = sessionStorage.getItem('user_name') || 'User';
-    if (username === 'User') {
-      try {
-        if (userToken.includes('.')) {
-          // Signed token: <b64url(payload)>.<b64url(sig)>
-          const payloadB64 = userToken.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-          const payload = JSON.parse(atob(payloadB64 + '=='));
-          username = payload.username || 'User';
-        } else {
-          // Legacy token: base64(username:userId)
-          username = atob(userToken).split(':')[0];
-        }
-      } catch (e) {
-        // Token is corrupt — log out cleanly
-        logout();
-        return;
-      }
-    }
-    authStatus.innerHTML = `
-      <span class="user-name">Signed in as <strong>${escapeHtml(username)}</strong></span>
-      <button class="btn btn-ghost" id="logout-btn">Sign out</button>
-    `;
-    document.getElementById('logout-btn').addEventListener('click', logout);
+function authHeaders() {
+  return userToken ? { 'Authorization': `Bearer ${userToken}` } : {};
+}
 
-    document.body.classList.add('is-logged-in');
-    landingPage.classList.add('hidden');
-    const appGrid = document.getElementById('app-grid');
-    if (appGrid) appGrid.classList.remove('hidden');
+function tokenUsername() {
+  const stored = sessionStorage.getItem('user_name');
+  if (stored) return stored;
+  try {
+    const payloadB64 = userToken.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(atob(payloadB64 + '==')).username || null;
+  } catch {
+    return null;
+  }
+}
+
+function showSignedIn(username) {
+  authStatus.innerHTML = `
+    <span class="user-name">Signed in as <strong>${escapeHtml(username)}</strong></span>
+    <button class="btn btn-ghost" id="logout-btn">Sign out</button>
+  `;
+  document.getElementById('logout-btn').addEventListener('click', logout);
+  document.body.classList.add('is-logged-in');
+  landingPage.classList.add('hidden');
+  document.getElementById('app-grid')?.classList.remove('hidden');
+}
+
+function initAuth() {
+  const username = userToken && tokenUsername();
+  if (username) {
+    showSignedIn(username);
     updateDashboard();
     updateInbox();
   } else {
-    authStatus.innerHTML = `<button class="btn btn-ghost" id="show-login">Sign in</button>`;
-
+    if (userToken) logout();
+    authStatus.innerHTML = `<a class="btn btn-ghost" href="/signin">Sign in</a>`;
     document.body.classList.remove('is-logged-in');
     landingPage.classList.remove('hidden');
     drawRosette();
-    const appGrid = document.getElementById('app-grid');
-    if (appGrid) appGrid.classList.add('hidden');
+    document.getElementById('app-grid')?.classList.add('hidden');
   }
 }
 
-// ── self-host mode: skip auth, show upload UI immediately as admin ─────────────
+// ── self-hosted: the owner signs in; nobody else can upload ──────────────────
 function initSelfHost() {
   selfHostMode = true;
+  const username = userToken && tokenUsername();
+  if (!username) { location.replace('/signin'); return; }
 
-  // Replace auth button with admin badge
-  if (authStatus) {
-    authStatus.innerHTML = `<span class="badge-admin">Self-hosted</span>`;
-  }
-
-  // no accounts on a self-hosted instance, so nobody can send you files
+  showSignedIn(username);
+  // no other accounts exist on a self-hosted instance, so nobody can send you files
   document.getElementById('inbox-section')?.classList.add('hidden');
-
-  // Skip landing page, show upload card and dashboard immediately
-  document.body.classList.add('is-logged-in');
-  if (landingPage) landingPage.classList.add('hidden');
-  const appGrid = document.getElementById('app-grid');
-  if (appGrid) appGrid.classList.remove('hidden');
-
-  // Show upload count as unlimited
   if (uploadCount) uploadCount.textContent = 'No limit';
-
-  // Render history from localStorage
   renderFileList(loadUploadHistory());
+  initUpdates();
 }
-
-function updateAuthUI() {
-  modalTitle.textContent = isLoginMode ? 'Sign in' : 'Create an account';
-  authSubmit.textContent = isLoginMode ? 'Sign in' : 'Create account';
-  toggleAuth.textContent = isLoginMode ? 'Sign up' : 'Sign in';
-  document.getElementById('auth-prompt-text').textContent = isLoginMode ? "Don't have an account? " : "Already have an account? ";
-
-  // update placeholders/labels if needed
-  authUsername.placeholder = isLoginMode ? "Your username" : "Pick a username";
-  authPassword.placeholder = isLoginMode ? "Your access code" : "Create an access code";
-  authPassword.autocomplete = isLoginMode ? 'current-password' : 'new-password';
-}
-
-function openAuthModal(loginMode) {
-  isLoginMode = loginMode;
-  updateAuthUI();
-  authModal.classList.remove('hidden');
-  setTimeout(() => authUsername.focus(), 50);
-}
-
-landingStartBtn.addEventListener('click', () => {
-  openAuthModal(false);
-});
 
 async function updateDashboard() {
   if (!userToken) return;
 
   // Render localStorage cache instantly so the UI is never blank during the round-trip
-  const cached = loadUploadHistory();
-  renderFileList(cached);
+  renderFileList(loadUploadHistory());
 
   // Fetch upload count from server (file list stays in localStorage — no server-side user→file link).
   try {
-    const res = await fetch('/api/auth/user/files', {
-      headers: { 'Authorization': `Bearer ${userToken}` }
-    });
+    const res = await fetch('/api/auth/user/files', { headers: authHeaders() });
     if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
-
     const data = await res.json();
-    uploadCount.textContent = `${data.dailyUploadCount ?? 0}/5 today`;
+    uploadCount.textContent = data.unlimited ? 'No limit' : `${data.dailyUploadCount ?? 0}/5 today`;
   } catch { /* network error — keep showing cached list */ }
 }
 
 async function updateInbox() {
   if (!userToken) return;
   try {
-    const res = await fetch('/api/inbox', {
-      headers: { 'Authorization': `Bearer ${userToken}` }
-    });
+    const res = await fetch('/api/inbox', { headers: authHeaders() });
     if (!res.ok) return;
     const data = await res.json();
     renderInbox(data.files || []);
@@ -656,204 +609,227 @@ async function updateInbox() {
 function renderInbox(files) {
   const list = document.getElementById('inbox-list');
   if (!list) return;
-  if (!files || files.length === 0) {
+  const live = (files || []).filter(f => !f.expires_at || new Date(f.expires_at) > Date.now());
+  if (live.length === 0) {
     list.innerHTML = '<p class="empty-msg">No files received.</p>';
     return;
   }
-  list.innerHTML = files.map(f => {
-    const expiryMs = f.expires_at ? new Date(f.expires_at) - Date.now() : null;
-    const expired = expiryMs !== null && expiryMs <= 0;
-    const expiryStr = expired
-      ? '<span class="is-expired-text">Expired</span>'
-      : expiryMs !== null
-        ? `${formatCountdown(expiryMs)} left`
-        : 'No expiry';
+  list.innerHTML = live.map(f => {
+    const expiryStr = f.expires_at ? `${formatCountdown(new Date(f.expires_at) - Date.now())} left` : 'No expiry';
     return `
-      <div class="file-item${expired ? ' is-expired' : ''}">
+      <div class="file-item">
         <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
         <div class="file-item-info">
           <span class="file-item-name">${escapeHtml(f.original_filename || 'Untitled')}</span>
           <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, ${expiryStr}</span>
         </div>
         <div class="file-item-actions">
-          ${!expired ? `<a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>` : ''}
+          <a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>
         </div>
       </div>`;
   }).join('');
 }
 
+const EMPTY_LIST = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
+const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+let listTimer = null;
+
+// Drop a share from this browser entirely: list entry, owner key, and row.
+function forgetShare(shortId) {
+  removeFromHistory(shortId);
+  try { localStorage.removeItem('owner_' + shortId); } catch {}
+  fileList.querySelector(`[data-short-id="${CSS.escape(shortId)}"]`)?.remove();
+  if (!fileList.querySelector('.file-item')) fileList.innerHTML = EMPTY_LIST;
+}
+
 function renderFileList(files) {
+  if (listTimer) { clearInterval(listTimer); listTimer = null; }
   if (!files || files.length === 0) {
-    fileList.innerHTML = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
+    fileList.innerHTML = EMPTY_LIST;
     return;
   }
 
   fileList.innerHTML = files.map(f => `
-    <div class="file-item" data-short-id="${f.short_id}">
+    <div class="file-item" data-short-id="${escapeHtml(f.short_id)}">
       <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
       <div class="file-item-info">
         <span class="file-item-name">${escapeHtml(f.original_filename)}</span>
-        <span class="file-item-time" data-expires="${f.expires_at}"></span>
+        <span class="file-item-time" data-expires="${escapeHtml(f.expires_at)}"></span>
       </div>
       <div class="file-item-actions">
         <a href="/r/${encodeURIComponent(f.short_id)}" target="_blank" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </a>
-        <button class="btn-icon delete-file-btn" data-id="${escapeHtml(f.short_id)}" title="Delete" aria-label="Delete ${escapeHtml(f.original_filename)}">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        </button>
+        <button class="btn-icon delete-file-btn" data-id="${escapeHtml(f.short_id)}" title="Delete" aria-label="Delete ${escapeHtml(f.original_filename)}">${TRASH_ICON}</button>
       </div>
     </div>
   `).join('');
 
   fileList.querySelectorAll('.delete-file-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Permanently delete this file?')) return;
+      if (!confirm('Delete this file for everyone? This can’t be undone.')) return;
       const shortId = btn.dataset.id;
-      // Retrieve deleteToken from history record or owner localStorage key
       const record = files.find(f => f.short_id === shortId);
       const deleteToken = record?.delete_token || localStorage.getItem('owner_' + shortId);
-      btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>`;
+      btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>`;
       btn.disabled = true;
       try {
-        const headers = { 'Content-Type': 'application/json' };
-        if (userToken) headers['Authorization'] = `Bearer ${userToken}`;
-        const res = await fetch(`/api/delete/${shortId}`, {
+        const res = await fetch(`/api/delete/${encodeURIComponent(shortId)}`, {
           method: 'POST',
-          headers,
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
           body: JSON.stringify({ deleteToken }),
         });
-        const data = await res.json();
-        if (data.deleted) {
+        const data = await res.json().catch(() => ({}));
+        if (data.deleted || res.status === 404) {
           showToast('File deleted.', 'success');
-          removeFromHistory(shortId);
-          btn.closest('.file-item').remove();
-          const remaining = fileList.querySelectorAll('.file-item').length;
-          if (remaining === 0) fileList.innerHTML = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
-          if (userToken) updateDashboard();
+          forgetShare(shortId);
         } else {
           showToast('Couldn’t delete the file. Try again.', 'error');
-          btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+          btn.innerHTML = TRASH_ICON;
           btn.disabled = false;
         }
       } catch {
         showToast('Couldn’t reach the server. Try again.', 'error');
-        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+        btn.innerHTML = TRASH_ICON;
         btn.disabled = false;
       }
     });
   });
 
-  // start small timers for each item
-  files.forEach(f => {
-    const expiry = new Date(f.expires_at).getTime();
-    const el = fileList.querySelector(`[data-expires="${f.expires_at}"]`);
-    if (!el) return;
-
-    function updateItemTick() {
-      const remaining = expiry - Date.now();
-      if (remaining <= 0) {
-        el.textContent = 'Expired';
-        return;
-      }
-      el.textContent = formatCountdown(remaining) + ' left';
-    }
-    updateItemTick();
-    setInterval(updateItemTick, 5000);
-  });
+  // countdowns; an expired share disappears from this browser on its own
+  const tick = () => {
+    files.forEach(f => {
+      const el = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"] .file-item-time`);
+      if (!el) return;
+      const remaining = new Date(f.expires_at).getTime() - Date.now();
+      if (remaining <= 0) forgetShare(f.short_id);
+      else el.textContent = formatCountdown(remaining) + ' left';
+    });
+  };
+  tick();
+  listTimer = setInterval(tick, 5000);
 }
 
 function logout() {
   userToken = null;
   sessionStorage.removeItem('user_token');
   sessionStorage.removeItem('user_name');
-  initAuth();
+  location.replace(selfHostMode ? '/signin' : '/');
 }
 
-document.addEventListener('click', (e) => {
-  if (e.target && e.target.id === 'show-login') {
-    openAuthModal(true);
+// ── updates (self-hosted) ─────────────────────────────────────────────────────
+const updatesSection = document.getElementById('updates-section');
+const updateVersion = document.getElementById('update-version');
+const updateStatus = document.getElementById('update-status');
+const updateBtn = document.getElementById('update-btn');
+const updateCheckBtn = document.getElementById('update-check-btn');
+const autoUpdateInput = document.getElementById('auto-update');
+
+async function updateCall(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 401) { logout(); throw new Error('signed out'); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Update failed');
+  return data;
+}
+
+function renderUpdates(s) {
+  updateVersion.textContent = `Version ${s.current}`;
+  autoUpdateInput.checked = !!s.autoUpdate;
+  autoUpdateInput.disabled = !s.canUpdate;
+  updateBtn.classList.add('hidden');
+  updateBtn.disabled = false;
+
+  if (s.blockedReason === 'docker') {
+    updateStatus.textContent = s.updateAvailable
+      ? `Version ${s.latest} is out. Rebuild the container to update.`
+      : 'Docker installs update by rebuilding the container.';
+    return;
+  }
+  if (s.status === 'updating') { updateStatus.textContent = `Installing version ${s.latest}…`; return; }
+  if (s.status === 'restarting') { updateStatus.textContent = 'Restarting with the new version…'; return; }
+  if (s.status === 'restart-required') { updateStatus.textContent = `Version ${s.latest} is installed. Restart ShareSecure to finish.`; return; }
+  if (s.status === 'failed') {
+    updateStatus.textContent = `The update didn’t install: ${s.error}`;
+  } else if (s.checkError) {
+    updateStatus.textContent = s.checkError;
+  } else if (s.updateAvailable) {
+    updateStatus.textContent = `Version ${s.latest} is available.`;
+  } else if (s.latest) {
+    updateStatus.textContent = 'You’re up to date.';
+  } else {
+    updateStatus.textContent = 'Checking for updates…';
+  }
+  if (s.updateAvailable && s.canUpdate) {
+    updateBtn.textContent = `Update to ${s.latest}`;
+    updateBtn.classList.remove('hidden');
+  }
+}
+
+// After an update the server restarts; wait for the new version, then reload.
+async function waitForRestart(fromVersion) {
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await fetch('/api/mode', { cache: 'no-store' });
+      const info = await res.json();
+      if (info.version && info.version !== fromVersion) { location.reload(); return; }
+    } catch { /* still restarting */ }
+  }
+  updateStatus.textContent = 'ShareSecure is taking a while to restart. Reload the page in a minute.';
+}
+
+async function initUpdates() {
+  if (!updatesSection) return;
+  updatesSection.classList.remove('hidden');
+  try {
+    let s = await updateCall('/api/update/status');
+    renderUpdates(s);
+    if (!s.checkedAt) renderUpdates(s = await updateCall('/api/update/check', {}));
+  } catch {
+    updatesSection.classList.add('hidden');
+  }
+}
+
+updateCheckBtn?.addEventListener('click', async () => {
+  updateCheckBtn.disabled = true;
+  updateStatus.textContent = 'Checking for updates…';
+  try { renderUpdates(await updateCall('/api/update/check', {})); } catch {}
+  updateCheckBtn.disabled = false;
+});
+
+updateBtn?.addEventListener('click', async () => {
+  updateBtn.disabled = true;
+  updateStatus.textContent = 'Downloading and installing the update…';
+  try {
+    const before = updateVersion.textContent.replace('Version ', '');
+    const s = await updateCall('/api/update/apply', {});
+    renderUpdates(s);
+    if (s.status === 'restarting') waitForRestart(before);
+  } catch (err) {
+    updateStatus.textContent = `The update didn’t install: ${err.message}`;
+    updateBtn.disabled = false;
   }
 });
-closeModal.addEventListener('click', () => authModal.classList.add('hidden'));
-authModal.addEventListener('click', (e) => { if (e.target === authModal) authModal.classList.add('hidden'); });
+
+autoUpdateInput?.addEventListener('change', async () => {
+  try {
+    renderUpdates(await updateCall('/api/update/settings', { autoUpdate: autoUpdateInput.checked }));
+    showToast(autoUpdateInput.checked ? 'Updates will install automatically.' : 'Automatic updates turned off.', 'success', 2500);
+  } catch {
+    autoUpdateInput.checked = !autoUpdateInput.checked;
+  }
+});
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!authModal.classList.contains('hidden')) authModal.classList.add('hidden');
   if (!resultCard.classList.contains('hidden')) {
     if (countdownInterval) clearInterval(countdownInterval);
     resultCard.classList.add('hidden');
-  }
-});
-
-toggleAuth.addEventListener('click', (e) => {
-  e.preventDefault();
-  isLoginMode = !isLoginMode;
-  updateAuthUI();
-});
-
-authForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const username = authUsername.value;
-  const access_code = authPassword.value;
-  const endpoint = isLoginMode ? '/api/auth/login' : '/api/auth/register';
-
-  authSubmit.disabled = true;
-  authSubmit.textContent = isLoginMode ? 'Signing in…' : 'Creating account…';
-
-  try {
-    // For registration: generate ZK credentials in the browser before sending.
-    // The server stores ONLY the commitment, never the secret.
-    let zk_commitment = null;
-    if (!isLoginMode) {
-      try {
-        const creds = await ZK.generateCredentials();
-        zk_commitment = creds.commitment;
-      } catch {
-        // Non-fatal: registration proceeds without ZK enrollment if generation fails.
-        // User can re-enroll later by re-registering or via a future settings flow.
-      }
-    }
-
-    const body = isLoginMode
-      ? { username, access_code }
-      : { username, access_code, zk_commitment };
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      if (isLoginMode) {
-        userToken = data.token;
-        sessionStorage.setItem('user_token', userToken);
-        // Store username separately so initAuth never needs to decode the token
-        if (data.username) sessionStorage.setItem('user_name', data.username);
-        authModal.classList.add('hidden');
-        initAuth();
-      } else {
-        // clear potential stale sessions on new account
-        sessionStorage.removeItem('user_token');
-        userToken = null;
-        showToast('Account created. Sign in to continue.', 'success');
-        isLoginMode = true;
-        updateAuthUI();
-      }
-    } else {
-      // Roll back the ZK credentials we just generated if registration failed
-      if (!isLoginMode) ZK.clearCredentials();
-      showToast(data.error || 'Something went wrong. Try again.', 'error');
-    }
-  } catch (err) {
-    if (!isLoginMode) ZK.clearCredentials();
-    showToast('Something went wrong. Try again.', 'error');
-  } finally {
-    authSubmit.disabled = false;
-    authSubmit.textContent = isLoginMode ? 'Sign in' : 'Create account';
   }
 });
 

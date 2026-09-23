@@ -2,17 +2,33 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.join(__dirname, '../data');
+// Data lives in the user's own app-data folder, separate from the program files,
+// so updates never touch it and it stays out of synced folders like OneDrive:
+//   Windows  %LOCALAPPDATA%\ShareSecure
+//   macOS    ~/Library/Application Support/ShareSecure
+//   Linux    ~/.local/share/sharesecure
+// Installs from before this change keep using ./data if it already has a database.
+function defaultDataDir() {
+  const legacy = path.join(__dirname, '../data');
+  if (fs.existsSync(path.join(legacy, 'sharesecure.db'))) return legacy;
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    return path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'ShareSecure');
+  }
+  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'ShareSecure');
+  return path.join(process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'sharesecure');
+}
+
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : defaultDataDir();
 
 const DB_PATH = process.env.DB_PATH || path.join(DATA_DIR, 'sharesecure.db');
 
 // ensure data + uploads directories exist
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true, mode: 0o700 });
 
 const db = new Database(DB_PATH);
 
@@ -21,6 +37,8 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.pragma('synchronous = NORMAL');
 db.pragma('cache_size = -8000'); // 8 MB cache
+// zero out deleted rows on disk so erased files leave no recoverable metadata or keys
+db.pragma('secure_delete = ON');
 
 // ── schema ──────────────────────────────────────────────────────────────────
 db.exec(`

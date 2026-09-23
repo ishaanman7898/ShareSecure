@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Sign in — ShareSecure</title>
+  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="auth-page">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/mark.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <a class="btn btn-ghost" href="/" id="auth-back">Back</a>
+  </header>
+
+  <main class="auth-main">
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <div class="auth-head">
+        <h1 id="auth-title">Sign in</h1>
+        <p class="auth-sub" id="auth-sub"></p>
+      </div>
+
+      <form id="auth-form" class="auth-form" novalidate>
+        <div class="form-group">
+          <label for="auth-username">Username</label>
+          <input type="text" id="auth-username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        </div>
+        <div class="form-group">
+          <label for="auth-password">Password <span class="label-optional" id="password-hint"></span></label>
+          <input type="password" id="auth-password" name="password" autocomplete="current-password" required />
+        </div>
+        <div class="form-group hidden" id="confirm-group">
+          <label for="auth-confirm">Confirm password</label>
+          <input type="password" id="auth-confirm" name="confirm" autocomplete="new-password" />
+        </div>
+        <p class="auth-error" id="auth-error" role="alert"></p>
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="auth-submit">Sign in</button>
+        <p class="auth-note hidden" id="auth-note"></p>
+      </form>
+
+      <p class="auth-switch" id="auth-switch"></p>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms" target="_blank">Terms</a>
+      <a href="/security" target="_blank">Security</a>
+      <a href="/self-host">Host it yourself</a>
+    </nav>
+    <p class="footer-note">Your session ends when you close the browser.</p>
+  </footer>
+
+  <script type="module" src="/signin.js"></script>
+</body>
+</html>

@@ -107,10 +107,16 @@ irm https://sharesecure-du8.pages.dev/install.ps1 | iex
 
 **Docker** (builds straight from GitHub, nothing to clone)
 ```bash
-docker run -d --name sharesecure --restart unless-stopped -p 3000:3000   -v sharesecure-data:/app/data $(docker build -q https://github.com/ishaanman7898/ShareSecure.git)
+docker run -d --name sharesecure --restart unless-stopped -p 3000:3000 \
+  -v sharesecure-data:/app/data $(docker build -q https://github.com/ishaanman7898/ShareSecure.git)
 ```
 
-The installers set up Node.js if needed, download ShareSecure to `~/sharesecure`, generate an encryption key and start the server at `http://localhost:3000`. Run the same command again to update; your files and settings are kept.
+The installers set up Node.js if needed, download ShareSecure to `~/sharesecure`, generate an encryption key and start the server at `http://localhost:3000`.
+
+- **Sign in:** the first time you open it, you create the owner account. Only the owner can upload and manage files; people you share links with don't need an account.
+- **Your data:** the database and encrypted files live in your user app-data folder, apart from the program and out of synced folders like OneDrive: `%LOCALAPPDATA%\ShareSecure` (Windows), `~/Library/Application Support/ShareSecure` (macOS), `~/.local/share/sharesecure` (Linux). Installs that already have a `./data` folder keep using it.
+- **Updates:** the Updates panel in the app shows when a new release is out. Install it with one click, or turn on automatic updates. Docker installs update by rebuilding the container.
+- **No traces:** when a link expires (or you delete it), its database row is erased with SQLite `secure_delete`, which destroys the file's own encryption key, and the stored file is overwritten and removed. This happens within 30 seconds, or immediately if someone opens the expired link.
 
 ### Manual install
 
@@ -132,7 +138,7 @@ The first start creates `.env` with a secure encryption key. With a clone you ca
 | `ENCRYPTION_KEY` | auto-generated | 64-char hex key for AES-256-GCM. Rotate with care — files encrypted under the old key become unreadable. |
 | `PORT` | `3000` | HTTP port. |
 | `BASE_URL` | `http://localhost:PORT` | Public-facing URL used in share links. Set this to your domain in production. |
-| `DATA_DIR` | `./data` | Where the database and uploaded files are stored. |
+| `DATA_DIR` | your app-data folder | Where the database and encrypted files are stored. |
 | `USE_LOCAL_TUNNEL` | `true` | Auto-start a public localtunnel for easy testing. Set `false` in production. |
 
 ---

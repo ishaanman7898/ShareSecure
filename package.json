@@ -1,11 +1,11 @@
 {
   "name": "sharesecure",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "server/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node server/index.js",
+    "start": "node server/launcher.js",
     "dev": "nodemon server/index.js",
     "generate-key": "node -e \"console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
     "deploy": "wrangler pages deploy public --project-name sharesecure"

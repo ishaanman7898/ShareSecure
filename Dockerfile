@@ -15,7 +15,8 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/app/data \
-    ENV_FILE=/app/data/.env
+    ENV_FILE=/app/data/.env \
+    SHARESECURE_DOCKER=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json .env.example ./
 COPY server ./server

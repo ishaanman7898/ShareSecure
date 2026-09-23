@@ -33,7 +33,7 @@ export async function onRequestPost(context) {
       args: []
     });
     const recent = await client.execute({
-      sql: "SELECT COUNT(*) as count FROM zk_challenge_log WHERE user_id = ? AND issued_at > datetime('now', '-1 day')",
+      sql: "SELECT COUNT(*) as count FROM zk_challenge_log WHERE user_id = ? AND issued_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
       args: [auth.userId]
     });
     if (recent.rows[0].count >= MAX_CHALLENGES_PER_DAY) {

@@ -1,94 +1,76 @@
 'use strict';
+// Self-hosted sign-in. A self-hosted ShareSecure has exactly one account: the
+// owner, created on first run from the setup page. After that registration is closed.
 const express = require('express');
 const router  = express.Router();
-const crypto  = require('crypto');
 
-const { db }                    = require('../db');
-const { decodeToken, getUserTag } = require('../utils');
+const { db } = require('../db');
+const session = require('../session');
 
-function hashCode(code) {
-  return crypto.createHash('sha256').update(code).digest('hex');
+const MIN_PASSWORD = 8;
+
+// Only accounts created by the setup page count. Older rows (unsalted hashes,
+// including one that used to ship inside the repo's database) are ignored and
+// cleared when the owner is created.
+function ownerExists() {
+  return db.prepare("SELECT COUNT(*) AS n FROM users WHERE access_code LIKE 'scrypt$%'").get().n > 0;
 }
 
-// ── POST /api/auth/register ───────────────────────────────────────────────────
+// ── GET /api/auth/status ──────────────────────────────────────────────────────
+router.get('/status', (_req, res) => {
+  res.json({ setupRequired: !ownerExists() });
+});
+
+// ── POST /api/auth/register (first-run setup only) ──────────────────────────
 router.post('/register', (req, res) => {
-  const { username, access_code } = req.body || {};
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.access_code || '');
 
-  if (!username || !access_code) {
-    return res.status(400).json({ error: 'Username and access code required' });
-  }
   if (username.length < 2 || username.length > 32) {
-    return res.status(400).json({ error: 'Username must be 2–32 characters' });
+    return res.status(400).json({ error: 'Username must be 2–32 characters.' });
   }
-  if (access_code.length < 6) {
-    return res.status(400).json({ error: 'Access code must be at least 6 characters' });
+  if (password.length < MIN_PASSWORD) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters.` });
   }
 
-  const hashed = hashCode(access_code);
+  const hashed = session.hashPassword(password);
+  const create = db.transaction(() => {
+    if (ownerExists()) return null;
+    db.prepare('DELETE FROM users').run();
+    return db.prepare('INSERT INTO users (username, access_code) VALUES (?, ?)').run(username, hashed);
+  });
 
-  try {
-    const result = db.prepare(
-      'INSERT INTO users (username, access_code) VALUES (?, ?)'
-    ).run(username.trim(), hashed);
-
-    res.json({ success: true, userId: String(result.lastInsertRowid) });
-  } catch (err) {
-    if (err.message && err.message.includes('UNIQUE constraint failed')) {
-      return res.status(400).json({ error: 'Username already taken' });
-    }
-    console.error('[auth] Registration error:', err.message);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+  const result = create();
+  if (!result) return res.status(403).json({ error: 'This ShareSecure already has an owner. Sign in instead.' });
+  res.json({ success: true });
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', (req, res) => {
-  const { username, access_code } = req.body || {};
-
-  if (!username || !access_code) {
-    return res.status(400).json({ error: 'Username and access code required' });
+  const wait = session.lockoutRemainingMs();
+  if (wait > 0) {
+    return res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(wait / 1000)} seconds.` });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username.trim());
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.access_code || '');
+  const user = db.prepare("SELECT * FROM users WHERE username = ? AND access_code LIKE 'scrypt$%'").get(username);
+  const check = user ? session.verifyPassword(password, user.access_code) : { ok: false };
 
-  if (!user || user.access_code !== hashCode(access_code)) {
-    return res.status(401).json({ error: 'Invalid username or access code' });
+  if (!check.ok) {
+    session.recordFailure();
+    return res.status(401).json({ error: 'Wrong username or password.' });
   }
 
-  const token = Buffer.from(`${user.username}:${user.id}`).toString('base64');
+  session.recordSuccess();
 
-  res.json({
-    success:  true,
-    userId:   String(user.id),
-    username: user.username,
-    token,
-  });
+  res.json({ success: true, username: user.username, token: session.issueToken(user) });
 });
 
 // ── GET /api/auth/user/files ──────────────────────────────────────────────────
-// The dashboard is now client-side (localStorage).  This endpoint only returns
-// the authoritative daily upload count so the UI can show "Used X/5 today"
-// even if the user clears localStorage.  No file records are returned from the
-// server — there is no longer a server-side link between files and accounts.
-router.get('/user/files', (req, res) => {
-  const auth = decodeToken(req.headers.authorization);
-  if (!auth) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const userTag = getUserTag(auth.userId);
-
-    const dailyRow = db.prepare(
-      "SELECT COUNT(*) AS count FROM upload_log WHERE user_tag = ? AND uploaded_at > datetime('now', '-1 day')"
-    ).get(userTag);
-
-    res.json({
-      files: [],                             // always empty — list lives in localStorage
-      dailyUploadCount: Number(dailyRow.count),
-    });
-  } catch (err) {
-    console.error('[auth] Dashboard error:', err.message);
-    res.status(500).json({ error: 'Failed to load files' });
-  }
+// The dashboard list lives in the browser. Self-hosted instances have no daily limit.
+router.get('/user/files', session.requireOwner, (_req, res) => {
+  res.json({ files: [], dailyUploadCount: 0, unlimited: true });
 });
 
 module.exports = router;

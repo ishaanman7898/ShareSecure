@@ -147,16 +147,19 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
     echo "PORT=$PORT"
     echo "BASE_URL=http://localhost:$PORT"
     echo "ENCRYPTION_KEY=$ENC_KEY"
-    echo "DATA_DIR=$INSTALL_DIR/data"
   } > "$INSTALL_DIR/.env"
+  chmod 600 "$INSTALL_DIR/.env"
   ok ".env created with a fresh AES-256 encryption key"
 else
   ok ".env already exists — skipping (delete it to reset)"
 fi
 
-# ── create data directories ───────────────────────────────────────────────────
-mkdir -p "$INSTALL_DIR/data/uploads"
-ok "Data directory ready at $INSTALL_DIR/data"
+# ── data folder ───────────────────────────────────────────────────────────────
+# The database and encrypted files live in your user app-data folder, apart from
+# the program, so updates never touch them. Older installs keep ./data.
+if [ -f "$INSTALL_DIR/data/sharesecure.db" ]; then DATA_HINT="$INSTALL_DIR/data"
+elif [ "$PLATFORM" = "mac" ]; then DATA_HINT="$HOME/Library/Application Support/ShareSecure"
+else DATA_HINT="${XDG_DATA_HOME:-$HOME/.local/share}/sharesecure"; fi
 
 # ── done ──────────────────────────────────────────────────────────────────────
 echo ""
@@ -167,8 +170,8 @@ echo ""
 echo -e "  ${BOLD}Start:${RESET}   cd $INSTALL_DIR && npm start"
 echo -e "  ${BOLD}Open:${RESET}    http://localhost:$PORT"
 echo ""
-echo -e "  ${DIM}Your files are stored in $INSTALL_DIR/data/${RESET}"
-echo -e "  ${DIM}Edit .env to change the port, base URL, or encryption key.${RESET}"
+echo -e "  ${DIM}Your files are stored in $DATA_HINT${RESET}"
+echo -e "  ${DIM}Updates install from inside the app. Edit .env to change the port or base URL.${RESET}"
 echo ""
 
 # auto-start if running interactively. Read from /dev/tty: under `curl | bash`

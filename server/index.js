@@ -38,6 +38,9 @@ require('dotenv').config({ path: envPath });
 
 const express = require('express');
 const { db, UPLOADS_DIR } = require('./db');
+const { purgeExpired, purgeOrphans } = require('./purge');
+const { requireOwner } = require('./session');
+const updater = require('./updater');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
@@ -76,7 +79,14 @@ app.use((_req, res, next) => {
 
 // ── middleware ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: '2mb' }));
-app.use(express.static(PUBLIC_DIR, { maxAge: '1h', etag: true }));
+
+// nothing about a file or a session may be cached by the browser
+app.use(['/api', '/r'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+// revalidate on every load so an update never leaves a browser on stale code
+app.use(express.static(PUBLIC_DIR, { maxAge: 0, etag: true }));
 
 // ── api routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
@@ -87,7 +97,19 @@ app.use('/api', require('./routes/files'));
 // This endpoint only exists in the Express server, not in Cloudflare Pages functions,
 // so the frontend uses its presence to detect self-hosted mode.
 app.get('/api/mode', (_req, res) => {
-  res.json({ selfHostMode: true });
+  const setupRequired = db.prepare("SELECT COUNT(*) AS n FROM users WHERE access_code LIKE 'scrypt$%'").get().n === 0;
+  res.json({ selfHostMode: true, setupRequired, version: updater.status().current });
+});
+
+// ── updates (owner only) ──────────────────────────────────────────────────────
+app.get('/api/update/status', requireOwner, (_req, res) => res.json(updater.status()));
+app.post('/api/update/check', requireOwner, async (_req, res) => res.json(await updater.check()));
+app.post('/api/update/apply', requireOwner, async (_req, res) => {
+  try { res.json(await updater.apply()); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+app.post('/api/update/settings', requireOwner, (req, res) => {
+  res.json(updater.setAutoUpdate(req.body?.autoUpdate === true));
 });
 
 // ── viewer ───────────────────────────────────────────────────────────────────
@@ -99,7 +121,8 @@ app.get('/r/:shortId', (req, res) => {
   if (!file || !file.is_active) {
     return res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html'));
   }
-  if (file.expires_at && new Date(file.expires_at) < new Date()) {
+  if (file.expires_at && file.expires_at <= new Date().toISOString()) {
+    purgeExpired();
     return res.status(410).sendFile(path.join(PUBLIC_DIR, 'expired.html'));
   }
   res.sendFile(path.join(PUBLIC_DIR, 'viewer.html'));
@@ -125,6 +148,9 @@ app.get('/changelog', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'changelog.html'));
 });
 
+// ── sign in ───────────────────────────────────────────────────────────────────
+app.get('/signin', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'signin.html')));
+
 // ── self-host guide ───────────────────────────────────────────────────────────
 app.get('/self-host', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'self-host.html'));
@@ -134,47 +160,23 @@ app.get('/download', (req, res) => res.redirect(301, '/self-host'));
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));
 
-// ── expired file cleanup ──────────────────────────────────────────────────────
-function cleanupExpired() {
+// ── erase expired files ───────────────────────────────────────────────────────
+// Expired links are erased within 30 seconds (and instantly if someone opens one).
+function sweep() {
   try {
-    // collect stored filenames before deleting rows
-    const expired = db.prepare(
-      "SELECT DISTINCT stored_filename FROM files WHERE expires_at < datetime('now') AND stored_filename IS NOT NULL"
-    ).all();
-
-    const result = db.prepare(
-      "DELETE FROM files WHERE expires_at < datetime('now')"
-    ).run();
-
-    // remove orphaned disk files (only if no other active file still references them)
-    const stillReferenced = new Set(
-      db.prepare('SELECT DISTINCT stored_filename FROM files WHERE stored_filename IS NOT NULL').all()
-        .map(r => r.stored_filename)
-    );
-
-    let diskDeleted = 0;
-    for (const row of expired) {
-      if (row.stored_filename && !stillReferenced.has(row.stored_filename)) {
-        const fp = path.join(UPLOADS_DIR, row.stored_filename);
-        if (fs.existsSync(fp)) {
-          fs.unlinkSync(fp);
-          diskDeleted++;
-        }
-      }
-    }
-
-    if (result.changes > 0) {
-      console.log(`[cleanup] Removed ${result.changes} expired record(s), ${diskDeleted} file(s) from disk.`);
-    }
+    const n = purgeExpired();
+    if (n > 0) console.log(`  [cleanup] Erased ${n} expired link(s).`);
   } catch (err) {
     console.error('[cleanup] Error:', err.message);
   }
 }
 
-cleanupExpired();
-setInterval(cleanupExpired, 60 * 60 * 1000); // hourly
+// Self-hosted instances have no daily limit, so the old upload log isn't needed.
+db.exec('DELETE FROM upload_log');
+purgeOrphans();
+sweep();
+setInterval(sweep, 30 * 1000);
 
-// ── start ─────────────────────────────────────────────────────────────────────
 // ── start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, async () => {
   const { DATA_DIR, DB_PATH } = require('./db');
@@ -201,7 +203,10 @@ app.listen(PORT, async () => {
     }
   }
 
-  console.log(`\n  Database     →  ${DB_PATH}`);
+  updater.start();
+
+  console.log(`\n  Your data    →  ${DATA_DIR}`);
+  console.log(`  Database     →  ${DB_PATH}`);
   console.log(`  Uploads      →  ${UPLOADS_DIR}`);
   if (!process.env.ENCRYPTION_KEY) {
     console.warn('\n  [warn] ENCRYPTION_KEY not set — files stored unencrypted on disk.');

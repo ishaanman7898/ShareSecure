@@ -117,17 +117,18 @@ if (-not (Test-Path $envPath)) {
 PORT=$Port
 BASE_URL=http://localhost:$Port
 ENCRYPTION_KEY=$encKey
-DATA_DIR=$InstallDir\data
 "@ | Set-Content $envPath -Encoding UTF8
   Write-Ok ".env created with a fresh AES-256 encryption key"
 } else {
   Write-Ok ".env already exists - skipping (delete it to reset)"
 }
 
-# -- create data directories ---------------------------------------------------
-$dataDir = Join-Path $InstallDir "data\uploads"
-New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-Write-Ok "Data directory ready at $(Join-Path $InstallDir 'data')"
+# -- data folder --------------------------------------------------------------
+# The database and encrypted files live in %LOCALAPPDATA%\ShareSecure, apart from
+# the program and out of OneDrive, so updates never touch them. Older installs keep .\data.
+$legacyData = Join-Path $InstallDir "data"
+if (Test-Path (Join-Path $legacyData "sharesecure.db")) { $dataHint = $legacyData }
+else { $dataHint = Join-Path $env:LOCALAPPDATA "ShareSecure" }
 
 # -- create a start shortcut on Desktop ---------------------------------------
 try {
@@ -161,8 +162,8 @@ Write-Host ""
 Write-Host "  Start:   cd $InstallDir && npm start" -ForegroundColor White
 Write-Host "  Open:    http://localhost:$Port" -ForegroundColor White
 Write-Host ""
-Write-Host "  Your files are stored in $InstallDir\data" -ForegroundColor DarkGray
-Write-Host "  Edit .env to change the port, base URL, or encryption key." -ForegroundColor DarkGray
+Write-Host "  Your files are stored in $dataHint" -ForegroundColor DarkGray
+Write-Host "  Updates install from inside the app. Edit .env to change the port or base URL." -ForegroundColor DarkGray
 Write-Host ""
 
 $launch = Read-Host "  Start ShareSecure now? [Y/n]"

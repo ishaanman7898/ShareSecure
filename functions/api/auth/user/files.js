@@ -16,7 +16,7 @@ export async function onRequestGet(context) {
             FROM files
             WHERE is_active = 1
               AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
-              AND (expires_at IS NULL OR expires_at > datetime('now'))
+              AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             ORDER BY uploaded_at DESC`,
       args: [userTag, auth.userId]
     });

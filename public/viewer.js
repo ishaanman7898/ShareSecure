@@ -107,8 +107,8 @@ document.addEventListener('keydown', e => {
   // Annotation shortcuts (when annotations are enabled)
   if (annEnabled && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const keyMap = { c: 'cursor', p: 'pen', h: 'highlight', e: 'eraser' };
-    const colorKeys = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4, '6': 5, '7': 6, '8': 7, '9': 8, '0': 9 };
-    const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#f0f0ff','#64748b','#0f172a'];
+    const colorKeys = { '1': 0, '2': 1, '3': 2, '4': 3, '5': 4 };
+    const colors = [...document.querySelectorAll('.ann-color')].map(b => b.dataset.color);
     if (keyMap[key]) { setAnnTool(keyMap[key]); showKbToast(keyMap[key][0].toUpperCase() + keyMap[key].slice(1)); return; }
     if (key in colorKeys) {
       const idx = colorKeys[key];
@@ -121,13 +121,6 @@ document.addEventListener('keydown', e => {
     }
     if (key === 'z') { annUndoOne(); showKbToast('Undo'); return; }
     if (key === 'x') { clearPageAnnotations(); showKbToast('Cleared'); return; }
-  }
-
-  // Fullscreen
-  if (e.key === 'F11') {
-    e.preventDefault();
-    toggleFullscreen();
-    return;
   }
 
   // Escape: close share panel or exit fullscreen
@@ -193,14 +186,6 @@ document.addEventListener('keydown', e => {
     if (key === 'f') {
       e.preventDefault();
       toggleFitToWidth();
-      return;
-    }
-    // Rotate
-    if (key === 'r') {
-      e.preventDefault();
-      currentRotation = (currentRotation + 90) % 360;
-      renderAllPages();
-      showKbToast(`Rotated ${currentRotation}°`);
       return;
     }
   }
@@ -290,25 +275,6 @@ document.addEventListener('wheel', e => {
   }
 }, { passive: false });
 
-// ── fullscreen ─────────────────────────────────────────────────────────────────
-function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen().catch(() => {});
-  }
-}
-
-document.addEventListener('fullscreenchange', () => {
-  const isFs = !!document.fullscreenElement;
-  const btn = $('fullscreen-btn');
-  if (btn) {
-    btn.classList.toggle('active', isFs);
-    btn.querySelector('.fs-expand')?.classList.toggle('hidden', isFs);
-    btn.querySelector('.fs-shrink')?.classList.toggle('hidden', !isFs);
-  }
-});
-
 // ── fit to width ───────────────────────────────────────────────────────────────
 let fitMode = null;
 
@@ -341,28 +307,6 @@ async function applyFitToWidth() {
   } catch (_) {}
 }
 
-// ── theme management ────────────────────────────────────────────────────────
-function initTheme() {
-  const saved = localStorage.getItem('viewer_theme') || 'dark';
-  setTheme(saved);
-}
-
-function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('viewer_theme', theme);
-  const isDark = theme === 'dark';
-  $('theme-btn').querySelector('.theme-sun').classList.toggle('hidden', isDark);
-  $('theme-btn').querySelector('.theme-moon').classList.toggle('hidden', !isDark);
-  $('theme-meta').content = isDark ? '#0d0d12' : '#ffffff';
-}
-
-$('theme-btn').addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme');
-  setTheme(current === 'dark' ? 'light' : 'dark');
-});
-
-initTheme();
-
 // ── delete confirmation modal ───────────────────────────────────────────────────
 function showDeleteConfirm() {
   return new Promise(resolve => {
@@ -370,14 +314,8 @@ function showDeleteConfirm() {
     backdrop.className = 'delete-modal-backdrop';
     backdrop.innerHTML = `
       <div class="delete-modal-card">
-        <div class="delete-modal-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-          </svg>
-        </div>
         <p class="delete-modal-title">Delete this file?</p>
-        <p class="delete-modal-sub">This permanently removes the file and all share links. This action cannot be undone.</p>
+        <p class="delete-modal-sub">The file and every link to it are erased for everyone. This can’t be undone.</p>
         <div class="delete-modal-actions">
           <button class="delete-modal-cancel" id="del-cancel">Cancel</button>
           <button class="delete-modal-confirm" id="del-confirm">Delete</button>
@@ -413,36 +351,42 @@ async function assignFreshId() {
   } catch (_) {}
 }
 
+// ── leave no trace in this browser once the file is gone ──────────────────────
+function forgetFile() {
+  try {
+    localStorage.removeItem('owner_' + myShortId);
+    localStorage.removeItem('owner_' + rawShortId);
+  } catch {}
+}
+
+function fileGone() {
+  forgetFile();
+  document.body.innerHTML = '';
+  location.replace('/expired.html');
+}
+
 // ── countdown ─────────────────────────────────────────────────────────────────
 function startCountdown(expiresAt) {
-  if (!expiresAt) { $('countdown-wrap').style.display = 'none'; return; }
+  if (!expiresAt) return;
   const expiry = new Date(expiresAt).getTime();
   const wrap = $('countdown-wrap');
   const text = $('countdown-text');
 
   function tick() {
     const rem = expiry - Date.now();
-    if (rem <= 0) {
-      document.body.innerHTML = '';
-      window.close();
-      setTimeout(() => location.replace('/expired.html'), 300);
-      return;
-    }
+    if (rem <= 0) { fileGone(); return; }
     const s = Math.floor(rem / 1000);
     const days = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
-    if (days > 0) {
-      text.textContent = `${days}d ${h}h`;
-    } else if (h > 0) {
-      text.textContent = `${h}h ${String(m).padStart(2, '0')}m`;
-    } else if (m > 0) {
-      text.textContent = `${m}m ${String(sec).padStart(2, '0')}s`;
-    } else {
-      text.textContent = `${sec}s`;
-    }
-    wrap.className = 'countdown-wrap desktop-only' + (rem < 60000 ? ' critical' : rem < 300000 ? ' warn' : '');
+    const left = days > 0 ? `${days}d ${h}h`
+      : h > 0 ? `${h}h ${String(m).padStart(2, '0')}m`
+      : m > 0 ? `${m}m ${String(sec).padStart(2, '0')}s`
+      : `${sec}s`;
+    text.textContent = 'Expires in ' + left;
+    wrap.classList.toggle('critical', rem < 60000);
+    wrap.classList.toggle('warn', rem >= 60000 && rem < 300000);
     setTimeout(tick, 1000);
   }
   tick();
@@ -461,10 +405,7 @@ function startStatusPolling() {
   setInterval(async () => {
     try {
       const res = await fetch(`/api/info/${myShortId}`);
-      if (res.status === 404 || res.status === 410) {
-        document.body.innerHTML = '';
-        location.replace('/expired.html');
-      }
+      if (res.status === 404 || res.status === 410) fileGone();
     } catch (err) {}
   }, 5000);
 }
@@ -472,7 +413,7 @@ function startStatusPolling() {
 // ── pdf viewer logic ───────────────────────────────────────────────────────
 let pdfDoc = null;
 let zoomScale = 1.3;
-let currentRotation = 0;
+const currentRotation = 0;
 let isRendering = false;
 
 async function loadPDF(url) {
@@ -578,7 +519,6 @@ function setupMobileToolbar() {
 
   $('m-zoom-in')?.addEventListener('click', () => adjustZoom(+0.2));
   $('m-zoom-out')?.addEventListener('click', () => adjustZoom(-0.2));
-  $('m-share-btn')?.addEventListener('click', openSharePanel);
 }
 
 function setupPinchToZoom() {
@@ -655,16 +595,9 @@ $('page-num')?.addEventListener('change', (e) => {
   $('page-wrapper-' + target)?.scrollIntoView({ behavior: 'smooth' });
 });
 
-$('rotate-btn')?.addEventListener('click', async () => {
-  currentRotation = (currentRotation + 90) % 360;
-  showKbToast(`Rotated ${currentRotation}°`);
-  await renderAllPages();
-});
-
 $('zoom-in-btn')?.addEventListener('click', () => adjustZoom(+0.25));
 $('zoom-out-btn')?.addEventListener('click', () => adjustZoom(-0.25));
 $('fit-btn')?.addEventListener('click', toggleFitToWidth);
-$('fullscreen-btn')?.addEventListener('click', toggleFullscreen);
 
 // ── image ─────────────────────────────────────────────────────────────────────
 function loadImage(url) {
@@ -684,24 +617,7 @@ function loadImage(url) {
     }
   };
   img.onerror = () => showUnsupported();
-  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
-}
-
-// ── text ──────────────────────────────────────────────────────────────────────
-async function loadText(url) {
-  const text = await fetch(url).then(r => r.text());
-  $('text-doc').textContent = text;
-  hide('loader'); show('text-container');
-  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
-}
-
-// ── video ─────────────────────────────────────────────────────────────────────
-function loadVideo(url) {
-  const v = $('video-player');
-  v.src = url;
-  v.oncanplay = () => { hide('loader'); show('video-container'); };
-  v.onerror = () => showUnsupported();
-  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
+  hide('zoom-group');
 }
 
 // ── docx ──────────────────────────────────────────────────────────────────────
@@ -716,19 +632,11 @@ async function loadDocx(url) {
     docContent.innerHTML = result.value;
     hide('loader');
     show('docx-container');
-    hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
+    hide('zoom-group');
   } catch (err) {
     console.error('DOCX Load Error:', err);
     showUnsupported();
   }
-}
-
-// ── audio ─────────────────────────────────────────────────────────────────────
-function loadAudio(url, name) {
-  $('audio-player').src = url;
-  $('audio-title').textContent = name;
-  hide('loader'); show('audio-container');
-  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
 }
 
 // ── unsupported ───────────────────────────────────────────────────────────────
@@ -736,7 +644,7 @@ function showUnsupported() {
   hide('loader');
   $('unsupported-title').textContent = fileInfo?.filename || 'Unknown file';
   show('unsupported');
-  hide('zoom-in-btn'); hide('zoom-out-btn'); hide('zoom-label');
+  hide('zoom-group');
 }
 
 
@@ -746,18 +654,12 @@ function showSendDialog() {
   backdrop.className = 'delete-modal-backdrop';
   backdrop.innerHTML = `
     <div class="delete-modal-card">
-      <div class="delete-modal-icon" style="background:var(--accent-glow);border-color:var(--border-hover);color:var(--text)">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-        </svg>
-      </div>
-      <p class="delete-modal-title">Send to user</p>
-      <p class="delete-modal-sub" id="send-dialog-sub">They won't know who sent it. Enter their exact username.</p>
-      <input id="send-username-input" type="text" placeholder="Username" autocomplete="off" spellcheck="false"
-        style="width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;background:rgba(0,0,0,0.4);color:var(--text,#f0f0ff);font-size:0.9rem;font-family:inherit;outline:none;margin:4px 0;" />
+      <p class="delete-modal-title">Send to a user</p>
+      <p class="delete-modal-sub" id="send-dialog-sub">It appears in their inbox. They won’t see who sent it.</p>
+      <input id="send-username-input" type="text" placeholder="Their username" autocomplete="off" spellcheck="false" aria-label="Username" />
       <div class="delete-modal-actions">
         <button class="delete-modal-cancel" id="send-cancel-btn">Cancel</button>
-        <button class="delete-modal-confirm" id="send-confirm-btn" style="background:rgba(16,185,129,0.85);border-color:rgba(16,185,129,0.5)">Send</button>
+        <button class="delete-modal-confirm is-primary" id="send-confirm-btn">Send</button>
       </div>
     </div>
   `;
@@ -793,16 +695,16 @@ function showSendDialog() {
       const data = await res.json();
       if (data.sent) {
         close();
-        showKbToast('Sent!');
+        showKbToast('Sent');
       } else {
-        sub.textContent = data.error || 'Failed to send.';
-        sub.style.color = 'var(--danger,#ef4444)';
+        sub.textContent = data.error || 'Couldn’t send. Check the username and try again.';
+        sub.style.color = 'var(--danger)';
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Send';
       }
     } catch {
-      sub.textContent = 'Network error. Try again.';
-      sub.style.color = 'var(--danger,#ef4444)';
+      sub.textContent = 'Couldn’t reach the server. Try again.';
+      sub.style.color = 'var(--danger)';
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Send';
     }
@@ -844,10 +746,10 @@ function openSharePanel() {
         if (!warningText) {
           warningText = document.createElement('div');
           warningText.id = 'viewer-localhost-warn';
-          warningText.style.color = '#f59e0b';
-          warningText.style.fontSize = '0.75rem';
-          warningText.style.marginTop = '0.5rem';
-          warningText.textContent = 'Warning: This link is pointing to your localhost and can only be accessed on this specific computer. Use your local network IP to share across devices on the same network.';
+          warningText.style.color = 'var(--muted)';
+          warningText.style.fontSize = '0.78rem';
+          warningText.style.paddingTop = '4px';
+          warningText.textContent = 'This link only works on this computer. Set BASE_URL or turn on the tunnel to share it with other devices.';
           $('share-link-text').parentNode.appendChild(warningText);
         }
       }
@@ -857,7 +759,7 @@ function openSharePanel() {
 
       $('share-copy-btn').onclick = () => {
         navigator.clipboard.writeText(data.shortUrl).then(() => {
-          $('share-copy-btn').textContent = 'Copied!';
+          $('share-copy-btn').textContent = 'Copied';
           $('share-copy-btn').classList.add('copied');
           setTimeout(() => { $('share-copy-btn').textContent = 'Copy'; $('share-copy-btn').classList.remove('copied'); }, 2000);
         });
@@ -871,7 +773,7 @@ function openSharePanel() {
       };
     })
     .catch(() => {
-      $('share-panel-body').innerHTML = '<p style="color:red;padding:20px;font-size:.85rem">Failed to generate link.</p>';
+      $('share-panel-body').innerHTML = '<p class="share-note">Couldn’t create a link. Close this panel and try again.</p>';
     });
 }
 
@@ -880,7 +782,7 @@ function closeSharePanel() { hide('share-overlay'); hide('share-panel'); }
 // ── annotations ───────────────────────────────────────────────────────────────
 let annEnabled = false;
 let annTool = 'cursor';
-let annColor = '#ef4444';
+let annColor = '#111111';
 let annStrokes = {};
 let annSaveTimer = null;
 
@@ -898,7 +800,7 @@ function setAnnStatus(msg, isError) {
   const el = $('ann-status');
   if (!el) return;
   el.textContent = msg;
-  el.style.color = isError ? 'var(--danger,#ef4444)' : 'var(--text-muted,#8892a4)';
+  el.style.color = isError ? 'var(--danger)' : '';
 }
 
 function scheduleSave() {
@@ -1054,8 +956,7 @@ function initAnnToolbar() {
   $('ann-undo')?.addEventListener('click', annUndoOne);
   $('ann-clear')?.addEventListener('click', clearPageAnnotations);
 
-  const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#a855f7','#ec4899','#f0f0ff','#64748b','#0f172a'];
-  document.querySelectorAll('.ann-color').forEach((btn, i) => {
+  document.querySelectorAll('.ann-color').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.ann-color').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -1103,7 +1004,7 @@ function showAnnToolbar(allowAnnotations) {
   fileInfo = await loadMeta();
   if (!fileInfo) return;
 
-  const { filename, size, mimeType, expiresAt, integrityHash, allowDownload, allowAnnotations } = fileInfo;
+  const { filename, size, mimeType, expiresAt, allowDownload, allowAnnotations } = fileInfo;
   document.title = filename + ' — ShareSecure';
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
@@ -1121,15 +1022,10 @@ function showAnnToolbar(allowAnnotations) {
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
 
-  if (integrityHash && isOwner) {
-    const badge = $('integrity-badge');
-    if (badge) {
-      badge.textContent = '🔒 SHA-256: ' + integrityHash.substring(0, 12) + '…';
-      badge.title = 'Full hash: ' + integrityHash;
-      badge.classList.remove('hidden');
-    }
+  // sending to another user needs an account on the hosted version; self-hosted has one owner only
+  if (sessionStorage.getItem('user_token')) {
+    fetch('/api/mode').then(r => r.json()).then(m => { if (!m.selfHostMode) show('send-to-user-btn'); }).catch(() => {});
   }
-
   $('send-to-user-btn').addEventListener('click', showSendDialog);
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
@@ -1152,18 +1048,18 @@ function showAnnToolbar(allowAnnotations) {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      alert('Download failed. Try again.');
+      showKbToast('Download failed. Try again.');
     } finally {
       btn.disabled = false;
       btn.querySelector('span') && (btn.querySelector('span').textContent = 'Download');
     }
   });
 
+  const deleteIcon = $('delete-file-btn').innerHTML;
   $('delete-file-btn').addEventListener('click', async () => {
     const confirmed = await showDeleteConfirm();
     if (!confirmed) return;
 
-    $('delete-file-btn').textContent = '⏳';
     $('delete-file-btn').disabled = true;
     try {
       const res = await fetch(`/api/delete/${myShortId}`, {
@@ -1172,16 +1068,14 @@ function showAnnToolbar(allowAnnotations) {
         body: JSON.stringify({ deleteToken: myDeleteToken })
       });
       const data = await res.json();
-      if (data.deleted) {
-        localStorage.removeItem('owner_' + myShortId);
-        document.body.innerHTML = '';
-        location.replace('/expired.html');
-      } else {
-        $('delete-file-btn').innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      if (data.deleted) fileGone(); else {
+        $('delete-file-btn').innerHTML = deleteIcon;
+        showKbToast('Couldn’t delete. Try again.');
         $('delete-file-btn').disabled = false;
       }
     } catch {
-      $('delete-file-btn').innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+      $('delete-file-btn').innerHTML = deleteIcon;
+      showKbToast('Couldn’t delete. Try again.');
       $('delete-file-btn').disabled = false;
     }
   });
@@ -1192,8 +1086,5 @@ function showAnnToolbar(allowAnnotations) {
     await loadPDF(rawUrl);
   } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
   else if (mimeType.startsWith('image/')) { loadImage(rawUrl); }
-  else if (mimeType.startsWith('video/')) { loadVideo(rawUrl); }
-  else if (mimeType.startsWith('audio/')) { loadAudio(rawUrl, filename); }
-  else if (mimeType.startsWith('text/') || mimeType === 'application/json') { await loadText(rawUrl); }
   else { showUnsupported(); }
 })();

@@ -37,12 +37,53 @@
 
     <div class="timeline">
 
-      <!-- v1.5.0 -->
+      <!-- v1.6.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.6.0</span>
+          <span class="release-date">September 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Sign in</h3>
+          <ul class="change-list">
+            <li><strong>Sign-in page</strong> — A proper page for signing in and creating an account replaces the pop-up.</li>
+            <li><strong>Self-hosted owner account</strong> — The desktop version asks you to create an owner account on first run. Only the owner can upload and manage files. Passwords use salted scrypt, sessions are signed and expire, and repeated wrong passwords lock sign-in.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Nothing left behind</h3>
+          <ul class="change-list">
+            <li><strong>Erased on expiry</strong> — Self-hosted files are erased within 30 seconds of expiring, or immediately when someone opens the dead link. The database uses <code>secure_delete</code>, which destroys each file’s own key, and the stored file is overwritten before it’s removed.</li>
+            <li><strong>Expiry fix</strong> — Links that expired earlier the same day were sometimes kept until the next day. Fixed on both versions.</li>
+            <li><strong>Browser cleanup</strong> — Expired shares disappear from your list and your browser’s storage on their own.</li>
+            <li><strong>Your data folder</strong> — Self-hosted data now lives in your user app-data folder, apart from the program and out of OneDrive.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Updates</h3>
+          <ul class="change-list">
+            <li><strong>In-app updates</strong> — The desktop version shows when a new release is out. Install it with one click, or turn on automatic updates. ShareSecure restarts itself on the new version.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Viewer and security</h3>
+          <ul class="change-list">
+            <li><strong>Simpler viewer</strong> — Removed rotate, theme, fullscreen, the badge and the footer. Five pen colours instead of ten; sending to a user moved into the share panel.</li>
+            <li><strong>ZK proof checks</strong> — The UniGroth verifier now recomputes its checks itself and binds every opened value to its position and the public inputs.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.5.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.5.0</span>
           <span class="release-date">September 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">

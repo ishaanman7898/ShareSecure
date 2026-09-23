@@ -97,7 +97,7 @@ export async function getClientById(_shortId, env) {
 export async function globalPurgeExpired(env, context) {
   const client = getFilesClient(env);
   context.waitUntil(
-    client.execute({ sql: "DELETE FROM files WHERE expires_at < datetime('now')", args: [] }).catch(() => {})
+    client.execute({ sql: "DELETE FROM files WHERE expires_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", args: [] }).catch(() => {})
   );
 }
 

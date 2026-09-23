@@ -21,7 +21,7 @@
   <main class="container sh">
     <section class="sh-hero">
       <h1 class="sh-title">Run your own ShareSecure</h1>
-      <p class="sh-lede">One command installs it on your computer or server. You get a private instance with no account, no daily upload limit, and files stored only on your machine.</p>
+      <p class="sh-lede">One command installs it on your computer or server. You get a private instance with no daily upload limit, files stored only on your machine, and updates you can install from inside the app.</p>
     </section>
 
     <section class="sh-install" aria-label="Install command">
@@ -63,7 +63,7 @@
             <tr><td><code>BASE_URL</code></td><td>localhost</td><td>Address used in share links. Set it to your domain if you run it on a server.</td></tr>
             <tr><td><code>USE_LOCAL_TUNNEL</code></td><td>true</td><td>Creates a temporary public link so other devices can open your shares. Turn off if you have your own domain.</td></tr>
             <tr><td><code>ENCRYPTION_KEY</code></td><td>Generated</td><td>Encrypts every file on disk. Changing it makes existing files unreadable.</td></tr>
-            <tr><td><code>DATA_DIR</code></td><td>./data</td><td>Where the database and uploaded files are stored.</td></tr>
+            <tr><td><code>DATA_DIR</code></td><td>App-data folder</td><td>Where the database and encrypted files are stored. Defaults to your user app-data folder.</td></tr>
           </tbody>
         </table>
       </div>

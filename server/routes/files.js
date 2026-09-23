@@ -14,6 +14,24 @@ const {
   encryptWithPerFileKey, decryptWithPerFileKey,
   stripDocxMetadata, stripPdfMetadata,
 } = require('../utils');
+const { requireOwner } = require('../session');
+const { purgeExpired, purgeCluster } = require('../purge');
+
+const isExpired = file => Boolean(file.expires_at && file.expires_at <= new Date().toISOString());
+
+// A link that has expired is erased the moment anyone touches it, not at the next sweep.
+function goneIfExpired(file, res, asJson = true) {
+  if (!file) {
+    asJson ? res.status(404).json({ error: 'File not found' }) : res.status(404).send('Not found');
+    return true;
+  }
+  if (isExpired(file)) {
+    purgeExpired();
+    asJson ? res.status(410).json({ error: 'Link expired' }) : res.status(410).send('Expired');
+    return true;
+  }
+  return false;
+}
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -75,7 +93,7 @@ const upload = multer({
 });
 
 // ── POST /api/upload ──────────────────────────────────────────────────────────
-router.post('/upload', upload.single('file'), (req, res) => {
+router.post('/upload', requireOwner, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
   // ── server-side magic byte validation (zero-knowledge: no logging) ───────
@@ -88,21 +106,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
   // Override user-supplied MIME with content-derived MIME — prevents spoofing
   req.file.mimetype = detected.mime;
 
-  const auth = decodeToken(req.headers.authorization);
-
-  // rate-limit: 5 uploads per 24h per authenticated session
-  // Uses upload_log (pseudonymous tag) so count persists even if files are deleted.
-  let userTag = null;
-  if (auth) {
-    userTag = getUserTag(auth.userId);
-    const row = db.prepare(
-      "SELECT COUNT(*) AS count FROM upload_log WHERE user_tag = ? AND uploaded_at > datetime('now', '-1 day')"
-    ).get(userTag);
-
-    if (row.count >= 5) {
-      return res.status(429).json({ error: 'Upload limit reached (5 files per 24h)' });
-    }
-  }
+  // Only the signed-in owner can upload to a self-hosted instance, so there is
+  // no daily limit and no upload log.
 
   const rawHours = parseFloat(req.body.expires_hours) || 1;
   const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
@@ -163,8 +168,7 @@ router.post('/upload', upload.single('file'), (req, res) => {
 
   // Privacy improvement: user_tag is no longer stored on the files row.
   // The dashboard is now client-side (localStorage), so there is no server-side
-  // association between an upload and a user account.  Rate-limit counting still
-  // uses upload_log (pseudonymous tag) which is separate from the files table.
+  // association between an upload and a user account.
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
@@ -178,15 +182,6 @@ router.post('/upload', upload.single('file'), (req, res) => {
     shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
     allow_annotations, allow_download
   );
-
-  // Log the upload for rate-limit counting.
-  // Count persists even if the file is later deleted — prevents quota circumvention.
-  // short_id is intentionally NOT stored here — linking a pseudonymous tag to a specific
-  // file ID would let a DB leak reconstruct upload activity even without usernames.
-  if (userTag) {
-    db.prepare('INSERT INTO upload_log (user_tag, uploaded_at) VALUES (?, ?)')
-      .run(userTag, uploaded_at);
-  }
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   res.json({
@@ -208,10 +203,7 @@ router.get('/info/:shortId', (req, res) => {
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
 
-  if (!file) return res.status(404).json({ error: 'File not found' });
-  if (file.expires_at && new Date(file.expires_at) < new Date()) {
-    return res.status(410).json({ error: 'Link expired' });
-  }
+  if (goneIfExpired(file, res)) return;
 
   const encKey   = getEncKey();
   const filename = decryptString(file.original_filename, encKey);
@@ -277,8 +269,7 @@ router.get('/raw/:shortId', (req, res) => {
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
-  if (!file) return res.status(404).send('Not found');
-  if (file.expires_at && new Date(file.expires_at) < new Date()) return res.status(410).send('Expired');
+  if (goneIfExpired(file, res, false)) return;
 
   pipeFile(res, file, 'inline');
 });
@@ -289,8 +280,7 @@ router.get('/download/:shortId', (req, res) => {
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
-  if (!file) return res.status(404).json({ error: 'Not found' });
-  if (file.expires_at && new Date(file.expires_at) < new Date()) return res.status(410).json({ error: 'Expired' });
+  if (goneIfExpired(file, res)) return;
   if (!file.allow_download) return res.status(403).json({ error: 'Download not permitted for this file' });
 
   pipeFile(res, file, 'attachment');
@@ -303,47 +293,20 @@ router.post('/delete/:shortId', (req, res) => {
   const short_id     = req.params.shortId;
 
   const file = db.prepare(
-    'SELECT short_id, user_tag, delete_token, cluster_id FROM files WHERE short_id = ?'
+    'SELECT short_id, delete_token, cluster_id FROM files WHERE short_id = ?'
   ).get(short_id);
 
   if (!file) return res.status(404).json({ error: 'File not found' });
 
-  const isOwner = auth && file.user_tag && file.user_tag === getUserTag(auth.userId);
+  const isOwner = Boolean(auth);   // the only account on a self-hosted instance is the owner
   const hasToken = deleteToken && file.delete_token && file.delete_token === deleteToken;
 
   if (!isOwner && !hasToken) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  // cascade: delete this cluster (original + all reshares)
-  const clusterId = file.cluster_id || short_id;
-
-  // collect all short_ids in this cluster before deletion
-  const clusterRows = db.prepare(
-    'SELECT short_id, stored_filename FROM files WHERE cluster_id = ?'
-  ).all(clusterId);
-
-  // upload_log entries are intentionally NOT removed on deletion — the daily quota
-  // is consumed at upload time and persists regardless of whether the file is deleted,
-  // preventing users from circumventing the 5-files/24h limit by uploading then deleting.
-
-  // collect distinct stored filenames before deleting DB rows
-  const clusterFiles = clusterRows;
-
-  db.prepare('DELETE FROM files WHERE cluster_id = ?').run(clusterId);
-
-  // remove disk files that are no longer referenced anywhere
-  const stillUsed = new Set(
-    db.prepare('SELECT DISTINCT stored_filename FROM files WHERE stored_filename IS NOT NULL').all()
-      .map(r => r.stored_filename)
-  );
-
-  for (const row of clusterFiles) {
-    if (row.stored_filename && !stillUsed.has(row.stored_filename)) {
-      const fp = path.join(UPLOADS_DIR, row.stored_filename);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
-    }
-  }
+  // cascade: erase this cluster (original + all reshares) and shred the stored file
+  purgeCluster(file.cluster_id || short_id);
 
   res.json({ deleted: true });
 });
@@ -354,8 +317,7 @@ router.post('/reshare/:shortId', (req, res) => {
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
-  if (!file) return res.status(404).json({ error: 'File not found' });
-  if (file.expires_at && new Date(file.expires_at) < new Date()) return res.status(410).json({ error: 'Expired' });
+  if (goneIfExpired(file, res)) return;
 
   const newShortId      = generateId(8);
   const newDeleteToken  = generateId(24);
@@ -389,10 +351,11 @@ router.post('/reshare/:shortId', (req, res) => {
 // ── GET /api/annotations/:shortId ────────────────────────────────────────────
 router.get('/annotations/:shortId', (req, res) => {
   const file = db.prepare(
-    'SELECT annotations FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT annotations, expires_at, allow_annotations FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
-  if (!file) return res.status(404).json({ error: 'File not found' });
+  if (goneIfExpired(file, res)) return;
+  if (!file.allow_annotations) return res.json({ annotations: [] });
 
   const encKey = getEncKey();
   const raw    = decryptString(file.annotations, encKey);
@@ -414,10 +377,11 @@ router.post('/annotations/:shortId', (req, res) => {
   if (annotStr.length > 1024 * 1024) return res.status(413).json({ error: 'Annotations too large (max 1 MB)' });
 
   const file = db.prepare(
-    'SELECT short_id FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT short_id, expires_at, allow_annotations FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
-  if (!file) return res.status(404).json({ error: 'File not found' });
+  if (goneIfExpired(file, res)) return;
+  if (!file.allow_annotations) return res.status(403).json({ error: 'Annotations are turned off for this file' });
 
   const encKey    = getEncKey();
   const encAnnot  = encryptString(annotStr, encKey);
