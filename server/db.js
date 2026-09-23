@@ -109,6 +109,9 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN wrapped_key TEXT',
   // link upload_log entry back to the file so deletion can restore the daily count
   'ALTER TABLE upload_log ADD COLUMN short_id TEXT',
+  // files people send to the owner: 'pending' until accepted, then 'accepted'
+  'ALTER TABLE files ADD COLUMN inbox_status TEXT',
+  'ALTER TABLE files ADD COLUMN inbox_note TEXT',
 ];
 
 for (const sql of migrations) {

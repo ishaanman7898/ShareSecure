@@ -389,7 +389,12 @@ uploadBtn.addEventListener('click', async () => {
     xhr.onload = async () => {
       if (xhr.status === 200) {
         const data = JSON.parse(xhr.responseText);
+        const sendTo = selfHostMode ? '' : (document.getElementById('send-to-input')?.value.trim() || '');
         showResult(data, selectedFile);
+        if (sendTo) {
+          sendToUser(data.shortId, sendTo);
+          document.getElementById('send-to-input').value = '';
+        }
         showToast('Link created.', 'success');
         if (userToken) updateDashboard();
         if (selfHostMode) renderFileList(loadUploadHistory());
@@ -538,10 +543,19 @@ function tokenUsername() {
 
 function showSignedIn(username) {
   authStatus.innerHTML = `
+    <button class="btn-icon inbox-bell" id="inbox-bell" aria-label="No file requests" title="Files sent to you">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="bell-badge hidden" id="inbox-badge"></span>
+    </button>
     <span class="user-name">Signed in as <strong>${escapeHtml(username)}</strong></span>
     <button class="btn btn-ghost" id="logout-btn">Sign out</button>
   `;
   document.getElementById('logout-btn').addEventListener('click', logout);
+  document.getElementById('inbox-bell').addEventListener('click', () => {
+    const title = document.getElementById('inbox-title');
+    title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    title?.focus({ preventScroll: true });
+  });
   document.body.classList.add('is-logged-in');
   landingPage.classList.add('hidden');
   document.getElementById('app-grid')?.classList.remove('hidden');
@@ -551,8 +565,9 @@ function initAuth() {
   const username = userToken && tokenUsername();
   if (username) {
     showSignedIn(username);
+    document.getElementById('send-to-wrap')?.classList.remove('hidden');
     updateDashboard();
-    updateInbox();
+    startInboxPolling();
   } else {
     if (userToken) logout();
     authStatus.innerHTML = `<a class="btn btn-ghost" href="/signin">Sign in</a>`;
@@ -570,10 +585,10 @@ function initSelfHost() {
   if (!username) { location.replace('/signin'); return; }
 
   showSignedIn(username);
-  // no other accounts exist on a self-hosted instance, so nobody can send you files
-  document.getElementById('inbox-section')?.classList.add('hidden');
   if (uploadCount) uploadCount.textContent = 'No limit';
   renderFileList(loadUploadHistory());
+  startInboxPolling();
+  initReceive();
   initUpdates();
 }
 
@@ -593,42 +608,235 @@ async function updateDashboard() {
   } catch { /* network error — keep showing cached list */ }
 }
 
+// ── inbox: files other people send you ────────────────────────────────────────
+// Files arrive as requests. Nothing opens until you accept it; declining erases it.
+const inboxRequests = document.getElementById('inbox-requests');
+const notifyToggle = document.getElementById('notify-toggle');
+const NOTIFY_KEY = 'ss_notify';
+const SEEN_KEY = 'ss_seen_requests';
+const BASE_TITLE = document.title;
+let inboxTimer = null;
+let pendingCount = 0;
+
+function seenRequests() {
+  try { return new Set(JSON.parse(sessionStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
+}
+
+function rememberSeen(ids) {
+  try { sessionStorage.setItem(SEEN_KEY, JSON.stringify([...ids])); } catch {}
+}
+
+function notificationsOn() {
+  return 'Notification' in window && Notification.permission === 'granted' && localStorage.getItem(NOTIFY_KEY) === 'on';
+}
+
+function renderNotifyToggle() {
+  if (!notifyToggle) return;
+  if (!('Notification' in window)) { notifyToggle.classList.add('hidden'); return; }
+  notifyToggle.classList.remove('hidden');
+  notifyToggle.disabled = Notification.permission === 'denied';
+  notifyToggle.textContent = Notification.permission === 'denied'
+    ? 'Notifications blocked'
+    : notificationsOn() ? 'Notifications on' : 'Turn on notifications';
+  notifyToggle.title = Notification.permission === 'denied'
+    ? 'Allow notifications for this site in your browser settings to turn them on.'
+    : '';
+}
+
+notifyToggle?.addEventListener('click', async () => {
+  if (notificationsOn()) {
+    localStorage.setItem(NOTIFY_KEY, 'off');
+    showToast('Notifications turned off.', 'info', 2500);
+  } else {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      localStorage.setItem(NOTIFY_KEY, 'on');
+      showToast('You’ll be notified when someone sends you a file.', 'success', 3000);
+    }
+  }
+  renderNotifyToggle();
+});
+
+function setPendingBadge(count) {
+  pendingCount = count;
+  const bell = document.getElementById('inbox-bell');
+  const badge = document.getElementById('inbox-badge');
+  if (badge) {
+    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.classList.toggle('hidden', count === 0);
+  }
+  if (bell) bell.setAttribute('aria-label', count ? `${count} file ${count === 1 ? 'request' : 'requests'} waiting` : 'No file requests');
+  document.title = count ? `(${count}) ${BASE_TITLE}` : BASE_TITLE;
+}
+
+function announce(newCount) {
+  const text = newCount === 1 ? 'Someone sent you a file.' : `${newCount} new files were sent to you.`;
+  showToast(`${text} Accept or decline it in Sent to you.`, 'info', 6000);
+  // a system notification only when the tab isn't in front of you; no file names on the lock screen
+  if (notificationsOn() && document.hidden) {
+    try {
+      const n = new Notification('ShareSecure', {
+        body: `${text} Open ShareSecure to accept or decline.`,
+        tag: 'sharesecure-inbox',
+        icon: '/mark.svg',
+      });
+      n.onclick = () => { window.focus(); document.getElementById('inbox-title')?.focus(); n.close(); };
+    } catch {}
+  }
+}
+
 async function updateInbox() {
   if (!userToken) return;
   try {
     const res = await fetch('/api/inbox', { headers: authHeaders() });
+    if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
     const data = await res.json();
-    renderInbox(data.files || []);
-    const count = (data.files || []).length;
-    const inboxCount = document.getElementById('inbox-count');
-    if (inboxCount) inboxCount.textContent = count > 0 ? `${count} received` : '';
+    const files = (data.files || []).filter(f => !f.expires_at || new Date(f.expires_at) > Date.now());
+    const pending = files.filter(f => f.status === 'pending');
+
+    const seen = seenRequests();
+    const fresh = pending.filter(f => !seen.has(f.short_id));
+    if (fresh.length && inboxTimer) announce(fresh.length);   // not on the very first load
+    pending.forEach(f => seen.add(f.short_id));
+    rememberSeen(seen);
+
+    setPendingBadge(pending.length);
+    renderRequests(pending);
+    renderInbox(files.filter(f => f.status !== 'pending'));
   } catch {}
 }
+
+function startInboxPolling() {
+  renderNotifyToggle();
+  updateInbox().finally(() => {
+    if (!inboxTimer) inboxTimer = setInterval(updateInbox, 30 * 1000);
+  });
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && inboxTimer) updateInbox();
+});
+
+function renderRequests(pending) {
+  if (!inboxRequests) return;
+  if (!pending.length) { inboxRequests.innerHTML = ''; return; }
+  inboxRequests.innerHTML = pending.map(f => `
+    <div class="request" data-id="${escapeHtml(f.short_id)}">
+      <div class="request-top">
+        <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
+        <div class="file-item-info">
+          <span class="file-item-name">${escapeHtml(f.original_filename || 'Untitled')}</span>
+          <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, expires in ${formatCountdown(new Date(f.expires_at) - Date.now())}</span>
+        </div>
+      </div>
+      ${f.note ? `<p class="request-note">“${escapeHtml(f.note)}”</p>` : ''}
+      <div class="request-actions">
+        <button class="btn btn-ghost" data-action="decline">Decline</button>
+        <button class="btn btn-primary" data-action="accept">Accept</button>
+      </div>
+    </div>`).join('');
+}
+
+inboxRequests?.addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.request');
+  const action = btn.dataset.action;
+  card.querySelectorAll('button').forEach(b => { b.disabled = true; });
+  try {
+    const res = await fetch(`/api/inbox/${encodeURIComponent(card.dataset.id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ action }),
+    });
+    if (!res.ok) throw new Error();
+    showToast(action === 'accept' ? 'Accepted. You can open it now.' : 'Declined. The file was erased.', 'success', 3000);
+    updateInbox();
+  } catch {
+    showToast('Couldn’t update the request. Try again.', 'error');
+    card.querySelectorAll('button').forEach(b => { b.disabled = false; });
+  }
+});
 
 function renderInbox(files) {
   const list = document.getElementById('inbox-list');
   if (!list) return;
-  const live = (files || []).filter(f => !f.expires_at || new Date(f.expires_at) > Date.now());
-  if (live.length === 0) {
-    list.innerHTML = '<p class="empty-msg">No files received.</p>';
+  if (!files.length) {
+    list.innerHTML = pendingCount ? '' : '<p class="empty-msg">No files received.</p>';
     return;
   }
-  list.innerHTML = live.map(f => {
-    const expiryStr = f.expires_at ? `${formatCountdown(new Date(f.expires_at) - Date.now())} left` : 'No expiry';
-    return `
-      <div class="file-item">
-        <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
-        <div class="file-item-info">
-          <span class="file-item-name">${escapeHtml(f.original_filename || 'Untitled')}</span>
-          <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, ${expiryStr}</span>
-        </div>
-        <div class="file-item-actions">
-          <a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>
-        </div>
-      </div>`;
-  }).join('');
+  list.innerHTML = files.map(f => `
+    <div class="file-item">
+      <div class="file-icon">${getFileIcon(f.mime_type || '')}</div>
+      <div class="file-item-info">
+        <span class="file-item-name">${escapeHtml(f.original_filename || 'Untitled')}</span>
+        <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, ${f.expires_at ? `${formatCountdown(new Date(f.expires_at) - Date.now())} left` : 'No expiry'}</span>
+      </div>
+      <div class="file-item-actions">
+        <a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>
+      </div>
+    </div>`).join('');
 }
+
+// ── web version: send a new upload straight to someone ───────────────────────
+async function sendToUser(shortId, username) {
+  try {
+    const res = await fetch(`/api/send/${encodeURIComponent(shortId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ targetUsername: username }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (data.sent) showToast(`Sent to ${username}. They’ll accept or decline it.`, 'success', 5000);
+    else showToast(data.error === 'User not found' ? `There’s no user called ${username}.` : (data.error || 'Couldn’t send the file.'), 'error', 6000);
+  } catch {
+    showToast('Couldn’t send the file. Try again from the file’s Share panel.', 'error', 6000);
+  }
+}
+
+// ── desktop version: let people send the owner files ─────────────────────────
+const receiveSection = document.getElementById('receive-section');
+const receiveToggle = document.getElementById('receive-toggle');
+
+function renderReceive(s) {
+  receiveToggle.checked = !!s.enabled;
+  document.getElementById('receive-info').classList.toggle('hidden', !s.enabled);
+  document.getElementById('receive-username').textContent = s.username || '';
+  document.getElementById('receive-url').textContent = s.sendUrl || `${location.origin}/send`;
+}
+
+async function initReceive() {
+  if (!receiveSection) return;
+  try {
+    const res = await fetch('/api/settings/incoming', { headers: authHeaders() });
+    if (!res.ok) return;
+    receiveSection.classList.remove('hidden');
+    renderReceive(await res.json());
+  } catch {}
+}
+
+receiveToggle?.addEventListener('change', async () => {
+  try {
+    const res = await fetch('/api/settings/incoming', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ enabled: receiveToggle.checked }),
+    });
+    if (!res.ok) throw new Error();
+    renderReceive(await res.json());
+    showToast(receiveToggle.checked ? 'People can now send you files for approval.' : 'Nobody can send you files now.', 'success', 3000);
+  } catch {
+    receiveToggle.checked = !receiveToggle.checked;
+    showToast('Couldn’t change the setting. Try again.', 'error');
+  }
+});
+
+document.getElementById('receive-copy')?.addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('receive-url').textContent)
+    .then(() => showToast('Link copied.', 'success', 2500))
+    .catch(() => showToast('Couldn’t copy. Select the link and copy it manually.', 'warn'));
+});
 
 const EMPTY_LIST = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
 const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;

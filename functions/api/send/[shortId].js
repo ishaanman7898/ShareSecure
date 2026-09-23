@@ -28,6 +28,7 @@ export async function onRequestPost(context) {
   if (!targetUsername) {
     return Response.json({ error: 'targetUsername required' }, { status: 400 });
   }
+  const note = String(body.note || '').trim().slice(0, 140);
 
   const authClient = getAuthClient(env);
   const filesClient = getFilesClient(env);
@@ -56,11 +57,29 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File expired' }, { status: 410 });
   }
 
-  // idempotent schema migration
-  try {
-    await filesClient.execute({ sql: 'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT', args: [] });
-  } catch {}
+  // idempotent schema migrations
+  for (const sql of [
+    'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
+    'ALTER TABLE files ADD COLUMN inbox_status TEXT',
+    'ALTER TABLE files ADD COLUMN inbox_note TEXT',
+  ]) {
+    try { await filesClient.execute({ sql, args: [] }); } catch {}
+  }
 
+  // Files arrive as requests the recipient has to accept. Cap how many can wait
+  // so nobody can flood someone's inbox.
+  const waiting = await filesClient.execute({
+    sql: `SELECT COUNT(*) AS n FROM files
+          WHERE recipient_user_tag = ? AND inbox_status = 'pending'
+            AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+    args: [recipientTag]
+  });
+  if (Number(waiting.rows[0].n) >= 20) {
+    return Response.json({ error: 'Their inbox is full right now. Try again later.' }, { status: 429 });
+  }
+
+  // The copy is stored inactive (is_active = 0) until the recipient accepts it,
+  // so every viewing endpoint treats it as not found until then.
   const newShortId = generateId(8);
   const newDeleteToken = generateId(24);
   const encKey = await getEncKey(env);
@@ -91,14 +110,16 @@ export async function onRequestPost(context) {
     sql: `INSERT INTO files
             (short_id, original_filename, mime_type, size_bytes, file_data, expires_at,
              delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at,
-             compressed, allow_annotations, allow_download, recipient_user_tag)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             compressed, allow_annotations, allow_download, recipient_user_tag,
+             is_active, inbox_status, inbox_note)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?)`,
     args: [
       newShortId, newFilename, newMime, file.size_bytes, newFileData,
       file.expires_at, newDeleteToken, file.integrity_hash,
       file.cluster_id, null, new Date().toISOString(),
       file.compressed || 0, file.allow_annotations ?? 1, file.allow_download ?? 0,
-      recipientTag
+      recipientTag,
+      note ? await encryptStr(note, encKey, env, newShortId) : null
     ]
   });
 

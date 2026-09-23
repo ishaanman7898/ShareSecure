@@ -90,6 +90,7 @@ app.use(express.static(PUBLIC_DIR, { maxAge: 0, etag: true }));
 
 // ── api routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api', require('./routes/inbox'));
 app.use('/api', require('./routes/files'));
 
 // ── mode endpoint (self-host detection) ───────────────────────────────────────
@@ -147,6 +148,9 @@ app.get('/security', (req, res) => {
 app.get('/changelog', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'changelog.html'));
 });
+
+// ── send the owner a file ──────────────────────────────────────────────────────
+app.get('/send', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'send.html')));
 
 // ── sign in ───────────────────────────────────────────────────────────────────
 app.get('/signin', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'signin.html')));

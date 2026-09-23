@@ -655,8 +655,9 @@ function showSendDialog() {
   backdrop.innerHTML = `
     <div class="delete-modal-card">
       <p class="delete-modal-title">Send to a user</p>
-      <p class="delete-modal-sub" id="send-dialog-sub">It appears in their inbox. They won’t see who sent it.</p>
+      <p class="delete-modal-sub" id="send-dialog-sub">They get a request and choose whether to accept it. They won’t see who sent it unless you say so in the note.</p>
       <input id="send-username-input" type="text" placeholder="Their username" autocomplete="off" spellcheck="false" aria-label="Username" />
+      <input id="send-note-input" type="text" placeholder="Note (optional)" maxlength="140" autocomplete="off" aria-label="Note" />
       <div class="delete-modal-actions">
         <button class="delete-modal-cancel" id="send-cancel-btn">Cancel</button>
         <button class="delete-modal-confirm is-primary" id="send-confirm-btn">Send</button>
@@ -690,12 +691,12 @@ function showSendDialog() {
       const res = await fetch(`/api/send/${myShortId}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ targetUsername: username })
+        body: JSON.stringify({ targetUsername: username, note: backdrop.querySelector('#send-note-input').value.trim() })
       });
       const data = await res.json();
       if (data.sent) {
         close();
-        showKbToast('Sent');
+        showKbToast('Sent. Waiting for them to accept.');
       } else {
         sub.textContent = data.error || 'Couldn’t send. Check the username and try again.';
         sub.style.color = 'var(--danger)';
@@ -713,6 +714,10 @@ function showSendDialog() {
   confirmBtn.addEventListener('click', doSend);
   backdrop.querySelector('#send-cancel-btn').addEventListener('click', close);
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#send-note-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); doSend(); }
+    e.stopPropagation();
+  });
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); doSend(); }
     if (e.key === 'Escape') { e.preventDefault(); close(); }

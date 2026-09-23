@@ -23,6 +23,8 @@ function load() {
     save();
   }
   if (typeof cache.autoUpdate !== 'boolean') cache.autoUpdate = false;
+  // people can send the owner files only after the owner turns this on
+  if (typeof cache.acceptIncoming !== 'boolean') cache.acceptIncoming = false;
   return cache;
 }
 

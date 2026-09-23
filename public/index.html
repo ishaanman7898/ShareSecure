@@ -85,6 +85,12 @@
             <input type="text" id="display-name-input" class="text-input" placeholder="Shown to people who open the link" maxlength="200" />
           </div>
 
+          <div id="send-to-wrap" class="field hidden">
+            <label for="send-to-input">Send to a user <span class="label-optional">optional</span></label>
+            <input type="text" id="send-to-input" class="text-input" placeholder="Their username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="32" />
+            <span class="field-hint">They get a request and choose whether to accept it. They won’t see who sent it.</span>
+          </div>
+
           <div class="field">
             <label for="expires-select">Link expires after</label>
             <select id="expires-select">
@@ -136,11 +142,30 @@
 
         <div id="inbox-section" class="inbox-section">
           <div class="list-header">
-            <h2 class="panel-title">Sent to you</h2>
-            <span class="pill pill-quiet" id="inbox-count"></span>
+            <h2 class="panel-title" id="inbox-title" tabindex="-1">Sent to you</h2>
+            <button class="link-btn hidden" id="notify-toggle"></button>
           </div>
+          <div id="inbox-requests" class="inbox-requests"></div>
           <div id="inbox-list" class="file-list">
             <p class="empty-msg">No files received.</p>
+          </div>
+        </div>
+
+        <div id="receive-section" class="receive-section hidden">
+          <div class="list-header">
+            <h2 class="panel-title">Receiving files</h2>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="receive-toggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Let people send me files</span>
+          </label>
+          <div class="receive-info hidden" id="receive-info">
+            <p>Share this page. People enter your username, <strong id="receive-username"></strong>, and you accept or decline each file.</p>
+            <div class="link-box receive-link">
+              <span id="receive-url"></span>
+              <button class="btn btn-ghost btn-copy" id="receive-copy">Copy</button>
+            </div>
           </div>
         </div>
 

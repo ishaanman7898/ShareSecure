@@ -22,6 +22,7 @@
         ['Update', 'Select Update in the app’s Updates panel, or turn on automatic updates.'],
         ['Your files', 'Kept in your user folder, apart from the program: <code>~/Library/Application Support/ShareSecure</code> on macOS, <code>~/.local/share/sharesecure</code> on Linux.'],
         ['When a link expires', 'The file, its key and its database record are erased within 30 seconds.'],
+        ['Receiving files', 'Turn on “Let people send me files” and share your /send page. Each file waits until you accept it.'],
       ],
     },
     windows: {
@@ -38,6 +39,7 @@
         ['Update', 'Select Update in the app’s Updates panel, or turn on automatic updates.'],
         ['Your files', 'Kept in <code>%LOCALAPPDATA%\\ShareSecure</code>, apart from the program and out of OneDrive.'],
         ['When a link expires', 'The file, its key and its database record are erased within 30 seconds.'],
+        ['Receiving files', 'Turn on “Let people send me files” and share your /send page. Each file waits until you accept it.'],
       ],
     },
     docker: {
@@ -54,6 +56,7 @@
         ['Update', 'Run <code>docker rm -f sharesecure</code>, then the install command again. The volume is kept.'],
         ['Your files', 'In the <code>sharesecure-data</code> volume.'],
         ['When a link expires', 'The file, its key and its database record are erased within 30 seconds.'],
+        ['Receiving files', 'Turn on “Let people send me files” and share your /send page. Each file waits until you accept it.'],
       ],
     },
   };

@@ -92,51 +92,42 @@ const upload = multer({
   limits: { fileSize: MAX_BYTES },
 });
 
-// ── POST /api/upload ──────────────────────────────────────────────────────────
-router.post('/upload', requireOwner, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+const UNSUPPORTED_TYPE = 'Only PDF (.pdf), Word (.docx), PNG (.png), and JPEG (.jpg/.jpeg) files are accepted. File type is determined by content, not filename.';
 
-  // ── server-side magic byte validation (zero-knowledge: no logging) ───────
-  const detected = detectFileType(req.file.buffer);
-  if (!detected) {
-    return res.status(415).json({
-      error: 'Only PDF (.pdf), Word (.docx), PNG (.png), and JPEG (.jpg/.jpeg) files are accepted. File type is determined by content, not filename.',
-    });
-  }
-  // Override user-supplied MIME with content-derived MIME — prevents spoofing
-  req.file.mimetype = detected.mime;
+// The shown name always ends in the extension of the file's real type, so a PDF
+// can't arrive looking like "invoice.exe".
+function cleanDisplayName(requested, detected, originalName) {
+  let name = (requested || '').toString().trim() || String(originalName || 'file');
+  const ext = detected.type === 'pdf' ? '.pdf' : detected.type === 'docx' ? '.docx' : detected.mime === 'image/png' ? '.png' : '.jpg';
+  // Strip any extension the user typed so we always enforce the correct one
+  name = name.replace(/\.[^.]+$/, '') + ext;
+  // Remove filesystem-unsafe characters
+  name = name.replace(/[<>:"/\|?*\x00-\x1f]/g, '').trim();
+  if (name.length > 200) name = name.substring(0, 197) + ext;
+  return name === ext ? 'file' + ext : name;
+}
 
-  // Only the signed-in owner can upload to a self-hosted instance, so there is
-  // no daily limit and no upload log.
+// Validate, strip metadata, compress, encrypt and store an uploaded file.
+// Used for the owner's uploads and for files people send to the owner
+// (`incoming`), which are stored inactive until the owner accepts them.
+function storeFile(file, body, { incoming = false, note = null } = {}) {
+  const detected = detectFileType(file.buffer);
+  if (!detected) return { error: UNSUPPORTED_TYPE, status: 415 };
 
-  const rawHours = parseFloat(req.body.expires_hours) || 1;
+  const rawHours = parseFloat(body.expires_hours) || 1;
   const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
-  const allow_annotations = req.body.allow_annotations === '1' ? 1 : 0;
-  const allow_download    = req.body.allow_download    === '1' ? 1 : 0;
+  const allow_annotations = body.allow_annotations === '1' ? 1 : 0;
+  const allow_download    = body.allow_download    === '1' ? 1 : 0;
+  const displayName = cleanDisplayName(body.display_name, detected, file.originalname);
 
-  // Optional custom display name — sanitise and preserve correct extension
-  let displayName = (req.body.display_name || '').toString().trim();
-  if (displayName) {
-    const ext = detected.type === 'pdf' ? '.pdf' : detected.type === 'docx' ? '.docx' : detected.mime === 'image/png' ? '.png' : '.jpg';
-    // Strip any extension the user typed so we always enforce the correct one
-    displayName = displayName.replace(/\.[^.]+$/, '') + ext;
-    // Remove filesystem-unsafe characters
-    displayName = displayName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
-    if (displayName.length > 200) displayName = displayName.substring(0, 197) + ext;
-    if (!displayName || displayName === ext) displayName = req.file.originalname;
-  } else {
-    displayName = req.file.originalname;
-  }
-
-  const shortId    = generateId(8);
+  const shortId     = generateId(8);
   const deleteToken = generateId(24);
-  const mimeType   = req.file.mimetype || 'application/octet-stream';
+  const mimeType    = detected.mime; // content-derived MIME, never the client's claim
 
   // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
-  // Removes identifying information embedded in the document before storage.
-  let rawBuffer = req.file.buffer;
+  let rawBuffer = file.buffer;
   if (detected.type === 'docx') rawBuffer = stripDocxMetadata(rawBuffer);
   if (detected.type === 'pdf')  rawBuffer = stripPdfMetadata(rawBuffer);
 
@@ -154,43 +145,51 @@ router.post('/upload', requireOwner, upload.single('file'), (req, res) => {
     wrappedKey = result.wrappedKey;
   }
 
-  // write to disk
   const storedFilename = generateId(32) + '.bin';
   fs.writeFileSync(path.join(UPLOADS_DIR, storedFilename), processed);
 
-  // encrypt metadata strings
-  const encFilename = encryptString(displayName, encKey);
-  const encMime     = encryptString(mimeType, encKey);
-
   // privacy: quantize upload time to hour boundary; pad size to 100 KB boundary
   const uploaded_at = quantizeToHour();
-  const paddedSize  = padSize(req.file.size);
+  const paddedSize  = padSize(file.size);
 
-  // Privacy improvement: user_tag is no longer stored on the files row.
-  // The dashboard is now client-side (localStorage), so there is no server-side
-  // association between an upload and a user account.
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token,
-      wrapped_key, cluster_id, allow_annotations, allow_download
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+      wrapped_key, cluster_id, allow_annotations, allow_download,
+      is_active, inbox_status, inbox_note
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    shortId, encFilename, encMime, paddedSize, storedFilename,
+    shortId, encryptString(displayName, encKey), encryptString(mimeType, encKey), paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
     wrappedKey,
     shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
-    allow_annotations, allow_download
+    allow_annotations, allow_download,
+    incoming ? 0 : 1,
+    incoming ? 'pending' : null,
+    note ? encryptString(note, encKey) : null
   );
+
+  return { shortId, deleteToken, expires_at, paddedSize };
+}
+
+// ── POST /api/upload ──────────────────────────────────────────────────────────
+// Only the signed-in owner can upload to a self-hosted instance, so there is
+// no daily limit and no upload log.
+router.post('/upload', requireOwner, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+  const stored = storeFile(req.file, req.body);
+  if (stored.error) return res.status(stored.status).json({ error: stored.error });
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
   res.json({
-    shortId,
-    shortUrl: `${baseUrl}/r/${shortId}`,
+    shortId: stored.shortId,
+    shortUrl: `${baseUrl}/r/${stored.shortId}`,
     filename: req.file.originalname,
-    size: paddedSize,
-    expiresAt: expires_at,
-    deleteToken,
+    size: stored.paddedSize,
+    expiresAt: stored.expires_at,
+    deleteToken: stored.deleteToken,
   });
 });
 
@@ -393,3 +392,5 @@ router.post('/annotations/:shortId', (req, res) => {
 });
 
 module.exports = router;
+module.exports.storeFile = storeFile;
+module.exports.upload = upload;

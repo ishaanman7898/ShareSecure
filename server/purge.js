@@ -52,11 +52,19 @@ function purgeWhere(where, params = []) {
 
 // expires_at is always an ISO-8601 UTC string, so plain string comparison is correct.
 function purgeExpired() {
-  return purgeWhere('(expires_at IS NOT NULL AND expires_at <= ?) OR is_active = 0', [new Date().toISOString()]);
+  // pending file requests are inactive on purpose, so they're only erased when they expire or are declined
+  return purgeWhere(
+    "(expires_at IS NOT NULL AND expires_at <= ?) OR (is_active = 0 AND (inbox_status IS NULL OR inbox_status != 'pending'))",
+    [new Date().toISOString()]
+  );
 }
 
 function purgeCluster(clusterId) {
   return purgeWhere('cluster_id = ?', [clusterId]);
+}
+
+function purgeOne(shortId) {
+  return purgeWhere('short_id = ?', [shortId]);
 }
 
 // Shred anything in the uploads folder the database doesn't know about
@@ -71,4 +79,4 @@ function purgeOrphans() {
   return removed;
 }
 
-module.exports = { purgeExpired, purgeCluster, purgeOrphans, shred };
+module.exports = { purgeExpired, purgeCluster, purgeOne, purgeOrphans, shred };

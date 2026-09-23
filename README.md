@@ -116,6 +116,7 @@ The installers set up Node.js if needed, download ShareSecure to `~/sharesecure`
 - **Sign in:** the first time you open it, you create the owner account. Only the owner can upload and manage files; people you share links with don't need an account.
 - **Your data:** the database and encrypted files live in your user app-data folder, apart from the program and out of synced folders like OneDrive: `%LOCALAPPDATA%\ShareSecure` (Windows), `~/Library/Application Support/ShareSecure` (macOS), `~/.local/share/sharesecure` (Linux). Installs that already have a `./data` folder keep using it.
 - **Updates:** the Updates panel in the app shows when a new release is out. Install it with one click, or turn on automatic updates. Docker installs update by rebuilding the container.
+- **Receiving files:** turn on *Let people send me files* and share your `/send` page. People enter your username to send you a file; it waits as a request until you accept it, and declining erases it. The app shows a badge, a toast and (if you allow it) a system notification when a request arrives.
 - **No traces:** when a link expires (or you delete it), its database row is erased with SQLite `secure_delete`, which destroys the file's own encryption key, and the stored file is overwritten and removed. This happens within 30 seconds, or immediately if someone opens the expired link.
 
 ### Manual install
