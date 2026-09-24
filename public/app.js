@@ -6,13 +6,13 @@ function escapeHtml(str) {
 }
 
 // ── landing rosette: guilloché bands like the ones printed on banknotes ───────
-// It doubles as a vault dial: circle the cursor around it to turn the dial,
-// and one full turn unlocks it. Tapping (or clicking) opens it too.
+// Each band is its own layer, so turning it is a cheap GPU rotation instead
+// of redrawing thousands of path points every frame.
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function drawRosette() {
-  const svg = document.getElementById('rosette');
-  if (!svg || svg.childElementCount) return;
+  const host = document.getElementById('rosette');
+  if (!host || host.childElementCount) return;
   const C = 200, STEPS = 480;
   // each band is a set of phase-shifted sine rings woven around a base radius
   const bands = [
@@ -21,10 +21,13 @@ function drawRosette() {
     { base: 88,  amp: 20, k: 12, n: 9,  cls: 'band-3' },
     { base: 44,  amp: 16, k: 8,  n: 7,  cls: 'band-4' },
   ];
-  const groups = bands.map((b, bi) => {
-    // the group carries the turning, the paths carry the engraving
-    const group = document.createElementNS(SVG_NS, 'g');
-    svg.appendChild(group);
+  const rings = bands.map((b, bi) => {
+    // the outer div follows the cursor; the svg inside turns slowly on its own
+    const ring = document.createElement('div');
+    ring.className = 'ring';
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 400 400');
+    svg.setAttribute('class', `ring-spin ring-spin-${bi + 1}`);
     for (let i = 0; i < b.n; i++) {
       const phase = (i / b.n) * Math.PI * 2;
       let d = '';
@@ -38,123 +41,50 @@ function drawRosette() {
       path.setAttribute('pathLength', '1');
       path.setAttribute('class', b.cls);
       path.style.setProperty('--d', (bi * 0.18 + i * 0.05).toFixed(2) + 's');
-      group.appendChild(path);
+      svg.appendChild(path);
     }
-    return group;
+    ring.appendChild(svg);
+    host.appendChild(ring);
+    return ring;
   });
-
-  // dial: safe-style ticks around the edge, and an arc that fills as you turn
-  const dial = document.createElementNS(SVG_NS, 'g');
-  dial.setAttribute('class', 'dial');
-  let ticks = '';
-  for (let i = 0; i < 72; i++) {
-    const a = (i / 72) * Math.PI * 2, major = i % 6 === 0;
-    const r1 = major ? 184 : 188, r2 = 193;
-    ticks += `<line class="${major ? 'major' : ''}" x1="${(C + r1 * Math.cos(a)).toFixed(2)}" y1="${(C + r1 * Math.sin(a)).toFixed(2)}" x2="${(C + r2 * Math.cos(a)).toFixed(2)}" y2="${(C + r2 * Math.sin(a)).toFixed(2)}"/>`;
-  }
-  dial.innerHTML = `<g class="ticks">${ticks}</g>`
-    + `<circle class="track" cx="${C}" cy="${C}" r="198"/>`
-    + `<circle class="progress" cx="${C}" cy="${C}" r="198" pathLength="1" stroke-dasharray="0 1" transform="rotate(-90 ${C} ${C})"/>`;
-  svg.appendChild(dial);
-
-  const lock = document.createElementNS(SVG_NS, 'g');
-  lock.setAttribute('class', 'lock');
-  lock.innerHTML = `<circle class="pulse" cx="${C}" cy="${C}" r="24"/>`
-    + `<circle class="lock-face" cx="${C}" cy="${C}" r="24"/>`
-    + `<path class="shackle" d="M193 199 V191 a7 7 0 0 1 14 0 V199"/>`
-    + `<rect class="lock-body" x="186" y="197" width="28" height="19" rx="3"/>`
-    + `<circle class="lock-hole" cx="${C}" cy="205" r="2.4"/>`
-    + `<rect class="lock-hole" x="199" y="205" width="2" height="6" rx="1"/>`;
-  svg.appendChild(lock);
-
-  initVault(svg, groups, dial.querySelector('.ticks'), dial.querySelector('.progress'));
+  followPointer(host, rings);
 }
 
-function initVault(svg, bands, ticks, progress) {
-  const art = svg.closest('.landing-art');
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const RATIO = [-0.3, 0.5, -0.8, 1.2];     // how far each band turns with the dial
-  const DRIFT = [0.3, -0.5, 0.7, -1];       // idle turning when nobody's touching it
-  const SPREAD = [1.03, 1.08, 1.16, 1.34];  // how far each band opens when unlocked
-  const rot = bands.map(() => 0), scale = bands.map(() => 1), base = bands.map(() => 0);
-  let dial = 0, drift = 0, turned = 0, last = null, open = false, inside = false, lastMove = 0, relockTimer = 0;
+// Circling the cursor around the rosette turns the bands, each by a different
+// amount and in alternating directions. The loop only runs while they're moving.
+function followPointer(host, rings) {
+  if (!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches) return;
+  const art = host.closest('.landing-art');
+  const RATIO = [-0.15, 0.25, -0.4, 0.6];
+  const rot = rings.map(() => 0);
+  let dial = 0, last = null, frame = 0;
 
-  const place = (el, r, s = 1) => el.setAttribute('transform',
-    `translate(200 200) rotate(${r.toFixed(2)}) scale(${s.toFixed(3)}) translate(-200 -200)`);
-
-  function setOpen(value) {
-    clearTimeout(relockTimer);
-    if (value && !open) {
-      // spin every band home to where it was engraved, then carry on from there
-      bands.forEach((_, i) => {
-        base[i] += Math.round(rot[i] / 360) * 360 - (dial * RATIO[i] + drift * DRIFT[i] + base[i]);
-      });
-      turned = 1;
-    }
-    if (!value) turned = 0;
-    open = value;
-    svg.classList.toggle('unlocked', value);
-    art.classList.toggle('is-open', value);
-    if (still) bands.forEach((g, i) => place(g, 0, value ? SPREAD[i] : 1));
+  function step() {
+    let moving = false;
+    rings.forEach((ring, i) => {
+      const diff = dial * RATIO[i] - rot[i];
+      if (Math.abs(diff) > 0.02) { rot[i] += diff * 0.1; moving = true; }
+      else rot[i] += diff;
+      ring.style.transform = `rotate(${rot[i].toFixed(3)}deg)`;
+    });
+    frame = moving ? requestAnimationFrame(step) : 0;
   }
-
-  function relockIn(ms) {
-    clearTimeout(relockTimer);
-    relockTimer = setTimeout(() => setOpen(false), ms);
-  }
-
-  art.addEventListener('click', () => {
-    setOpen(!open);
-    if (open && !inside) relockIn(3500);  // a tap on a phone springs shut again
-  });
-
-  if (still) return;
 
   art.addEventListener('pointermove', e => {
-    if (e.pointerType === 'touch') return;
-    inside = true;
-    if (open) { clearTimeout(relockTimer); return; }
-    const r = svg.getBoundingClientRect();
+    const r = host.getBoundingClientRect();
     const x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
-    const dist = Math.hypot(x, y) / (r.width / 2);
-    // too close to the middle to read an angle reliably
-    if (dist < 0.15) { last = null; return; }
+    // near the middle the angle swings wildly, so ignore it there
+    if (Math.hypot(x, y) < r.width * 0.1) { last = null; return; }
     const angle = Math.atan2(y, x) * 180 / Math.PI;
     if (last !== null) {
       let delta = angle - last;
       if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
       dial += delta;
-      turned = Math.min(1, turned + Math.abs(delta) / 360);
-      lastMove = performance.now();
-      if (turned >= 1) setOpen(true);
+      if (!frame) frame = requestAnimationFrame(step);
     }
     last = angle;
   });
-
-  art.addEventListener('pointerleave', () => {
-    inside = false;
-    last = null;
-    if (open) relockIn(1600);
-  });
-
-  function frame(now) {
-    if (!open) {
-      if (!inside) drift += 0.04;
-      // the dial slowly unwinds if you stop turning it
-      if (now - lastMove > 700) turned = Math.max(0, turned - 0.004);
-    }
-    bands.forEach((g, i) => {
-      const target = dial * RATIO[i] + drift * DRIFT[i] + base[i];
-      rot[i] += (target - rot[i]) * (open ? 0.08 : 0.12);
-      scale[i] += ((open ? SPREAD[i] : 1) - scale[i]) * 0.08;
-      place(g, rot[i], scale[i]);
-    });
-    place(ticks, open ? 0 : dial * 0.6 + drift * 0.2);
-    progress.setAttribute('stroke-dasharray', `${turned.toFixed(4)} 1`);
-    progress.style.opacity = turned < 0.01 ? '0' : '';
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
+  art.addEventListener('pointerleave', () => { last = null; });
 }
 
 // ── toast notification system ─────────────────────────────────────────────────

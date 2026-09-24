@@ -176,57 +176,36 @@ body:has(#landing-page:not(.hidden)) .container {
   margin-right: calc(-1 * var(--gutter));
   padding: 0 48px;
   border-left: 1px solid var(--line);
-  cursor: grab;
-  -webkit-tap-highlight-color: transparent;
 }
 
-#rosette { width: 100%; max-width: min(460px, 66vh); height: auto; max-height: 100%; overflow: visible; }
-#rosette path { fill: none; stroke: currentColor; stroke-width: 0.6; }
-#rosette .band-1 { opacity: 0.85; }
-#rosette .band-2 { opacity: 0.5; }
-#rosette .band-3 { opacity: 0.75; }
-#rosette .band-4 { opacity: 0.4; }
+.rosette { position: relative; width: 100%; max-width: min(460px, 66vh); aspect-ratio: 1; max-height: 100%; }
 
-/* vault dial: tick ring, progress arc and the lock in the middle */
-#rosette .ticks line { stroke: currentColor; stroke-width: 0.8; opacity: 0.35; }
-#rosette .ticks line.major { opacity: 0.8; stroke-width: 1.1; }
-#rosette .track { fill: none; stroke: currentColor; stroke-width: 1; opacity: 0.12; }
-#rosette .progress { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; opacity: 0.9; }
-#rosette .lock-face { fill: var(--paper); stroke: currentColor; stroke-width: 0.8; }
-#rosette .lock-body { fill: currentColor; }
-#rosette .lock-hole { fill: var(--paper); }
-#rosette .shackle { fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; }
-#rosette .pulse { fill: none; stroke: currentColor; stroke-width: 1; opacity: 0; }
-
-#rosette .shackle,
-#rosette .pulse,
-#rosette .lock { transform-box: view-box; transform-origin: 200px 200px; }
-#rosette .shackle { transform-origin: 193px 199px; transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1); }
-#rosette.unlocked .shackle { transform: translateY(-6px) rotate(-28deg); }
-#rosette .lock { transition: transform 0.5s cubic-bezier(0.3, 1.5, 0.5, 1); }
-#rosette.unlocked .lock { transform: scale(1.18); }
-
-.landing-art.is-grabbing { cursor: grabbing; }
-.landing-art.is-open { cursor: default; }
+/* each band is its own compositor layer, so turning it never repaints the paths */
+.rosette .ring { position: absolute; inset: 0; will-change: transform; }
+.rosette .ring-spin { display: block; width: 100%; height: 100%; overflow: visible; }
+.rosette path { fill: none; stroke: currentColor; stroke-width: 0.6; }
+.rosette .band-1 { opacity: 0.85; }
+.rosette .band-2 { opacity: 0.5; }
+.rosette .band-3 { opacity: 0.75; }
+.rosette .band-4 { opacity: 0.4; }
 
 @media (prefers-reduced-motion: no-preference) {
-  #rosette path {
+  .rosette path {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
     animation: engrave 2.4s cubic-bezier(0.65, 0, 0.35, 1) forwards;
     animation-delay: var(--d, 0s);
   }
-  #rosette .dial,
-  #rosette .lock { animation: fade-in 0.8s 1.4s both; }
-  #rosette.unlocked .pulse { animation: pulse 0.9s cubic-bezier(0.2, 0.7, 0.3, 1); }
+
+  /* once engraved, the bands keep turning slowly against each other */
+  .rosette .ring-spin { will-change: transform; animation: turn 140s linear 2.4s infinite; }
+  .rosette .ring-spin-2 { animation-duration: 100s; animation-direction: reverse; }
+  .rosette .ring-spin-3 { animation-duration: 80s; }
+  .rosette .ring-spin-4 { animation-duration: 60s; animation-direction: reverse; }
 }
 
 @keyframes engrave { to { stroke-dashoffset: 0; } }
-@keyframes fade-in { from { opacity: 0; } }
-@keyframes pulse {
-  from { opacity: 0.7; transform: scale(1); }
-  to { opacity: 0; transform: scale(3.2); }
-}
+@keyframes turn { to { transform: rotate(360deg); } }
 
 /* ── buttons ── */
 .btn {

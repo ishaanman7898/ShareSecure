@@ -27,10 +27,21 @@ jobs:
 
       - run: npm ci
 
+      # macOS builds are signed and notarized once the Apple secrets exist;
+      # until then (and on Windows and Linux) they build unsigned. See docs/SIGNING.md.
       - name: Build
-        run: npx electron-builder --publish never
+        shell: bash
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npx electron-builder --publish never
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/')

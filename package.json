@@ -53,7 +53,8 @@
       "!**/*.map",
       "!desktop/logo.js",
       "!desktop/render-icons.js",
-      "!desktop/logo.svg"
+      "!desktop/logo.svg",
+      "!desktop/entitlements.mac.plist"
     ],
     "asarUnpack": [
       "**/*.node"
@@ -100,7 +101,11 @@
         }
       ],
       "category": "public.app-category.productivity",
-      "artifactName": "ShareSecure-mac-${arch}.${ext}"
+      "artifactName": "ShareSecure-mac-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "desktop/entitlements.mac.plist",
+      "entitlementsInherit": "desktop/entitlements.mac.plist"
     },
     "linux": {
       "target": [
