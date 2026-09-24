@@ -7,14 +7,15 @@
   <meta name="robots" content="noindex, nofollow" />
   <meta name="color-scheme" content="light dark" />
   <title>ShareSecure</title>
-  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <link rel="icon" type="image/png" href="/app-icon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <!-- terms modal -->
   <div class="modal hidden tc-modal" id="tc-modal" role="dialog" aria-modal="true" aria-labelledby="tc-title">
     <div class="modal-content tc-modal-content">
-      <img class="tc-mark" src="/mark.svg" alt="" width="40" height="40" />
+      <img class="tc-mark" src="/app-icon.png" alt="" width="40" height="40" />
       <h2 id="tc-title">Before you continue</h2>
       <div class="tc-content">
         <p>By selecting “I accept”, you agree to the <a href="/terms" target="_blank">Terms and Conditions</a> and the AI Scraping Policy.</p>
@@ -27,7 +28,7 @@
 
   <header class="topbar">
     <a class="brand" href="/" aria-label="ShareSecure home">
-      <img src="/mark.svg" alt="" width="28" height="28" />
+      <img src="/app-icon.png" alt="" width="28" height="28" />
       <span>ShareSecure</span>
     </a>
     <div id="auth-status">
@@ -85,7 +86,7 @@
         <h2 class="panel-title" id="upload-title">New share</h2>
 
         <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose a file to share">
-          <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
           <p class="drop-label drop-label-fine">Drop a file here, or <span class="drop-browse">browse</span></p>
           <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose a file</span></p>
           <p class="drop-limit">PDF, DOCX, PNG or JPG, up to 10 MB</p>

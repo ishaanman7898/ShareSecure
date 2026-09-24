@@ -844,7 +844,7 @@ function announce(newCount) {
       const n = new Notification('ShareSecure', {
         body: `${text} Open ShareSecure to accept or decline.`,
         tag: 'sharesecure-inbox',
-        icon: '/mark.svg',
+        icon: '/app-icon.png',
       });
       n.onclick = () => { window.focus(); document.getElementById('inbox-title')?.focus(); n.close(); };
     } catch {}
@@ -929,7 +929,7 @@ function renderInbox(files) {
   const list = document.getElementById('inbox-list');
   if (!list) return;
   if (!files.length) {
-    list.innerHTML = pendingCount ? '' : '<p class="empty-msg">No files received.</p>';
+    list.innerHTML = pendingCount ? '' : EMPTY_INBOX;
     return;
   }
   list.innerHTML = files.map(f => `
@@ -1004,7 +1004,14 @@ document.getElementById('receive-copy')?.addEventListener('click', () => {
     .catch(() => showToast('Couldn’t copy. Select the link and copy it manually.', 'warn'));
 });
 
-const EMPTY_LIST = `<p class="empty-msg">Nothing shared yet. Your links will show up here.</p>`;
+const EMPTY_LIST = `<div class="empty-msg">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+  <p>Nothing shared yet.</p><span>Your links show up here until they expire.</span>
+</div>`;
+const EMPTY_INBOX = `<div class="empty-msg">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+  <p>No files received.</p><span>Files people send you wait here for you to accept.</span>
+</div>`;
 const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 let listTimer = null;
 
@@ -1029,6 +1036,7 @@ function renderFileList(files) {
       <div class="file-item-info">
         <span class="file-item-name">${escapeHtml(f.original_filename)}</span>
         <span class="file-item-time" data-expires="${escapeHtml(f.expires_at)}"></span>
+        <span class="expiry-bar" aria-hidden="true"><span></span></span>
       </div>
       <div class="file-item-actions">
         <a href="/r/${encodeURIComponent(f.short_id)}" target="_blank" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
@@ -1073,11 +1081,18 @@ function renderFileList(files) {
   // countdowns; an expired share disappears from this browser on its own
   const tick = () => {
     files.forEach(f => {
-      const el = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"] .file-item-time`);
-      if (!el) return;
-      const remaining = new Date(f.expires_at).getTime() - Date.now();
-      if (remaining <= 0) forgetShare(f.short_id);
-      else el.textContent = formatCountdown(remaining) + ' left';
+      const row = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"]`);
+      if (!row) return;
+      const end = new Date(f.expires_at).getTime();
+      const remaining = end - Date.now();
+      if (remaining <= 0) { forgetShare(f.short_id); return; }
+      row.querySelector('.file-item-time').textContent = formatCountdown(remaining) + ' left';
+      // the bar shows how much of the link's life is left
+      const start = new Date(f.uploaded_at).getTime();
+      const left = end > start ? Math.min(1, remaining / (end - start)) : 1;
+      const bar = row.querySelector('.expiry-bar');
+      bar.style.setProperty('--left', left.toFixed(4));
+      bar.classList.toggle('is-low', left < 0.1);
     });
   };
   tick();

@@ -18,7 +18,8 @@ if (!app.requestSingleInstanceLock()) {
 const USER_DIR = app.getPath('userData');
 const DATA_DIR = path.join(USER_DIR, 'data');
 const PORT_FILE = path.join(USER_DIR, 'port.json');
-const ICON = path.join(__dirname, 'icon.png');
+// the full-bleed tile reads better at window and tray sizes than the Mac-grid one
+const ICON = path.join(__dirname, 'icon-win.png');
 
 let win = null;
 let tray = null;

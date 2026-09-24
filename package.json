@@ -1,6 +1,6 @@
 {
   "name": "sharesecure",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "desktop/main.js",
   "type": "commonjs",
@@ -12,7 +12,8 @@
     "dist": "electron-builder --publish never",
     "postdist": "npm rebuild better-sqlite3",
     "generate-key": "node -e \"console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
-    "deploy": "wrangler pages deploy public --project-name sharesecure"
+    "deploy": "wrangler pages deploy public --project-name sharesecure",
+    "icons": "electron desktop/render-icons.js"
   },
   "keywords": [],
   "author": "Ishaan",
@@ -49,7 +50,10 @@
       "public/**",
       ".env.example",
       "package.json",
-      "!**/*.map"
+      "!**/*.map",
+      "!desktop/logo.js",
+      "!desktop/render-icons.js",
+      "!desktop/logo.svg"
     ],
     "asarUnpack": [
       "**/*.node"
@@ -68,7 +72,8 @@
           ]
         }
       ],
-      "artifactName": "ShareSecure-Setup.${ext}"
+      "artifactName": "ShareSecure-Setup.${ext}",
+      "icon": "desktop/icon-win.png"
     },
     "nsis": {
       "oneClick": false,
