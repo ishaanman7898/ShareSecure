@@ -379,16 +379,7 @@ fileInput.addEventListener('change', () => {
 clearFile.addEventListener('click', clearSelection);
 
 // upload
-uploadBtn.addEventListener('click', async () => {
-  if (!selectedFile) return;
-
-  if (expiresSelect.value === 'custom') {
-    if (!customExpiryHours) {
-      showToast('Pick an expiry time within the next 10 days.', 'warn');
-      return;
-    }
-  }
-
+function buildUploadForm() {
   const formData = new FormData();
   formData.append('file', selectedFile);
   formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
@@ -399,6 +390,54 @@ uploadBtn.addEventListener('click', async () => {
   const displayNameInput = document.getElementById('display-name-input');
   if (displayNameInput && displayNameInput.value.trim()) {
     formData.append('display_name', displayNameInput.value.trim());
+  }
+  return formData;
+}
+
+// Sends one upload and resolves with { status, body }. status is 0 if the
+// server couldn't be reached.
+function sendUpload(formData, withBearer) {
+  return new Promise(resolve => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+    if (withBearer && userToken) xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+    xhr.upload.addEventListener('progress', e => {
+      if (e.lengthComputable) progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
+    });
+    xhr.onload = () => {
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch {}
+      resolve({ status: xhr.status, body });
+    };
+    xhr.onerror = () => resolve({ status: 0, body: {} });
+    xhr.send(formData);
+  });
+}
+
+// Only a real 401 on the session means signed out; ask before logging anyone out.
+async function sessionStillValid() {
+  if (selfHostMode) return true;
+  try {
+    const res = await fetch('/api/auth/user/files', { headers: authHeaders() });
+    return res.status !== 401;
+  } catch {
+    return true;
+  }
+}
+
+function resetUploadButton() {
+  uploadBtn.disabled = false;
+  progressWrap.classList.add('hidden');
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+
+  if (expiresSelect.value === 'custom') {
+    if (!customExpiryHours) {
+      showToast('Pick an expiry time within the next 10 days.', 'warn');
+      return;
+    }
   }
 
   uploadBtn.disabled = true;
@@ -413,65 +452,50 @@ uploadBtn.addEventListener('click', async () => {
   if (userToken && ZK.hasZKCredentials()) {
     try {
       zkFields = await ZK.prepareUploadFields(userToken);
-      formData.append('zk_proof',     zkFields.zk_proof);
-      formData.append('zk_nullifier', zkFields.zk_nullifier);
-      formData.append('zk_nonce',     zkFields.zk_nonce);
     } catch {
       // ZK prep failed (challenge limit, network, etc.) — fall back to Bearer
       zkFields = null;
     }
   }
 
-  try {
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/upload');
-    if (!zkFields && userToken) {
-      xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+  const form = buildUploadForm();
+  if (zkFields) {
+    form.append('zk_proof',     zkFields.zk_proof);
+    form.append('zk_nullifier', zkFields.zk_nullifier);
+    form.append('zk_nonce',     zkFields.zk_nonce);
+  }
+  let result = await sendUpload(form, !zkFields);
+
+  // The server refused the private proof (older servers answered 401). The
+  // session is still fine, so upload the normal way instead of signing out.
+  if (zkFields && (result.status === 403 || result.status === 401)) {
+    progressBar.style.width = '0%';
+    result = await sendUpload(buildUploadForm(), true);
+  }
+
+  if (result.status === 200) {
+    const data = result.body;
+    const sendTo = selfHostMode ? '' : (document.getElementById('send-to-input')?.value.trim() || '');
+    showResult(data, selectedFile);
+    if (sendTo) {
+      sendToUser(data.shortId, sendTo);
+      document.getElementById('send-to-input').value = '';
     }
-
-    xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) {
-        progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
-      }
-    });
-
-    xhr.onload = async () => {
-      if (xhr.status === 200) {
-        const data = JSON.parse(xhr.responseText);
-        const sendTo = selfHostMode ? '' : (document.getElementById('send-to-input')?.value.trim() || '');
-        showResult(data, selectedFile);
-        if (sendTo) {
-          sendToUser(data.shortId, sendTo);
-          document.getElementById('send-to-input').value = '';
-        }
-        showToast('Link created.', 'success');
-        if (userToken) updateDashboard();
-        if (selfHostMode) renderFileList(loadUploadHistory());
-      } else if (xhr.status === 401) {
-        showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
-        logout();
-      } else if (xhr.status === 429) {
-        showToast('Upload limit reached (5 files per 24h). Try again tomorrow.', 'warn', 6000);
-        uploadBtn.disabled = false;
-        progressWrap.classList.add('hidden');
-      } else {
-        showToast('Upload failed. Try again.', 'error');
-        uploadBtn.disabled = false;
-        progressWrap.classList.add('hidden');
-      }
-    };
-
-    xhr.onerror = () => {
-      showToast('Couldn’t reach the server. Check your connection and try again.', 'error');
-      uploadBtn.disabled = false;
-      progressWrap.classList.add('hidden');
-    };
-
-    xhr.send(formData);
-  } catch (err) {
-    showToast('Upload failed. Try again.', 'error');
-    uploadBtn.disabled = false;
-    progressWrap.classList.add('hidden');
+    showToast('Link created.', 'success');
+    if (userToken) updateDashboard();
+    if (selfHostMode) renderFileList(loadUploadHistory());
+  } else if (result.status === 401 && !(await sessionStillValid())) {
+    showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
+    logout();
+  } else if (result.status === 429) {
+    showToast('Upload limit reached (5 files per 24h). Try again tomorrow.', 'warn', 6000);
+    resetUploadButton();
+  } else if (result.status === 0) {
+    showToast('Couldn’t reach the server. Check your connection and try again.', 'error');
+    resetUploadButton();
+  } else {
+    showToast(result.body.error ? `Upload failed: ${result.body.error}` : 'Upload failed. Try again.', 'error', 6000);
+    resetUploadButton();
   }
 });
 
@@ -644,6 +668,143 @@ document.getElementById('menu-inbox').addEventListener('click', () => {
 
 document.getElementById('logout-btn').addEventListener('click', logout);
 
+// ── account dialogs ───────────────────────────────────────────────────────────
+let modalReturnFocus = null;
+
+function openModal(modal) {
+  closeMenu(false);
+  modalReturnFocus = profileBtn;
+  modal.classList.remove('hidden');
+  (modal.querySelector('input') || modal.querySelector('button:not([data-close])'))?.focus();
+}
+
+function closeModal(modal) {
+  if (modal.classList.contains('hidden')) return;
+  modal.classList.add('hidden');
+  modalReturnFocus?.focus();
+}
+
+for (const modal of document.querySelectorAll('#mcp-modal, #delete-modal')) {
+  modal.addEventListener('click', e => {
+    if (e.target === modal || e.target.closest('[data-close]')) closeModal(modal);
+  });
+}
+
+// copy buttons point at the element whose text they copy
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-copy]');
+  if (!btn) return;
+  navigator.clipboard.writeText(document.getElementById(btn.dataset.copy).textContent)
+    .then(() => {
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+    })
+    .catch(() => showToast('Couldn’t copy. Select the text and copy it manually.', 'warn'));
+});
+
+// ── connect an AI assistant (MCP) ─────────────────────────────────────────────
+const mcpModal = document.getElementById('mcp-modal');
+
+function renderMcp(state, token) {
+  document.getElementById('mcp-off').classList.toggle('hidden', state.hasToken || Boolean(token));
+  document.getElementById('mcp-on').classList.toggle('hidden', !(state.hasToken || token));
+  document.getElementById('mcp-status').textContent = token
+    ? 'Your assistant can now share files for you once it’s set up below.'
+    : `Connected${state.createdAt ? ` since ${new Date(state.createdAt).toLocaleDateString()}` : ''}. Replace the token if you’ve lost it, or turn this off to disconnect every assistant.`;
+  document.getElementById('mcp-setup').classList.toggle('hidden', !token);
+  if (!token) return;
+  document.getElementById('mcp-token').textContent = token;
+  document.getElementById('mcp-claude').textContent =
+    `claude mcp add --transport http sharesecure ${state.mcpUrl} --header "Authorization: Bearer ${token}"`;
+  document.getElementById('mcp-codex').textContent =
+    `[mcp_servers.sharesecure]\nurl = "${state.mcpUrl}"\nbearer_token_env_var = "SHARESECURE_TOKEN"`;
+}
+
+async function mcpCall(method) {
+  const res = await fetch('/api/auth/mcp-token', { method, headers: authHeaders() });
+  if (res.status === 401 && !(await sessionStillValid())) { logout(); throw new Error('signed out'); }
+  if (!res.ok) throw new Error('failed');
+  return res.json();
+}
+
+document.getElementById('menu-mcp').addEventListener('click', async () => {
+  openModal(mcpModal);
+  try { renderMcp(await mcpCall('GET')); } catch { showToast('Couldn’t load your assistant settings.', 'error'); }
+});
+
+async function createMcpToken() {
+  try {
+    const data = await mcpCall('POST');
+    renderMcp({ hasToken: true, mcpUrl: data.mcpUrl }, data.token);
+  } catch { showToast('Couldn’t create a token. Try again.', 'error'); }
+}
+
+document.getElementById('mcp-create').addEventListener('click', createMcpToken);
+document.getElementById('mcp-rotate').addEventListener('click', createMcpToken);
+document.getElementById('mcp-revoke').addEventListener('click', async () => {
+  try {
+    renderMcp(await mcpCall('DELETE'));
+    showToast('Assistants can no longer share files for you.', 'success', 3000);
+  } catch { showToast('Couldn’t turn it off. Try again.', 'error'); }
+});
+
+// ── delete account ────────────────────────────────────────────────────────────
+const deleteModal = document.getElementById('delete-modal');
+const deleteForm = document.getElementById('delete-form');
+const deleteError = document.getElementById('delete-error');
+
+document.getElementById('menu-delete').addEventListener('click', () => {
+  document.getElementById('delete-text').textContent = selfHostMode
+    ? 'This erases the owner account and every file on this ShareSecure, right away, and takes you back to setup. It can’t be undone.'
+    : 'This erases your account and every file you’ve shared from it, right away. Your links stop working. It can’t be undone.';
+  deleteForm.reset();
+  deleteError.textContent = '';
+  openModal(deleteModal);
+});
+
+deleteForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const password = document.getElementById('delete-password').value;
+  if (!password) { deleteError.textContent = 'Enter your password.'; return; }
+  const btn = document.getElementById('delete-confirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  deleteError.textContent = '';
+  try {
+    const res = await fetch('/api/auth/delete-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ access_code: password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.deleted) throw new Error(res.status === 403 ? 'That password isn’t right.' : (data.error || 'Couldn’t delete the account. Try again.'));
+
+    // Private uploads have no account link on the server, so erase them with
+    // the delete keys this browser kept.
+    if (!selfHostMode) {
+      await Promise.allSettled(loadUploadHistory().map(f => fetch(`/api/delete/${encodeURIComponent(f.short_id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteToken: f.delete_token || localStorage.getItem('owner_' + f.short_id) }),
+      })));
+      ZK.clearCredentials();
+    }
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+      localStorage.removeItem(NOTIFY_KEY);
+      Object.keys(localStorage).filter(k => k.startsWith('owner_')).forEach(k => localStorage.removeItem(k));
+    } catch {}
+    userToken = null;
+    sessionStorage.clear();
+    sessionStorage.setItem('account_deleted', '1');
+    location.replace(selfHostMode ? '/signin' : '/');
+  } catch (err) {
+    deleteError.textContent = err.message;
+    btn.disabled = false;
+    btn.textContent = 'Delete account';
+  }
+});
+
 function showSignedIn(username) {
   document.getElementById('signin-link').classList.add('hidden');
   document.getElementById('profile-name').textContent = username;
@@ -663,13 +824,29 @@ function initAuth() {
     document.getElementById('send-to-wrap')?.classList.remove('hidden');
     updateDashboard();
     startInboxPolling();
+    repairZkEnrollment();
   } else {
     if (userToken) logout();
     document.body.classList.remove('is-logged-in');
     landingPage.classList.remove('hidden');
+    if (sessionStorage.getItem('account_deleted')) {
+      sessionStorage.removeItem('account_deleted');
+      showToast('Your account and files were deleted.', 'success', 5000);
+    }
     drawRosette();
     document.getElementById('app-grid')?.classList.add('hidden');
   }
+}
+
+// Accounts created before the sign-up fix never had their private-upload
+// commitment saved. Save this browser's now; the server ignores it if one exists.
+function repairZkEnrollment() {
+  if (!ZK.hasZKCredentials()) return;
+  fetch('/api/auth/zk-enroll', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ commitment: ZK.getStoredCommitment() }),
+  }).catch(() => {});
 }
 
 // ── self-hosted: the owner signs in; nobody else can upload ──────────────────
@@ -680,7 +857,7 @@ function initSelfHost() {
 
   showSignedIn(username);
   if (uploadCount) uploadCount.textContent = 'No limit';
-  renderFileList(loadUploadHistory());
+  updateDashboard();
   startInboxPolling();
   initReceive();
   initUpdates();
@@ -692,14 +869,45 @@ async function updateDashboard() {
   // Render localStorage cache instantly so the UI is never blank during the round-trip
   renderFileList(loadUploadHistory());
 
-  // Fetch upload count from server (file list stays in localStorage — no server-side user→file link).
+  // The upload count, plus any shares the server can tie to this account (ones
+  // made by an assistant, or from another browser) that this browser hasn't seen.
+  // Private uploads have no server-side link, so those only live in this list.
   try {
     const res = await fetch('/api/auth/user/files', { headers: authHeaders() });
     if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
     const data = await res.json();
     uploadCount.textContent = data.unlimited ? 'No limit' : `${data.dailyUploadCount ?? 0}/5 today`;
+    if (mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
   } catch { /* network error — keep showing cached list */ }
+}
+
+// SQLite timestamps ("2026-09-23 14:00:00") are UTC but carry no zone.
+function parseServerTime(value) {
+  if (!value) return new Date();
+  const s = String(value);
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+}
+
+// Adds server-listed shares missing from this browser's list. True if any were added.
+function mergeServerShares(files) {
+  const history = loadUploadHistory();
+  const known = new Set(history.map(f => f.short_id));
+  const fresh = files.filter(f => f.short_id && !known.has(f.short_id)).map(f => ({
+    short_id: f.short_id,
+    original_filename: f.original_filename || 'Untitled',
+    mime_type: f.mime_type || 'application/octet-stream',
+    size_bytes: f.size_bytes || 0,
+    expires_at: f.expires_at,
+    uploaded_at: parseServerTime(f.uploaded_at).toISOString(),
+    delete_token: f.delete_token || null,
+  }));
+  if (!fresh.length) return false;
+  try {
+    const merged = [...history, ...fresh].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(merged.slice(0, 50)));
+  } catch {}
+  return true;
 }
 
 // ── inbox: files other people send you ────────────────────────────────────────
@@ -812,6 +1020,8 @@ function startInboxPolling() {
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden && inboxTimer) updateInbox();
+  // picks up shares an assistant made while you were away
+  if (!document.hidden && userToken) updateDashboard();
 });
 
 function renderRequests(pending) {
@@ -1154,6 +1364,8 @@ autoUpdateInput?.addEventListener('change', async () => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!profileMenu.classList.contains('hidden')) { closeMenu(true); return; }
+  const openDialog = document.querySelector('#mcp-modal:not(.hidden), #delete-modal:not(.hidden)');
+  if (openDialog) { closeModal(openDialog); return; }
   if (!resultCard.classList.contains('hidden')) {
     if (countdownInterval) clearInterval(countdownInterval);
     resultCard.classList.add('hidden');

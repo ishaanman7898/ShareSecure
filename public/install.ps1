@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $RepoUrl    = if ($env:SHARESECURE_REPO) { $env:SHARESECURE_REPO } else { "https://github.com/ishaanman7898/ShareSecure" }
 $InstallDir = if ($env:SHARESECURE_DIR)  { $env:SHARESECURE_DIR  } else { "$env:USERPROFILE\sharesecure" }
 $Port       = if ($env:SHARESECURE_PORT) { $env:SHARESECURE_PORT } else { "3000" }
-$MinNode    = 18
+$MinNode    = 20
 
 # -- helpers -------------------------------------------------------------------
 function Write-Step  { param($msg) Write-Host "  " -NoNewline; Write-Host $msg -ForegroundColor Cyan }

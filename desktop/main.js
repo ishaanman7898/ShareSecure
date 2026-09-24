@@ -1,16 +1,22 @@
 'use strict';
-// ShareSecure desktop: runs the self-hosted server inside the app and shows it
-// in its own window. Closing the window keeps it running in the tray, because
-// share links only work while the server is up.
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification } = require('electron');
+// ShareSecure desktop. On first launch you choose how to use it:
+//   account  sign in to your ShareSecure account (the website, in its own window)
+//   local    run a private ShareSecure on this computer; closing the window keeps
+//            it running in the tray, because share links only work while it's up
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog } = require('electron');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+
+// a dev run (npm run desktop) never touches the installed app's data or lock
+if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'ShareSecure-dev'));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
   return;
 }
+
+const CLOUD = 'https://sharesecure-du8.pages.dev';
 
 // Program files are read-only once packaged, so settings, the encryption key
 // and every stored file live in the user's app-data folder. It's a separate
@@ -18,14 +24,30 @@ if (!app.requestSingleInstanceLock()) {
 const USER_DIR = app.getPath('userData');
 const DATA_DIR = path.join(USER_DIR, 'data');
 const PORT_FILE = path.join(USER_DIR, 'port.json');
+const MODE_FILE = path.join(USER_DIR, 'mode.json');
 // the full-bleed tile reads better at window and tray sizes than the Mac-grid one
 const ICON = path.join(__dirname, 'icon-win.png');
 
 let win = null;
 let tray = null;
 let quitting = false;
+let mode = null;     // 'account' | 'local' | null until chosen
 let origin = '';
 let toldAboutTray = false;
+
+function readMode() {
+  try {
+    const m = JSON.parse(fs.readFileSync(MODE_FILE, 'utf8')).mode;
+    if (m === 'account' || m === 'local') return m;
+  } catch {}
+  // 1.8.0 only had local mode: anyone with a local database keeps it
+  return fs.existsSync(path.join(DATA_DIR, 'sharesecure.db')) ? 'local' : null;
+}
+
+function saveMode(m) {
+  fs.mkdirSync(USER_DIR, { recursive: true });
+  fs.writeFileSync(MODE_FILE, JSON.stringify({ mode: m }));
+}
 
 function portFree(port) {
   return new Promise(resolve => {
@@ -73,11 +95,12 @@ async function startServer() {
   await waitForServer(origin);
 }
 
-// Share links point at the public tunnel. Inside the app, open them on
-// localhost instead, which skips the tunnel's warning page.
-function toLocal(url) {
+// Links that belong in the app window. In local mode, share links point at the
+// public tunnel; open them on localhost instead, which skips its warning page.
+function inApp(url) {
   try {
     const u = new URL(url);
+    if (mode === 'account') return u.origin === CLOUD ? url : null;
     const base = process.env.BASE_URL && new URL(process.env.BASE_URL);
     if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (base && u.host === base.host)) {
       return origin + u.pathname + u.search + u.hash;
@@ -88,13 +111,13 @@ function toLocal(url) {
 
 function wireLinks(contents) {
   contents.setWindowOpenHandler(({ url }) => {
-    const local = toLocal(url);
-    if (local) openWindow(local, { width: 1100, height: 820 });
+    const target = inApp(url);
+    if (target) openWindow(target, { width: 1100, height: 820 });
     else if (/^https?:/.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   contents.on('will-navigate', (e, url) => {
-    if (toLocal(url)) return;
+    if (inApp(url) || url.startsWith('file:')) return;
     e.preventDefault();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
@@ -114,43 +137,106 @@ function openWindow(url, size) {
   });
   wireLinks(w.webContents);
   w.once('ready-to-show', () => w.show());
-  w.loadURL(url);
+  if (url) w.loadURL(url);
   return w;
 }
 
+function mainUrl() {
+  return mode === 'account' ? `${CLOUD}/signin` : origin;
+}
+
+function createMain(url) {
+  win = openWindow(url, { width: 1240, height: 820 });
+  win.on('close', e => {
+    // with an account there's no server to keep alive, so closing quits
+    if (quitting || mode !== 'local') return;
+    e.preventDefault();
+    win.hide();
+    if (!toldAboutTray && Notification.isSupported()) {
+      toldAboutTray = true;
+      new Notification({
+        title: 'ShareSecure is still running',
+        body: 'Your links keep working while it runs. Quit from the tray icon to stop it.',
+        icon: ICON,
+      }).show();
+    }
+  });
+  win.on('closed', () => {
+    win = null;
+    if (mode !== 'local' && !quitting) app.quit();
+  });
+}
+
 function showMain() {
-  if (!win || win.isDestroyed()) {
-    win = openWindow(origin, { width: 1240, height: 820 });
-    win.on('close', e => {
-      if (quitting) return;
-      e.preventDefault();
-      win.hide();
-      if (!toldAboutTray && Notification.isSupported()) {
-        toldAboutTray = true;
-        new Notification({
-          title: 'ShareSecure is still running',
-          body: 'Your links keep working while it runs. Quit from the tray icon to stop it.',
-          icon: ICON,
-        }).show();
-      }
-    });
-    return;
-  }
+  if (!mode) return showWelcome();
+  if (!win || win.isDestroyed()) return createMain(mainUrl());
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
+}
+
+// First launch: pick "sign in to your account" or "run it on this computer".
+// The page's buttons change the URL hash, which we listen for here.
+function showWelcome() {
+  if (win && !win.isDestroyed()) { win.show(); return; }
+  createMain(null);
+  win.loadFile(path.join(__dirname, 'welcome.html'));
+  win.webContents.on('did-navigate-in-page', async (_e, url) => {
+    const choice = new URL(url).hash.slice(1);
+    if (choice !== 'account' && choice !== 'local') return;
+    saveMode(choice);
+    await start(choice);
+    win.loadURL(mainUrl());
+    buildTrayMenu();
+  });
+}
+
+async function start(chosen) {
+  mode = chosen;
+  if (mode === 'local') {
+    try {
+      await startServer();
+    } catch (err) {
+      dialog.showErrorBox('ShareSecure couldn’t start', err.message);
+      app.exit(1);
+    }
+  } else {
+    origin = CLOUD;
+  }
+}
+
+// Switching needs a fresh start: a local server can't be stopped in place.
+async function changeMode() {
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Choose again', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Choose how to use ShareSecure',
+    detail: 'ShareSecure will restart and ask whether to sign in to your account or run it on this computer. Nothing is deleted.',
+  });
+  if (response !== 0) return;
+  try { fs.unlinkSync(MODE_FILE); } catch {}
+  quitting = true;
+  app.relaunch();
+  app.exit(0);
+}
+
+function buildTrayMenu() {
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Open ShareSecure', click: showMain },
+    ...(mode === 'local' ? [{ label: 'Open data folder', click: () => shell.openPath(DATA_DIR) }] : []),
+    { label: 'Switch between account and this computer…', click: changeMode, enabled: Boolean(mode) },
+    { type: 'separator' },
+    { label: 'Quit ShareSecure', click: () => { quitting = true; app.quit(); } },
+  ]));
 }
 
 function createTray() {
   const image = nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 });
   tray = new Tray(image);
   tray.setToolTip('ShareSecure');
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open ShareSecure', click: showMain },
-    { label: 'Open data folder', click: () => shell.openPath(DATA_DIR) },
-    { type: 'separator' },
-    { label: 'Quit ShareSecure', click: () => { quitting = true; app.quit(); } },
-  ]));
+  buildTrayMenu();
   tray.on('click', showMain);
 }
 
@@ -165,19 +251,13 @@ function checkForUpdates() {
 app.on('second-instance', showMain);
 app.on('activate', showMain);
 app.on('before-quit', () => { quitting = true; });
-// stay alive in the tray when every window is closed
-app.on('window-all-closed', () => {});
+// in local mode stay alive in the tray when every window is closed
+app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
-  try {
-    await startServer();
-  } catch (err) {
-    const { dialog } = require('electron');
-    dialog.showErrorBox('ShareSecure couldn’t start', err.message);
-    app.exit(1);
-    return;
-  }
+  const saved = readMode();
+  if (saved) await start(saved);
   createTray();
   showMain();
   checkForUpdates();

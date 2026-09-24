@@ -18,6 +18,17 @@ function generateId(length) {
   return Array.from(bytes).map(b => chars[b % chars.length]).join('');
 }
 
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+// PDF, PNG, JPEG and DOCX (a ZIP) by their signatures; anything else is refused
+function detectType(b) {
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image/png';
+  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg';
+  if (b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) return DOCX_MIME;
+  return null;
+}
+
 async function sha256hex(buffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -61,6 +72,12 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
   }
 
+  // the type comes from the file's first bytes, never its name or the browser's claim
+  const detectedMime = detectType(new Uint8Array(await file.slice(0, 8).arrayBuffer()));
+  if (!detectedMime) {
+    return Response.json({ error: 'Only PDF, DOCX, PNG and JPG files can be shared.' }, { status: 415 });
+  }
+
   // ZK-auth path: if zk_proof/zk_nullifier/zk_nonce form fields are present,
   // verify the UniGroth proof and accept the upload WITHOUT any user identifier
   // (no user_tag, no user_id). The server confirms the uploader is a registered
@@ -83,7 +100,9 @@ export async function onRequestPost(context) {
       env
     );
     if (!result.valid) {
-      return Response.json({ error: `ZK proof rejected: ${result.error}` }, { status: 401 });
+      // 403, not 401: the session is fine, only the proof failed. The app retries
+      // with its normal sign-in instead of treating this as being signed out.
+      return Response.json({ error: `ZK proof rejected: ${result.error}`, code: 'zk_rejected' }, { status: 403 });
     }
     zkValidated = true;
   }
@@ -118,7 +137,7 @@ export async function onRequestPost(context) {
 
   const shortId = generateId(8);
   const deleteToken = generateId(24);
-  const mimeType = file.type || 'application/octet-stream';
+  const mimeType = detectedMime;
 
   // Use custom display_name if provided, otherwise fall back to original filename
   const rawDisplayName = formData.get('display_name');

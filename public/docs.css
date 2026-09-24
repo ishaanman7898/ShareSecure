@@ -462,3 +462,19 @@ h2 .section-num {
   .toc ol { grid-template-columns: 1fr; }
   .release-header { flex-direction: column; gap: 4px; }
 }
+
+/* ── Legal pages: plain, readable documents ── */
+.legal { max-width: 680px; }
+.legal .page-title { font-size: 2.4rem; font-weight: 700; }
+.legal .page-meta { margin-bottom: 36px; }
+.legal section { margin-bottom: 40px; animation: none; }
+.legal h2 { display: block; font-size: 1.15rem; margin-bottom: 10px; letter-spacing: -0.01em; }
+.legal h3 { font-size: 1rem; margin: 18px 0 6px; }
+.legal p, .legal li { color: var(--text); line-height: 1.7; }
+.legal p + p { margin-top: 10px; }
+.legal ul { margin: 8px 0 0 20px; display: grid; gap: 6px; }
+.legal .summary { padding: 4px 0 4px 20px; margin-bottom: 44px; border-left: 2px solid var(--heading); }
+.legal .summary h2 { font-size: 1rem; }
+.legal .summary ul { gap: 4px; }
+.legal .muted { color: var(--text-muted); font-size: 0.92rem; }
+.legal .footer { margin-top: 72px; padding: 40px 0; }

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'" />
+  <title>Welcome to ShareSecure</title>
+  <style>
+    :root { --paper: #fff; --ink: #000; --ink-2: #2b2b2b; --muted: #6b6b6b; --line: #e4e4e4; --line-strong: #c9c9c9; --sunken: #f4f4f4; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #000; --ink: #fff; --ink-2: #d6d6d6; --muted: #8c8c8c; --line: #1f1f1f; --line-strong: #333; --sunken: #0e0e0e; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 20px;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    main { width: 100%; max-width: 560px; }
+    img { display: block; width: 64px; height: 64px; margin-bottom: 20px; }
+    h1 { font-size: 1.9rem; letter-spacing: -0.03em; line-height: 1.15; }
+    .lede { margin-top: 8px; color: var(--ink-2); }
+    .choices { display: grid; gap: 12px; margin-top: 28px; }
+    a.choice {
+      display: block;
+      padding: 18px 20px;
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      color: inherit;
+      text-decoration: none;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+    a.choice:hover, a.choice:focus-visible { border-color: var(--ink); background: var(--sunken); outline: none; }
+    .choice strong { display: block; font-size: 1.02rem; }
+    .choice span { display: block; margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
+    .note { margin-top: 20px; color: var(--muted); font-size: 0.84rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="icon-win.png" alt="" />
+    <h1>Welcome to ShareSecure</h1>
+    <p class="lede">How do you want to use it?</p>
+    <div class="choices">
+      <a class="choice" href="#account">
+        <strong>Sign in to my ShareSecure account</strong>
+        <span>Use the account you have on the website, or create one. Your links work any time, even with this app closed.</span>
+      </a>
+      <a class="choice" href="#local">
+        <strong>Run it privately on this computer</strong>
+        <span>Your files and encryption key never leave this computer, with no upload limit. Links work while the app is running.</span>
+      </a>
+    </div>
+    <p class="note">You can switch later from the ShareSecure icon in your menu bar or system tray.</p>
+  </main>
+</body>
+</html>

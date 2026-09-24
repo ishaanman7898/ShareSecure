@@ -154,5 +154,9 @@ form.addEventListener('submit', async e => {
     mode = 'signin';
   }
   render();
+  if (sessionStorage.getItem('account_deleted')) {
+    sessionStorage.removeItem('account_deleted');
+    $('auth-sub').textContent = 'The account and its files were deleted. Set up a new owner account to use ShareSecure again.';
+  }
   username.focus();
 })();

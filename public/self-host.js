@@ -12,7 +12,7 @@
       cmd: `curl -fsSL ${base}/install.sh | bash`,
       hint: 'Paste into Terminal. Works on macOS, Ubuntu, Debian, Fedora and Arch.',
       steps: [
-        'Installs Node.js if you don’t have version 18 or newer.',
+        'Installs Node.js if you don’t have version 20 or newer.',
         'Downloads ShareSecure into <code>~/sharesecure</code>.',
         'Creates an encryption key that only your install knows.',
         'Starts the server at <code>http://localhost:3000</code>. The first time you open it, you create your owner account.',
@@ -29,7 +29,7 @@
       cmd: `irm ${base}/install.ps1 | iex`,
       hint: 'Paste into PowerShell. Node.js is installed with winget if it’s missing.',
       steps: [
-        'Installs Node.js if you don’t have version 18 or newer.',
+        'Installs Node.js if you don’t have version 20 or newer.',
         'Downloads ShareSecure into <code>%USERPROFILE%\\sharesecure</code>.',
         'Creates an encryption key that only your install knows.',
         'Adds a desktop shortcut, starts the server and opens it. The first time, you create your owner account.',

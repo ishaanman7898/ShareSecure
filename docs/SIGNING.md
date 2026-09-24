@@ -29,7 +29,7 @@ Signing plus notarization removes the Gatekeeper warning completely, and lets th
 
 Windows installers are unsigned. The first time someone runs one, SmartScreen says “Windows protected your PC”. They click **More info → Run anyway**, and it doesn't ask again.
 
-If you ever want Windows signing without paying, [SignPath Foundation](https://signpath.org) signs open-source projects for free if you apply and are accepted. One requirement is an open-source license, which ShareSecure has (ISC). Signing still doesn't remove SmartScreen right away: the warning fades as more people install the app.
+If you ever want Windows signing without paying, [SignPath Foundation](https://signpath.org) signs open-source projects for free if you apply and are accepted. One requirement is an open-source license, which ShareSecure has (MIT). Signing still doesn't remove SmartScreen right away: the warning fades as more people install the app.
 
 ## Existing installs
 

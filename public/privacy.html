@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Privacy policy — ShareSecure</title>
+  <link rel="icon" type="image/png" href="/app-icon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+
+<body>
+
+  <header class="topbar">
+    <a class="topbar-brand" href="/">
+      <img src="/app-icon.png" alt="" width="26" height="26" />
+      ShareSecure
+    </a>
+    <a class="topbar-back" href="/">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+      Back to ShareSecure
+    </a>
+  </header>
+
+  <main class="wrapper legal">
+
+    <header>
+      <h1 class="page-title">Privacy policy</h1>
+      <div class="page-meta">
+        <span>Last updated September 23, 2026</span>
+      </div>
+    </header>
+
+    <div class="summary">
+      <h2>The short version</h2>
+      <ul>
+        <li>We only ask for a username and password. No email, no real name.</li>
+        <li>Files, their names and notes are stored encrypted, and erased after they expire.</li>
+        <li>No analytics, no ads, no tracking cookies. We don't log IP addresses.</li>
+        <li>The companies that host the site can see your IP address, like any website host.</li>
+      </ul>
+    </div>
+
+    <p class="muted" style="margin-bottom: 40px;">This covers the ShareSecure website at sharesecure-du8.pages.dev. The desktop app and other copies people run themselves work differently; see section 7.</p>
+
+    <section id="collect">
+      <h2>1. What we store</h2>
+      <h3>Your account</h3>
+      <p>Your username, a hash of your password (never the password itself), when you signed up, and a public code used to check the private upload proof described below. If you connect an AI assistant, we also keep a hash of its token.</p>
+      <h3>Files you share</h3>
+      <p>The file, its name and its type, all encrypted with AES-256-GCM. Alongside them we keep the file's size, when it was uploaded, when it expires, how many times it's been opened, and a SHA-256 fingerprint of its contents that we use to check it hasn't been damaged. Notes and drawings people add to a file are encrypted too.</p>
+      <h3>Who uploaded what</h3>
+      <p>In the browser where you created your account, uploads use a private proof that shows you have an account without revealing which one, so the file isn't linked to you at all. From any other browser, the file is tagged with a code derived from your account using a secret key. It isn't your username or account number. Files an AI assistant shares for you are tagged the same way. The one-time upload link an assistant gets is erased once it's used, or after 10 minutes.</p>
+      <h3>Your daily upload count</h3>
+      <p>To enforce 5 uploads a day, we record when each private upload proof is issued to your account. These records are erased after 24 hours.</p>
+      <h3>Files sent to you</h3>
+      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. We don't store who sent it.</p>
+    </section>
+
+    <section id="not-collected">
+      <h2>2. What we don't collect</h2>
+      <p>No email address, phone number or real name. No analytics, advertising or tracking scripts, and no cookies. ShareSecure's own code doesn't record IP addresses.</p>
+    </section>
+
+    <section id="others">
+      <h2>3. Services that handle your data</h2>
+      <ul>
+        <li><strong>Cloudflare</strong> hosts the site and handles every request. Like any web host it sees your IP address and basic request details, under <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">its privacy policy</a>.</li>
+        <li><strong>Turso</strong> stores the database, including the encrypted files.</li>
+        <li><strong>Google Fonts</strong> serves the site's fonts, so Google sees your IP address when a page loads them.</li>
+        <li><strong>GitHub</strong> hosts the source code and desktop app downloads.</li>
+      </ul>
+      <p>We don't sell or share your data with anyone else.</p>
+    </section>
+
+    <section id="retention">
+      <h2>4. How long we keep it</h2>
+      <ul>
+        <li>A file's link stops working the moment it expires. The file and everything stored about it are erased the next time cleanup runs, which happens every time anyone uploads.</li>
+        <li>If you delete a file, or decline one sent to you, it's erased straight away.</li>
+        <li>Your account stays until you delete it. Deleting it from the account menu erases it and every file you've shared from it right away.</li>
+      </ul>
+    </section>
+
+    <section id="browser">
+      <h2>5. What's stored in your browser</h2>
+      <p>Your sign-in lasts until you close the browser. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days. It also keeps the secret behind your private upload proof, and remembers that you accepted the terms and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
+    </section>
+
+    <section id="security">
+      <h2>6. How your files are protected</h2>
+      <p>Each file is encrypted with its own key, and those keys come from a master key kept on the server. That protects files if the database is ever copied, but it isn't end-to-end encryption. Whoever controls the server could decrypt files while they exist. If that matters for what you're sharing, run ShareSecure yourself so the key stays on your own machine.</p>
+      <p>See the <a href="/security">security page</a> for how to report a problem.</p>
+    </section>
+
+    <section id="self-hosted">
+      <h2>7. The desktop app and self-hosted copies</h2>
+      <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer, and we never receive any of it. A few things still reach the internet:</p>
+      <ul>
+        <li>To make share links work for other devices, the app uses a public relay (localtunnel at loca.lt). The relay can see traffic that passes through it. If you have your own domain, you can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting.</li>
+        <li>The app checks GitHub for updates.</li>
+      </ul>
+      <p>The self-hosted version also removes author and editing details from PDF and Word files when you upload them.</p>
+    </section>
+
+    <section id="choices">
+      <h2>8. Your choices</h2>
+      <p>You can delete any file you've shared at any time from Your shares, and delete your whole account from the account menu. You can also turn off AI assistant access there. To ask what we hold about you, email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> with your username.</p>
+    </section>
+
+    <section id="children">
+      <h2>9. Children</h2>
+      <p>ShareSecure isn't meant for children under 13, and we don't knowingly let them use it.</p>
+    </section>
+
+    <section id="changes">
+      <h2>10. Changes</h2>
+      <p>If we change this policy, we'll update this page and the date at the top.</p>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-nav">
+        <a href="/">ShareSecure</a>
+        <a href="/terms">Terms</a>
+        <a href="/security">Security</a>
+        <a href="/changelog">Changelog</a>
+      </div>
+    </footer>
+
+  </main>
+</body>
+
+</html>

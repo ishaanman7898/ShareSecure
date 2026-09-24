@@ -31,12 +31,15 @@ export async function onRequestPost(context) {
       )`,
       args: []
     });
-    const result = await db.execute({
+    await db.execute({
       sql: 'INSERT INTO users (username, access_code) VALUES (?, ?)',
       args: [username, hashed]
     });
 
-    const userId = result.lastInsertRowid?.toString();
+    // Turso's HTTP client doesn't return lastInsertRowid, so look the id up.
+    // Without it the ZK commitment was never saved and private uploads failed.
+    const row = await db.execute({ sql: 'SELECT id FROM users WHERE username = ?', args: [username] });
+    const userId = row.rows[0]?.id?.toString();
 
     // Optional: client may pre-compute a UniGroth commitment and send it now.
     // The server NEVER sees the underlying secret — only the commitment.

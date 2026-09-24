@@ -4,8 +4,12 @@
 const express = require('express');
 const router  = express.Router();
 
+const crypto = require('crypto');
 const { db } = require('../db');
 const session = require('../session');
+const settings = require('../settings');
+const { purgeAll } = require('../purge');
+const { getEncKey, decryptString } = require('../utils');
 
 const MIN_PASSWORD = 8;
 
@@ -67,10 +71,58 @@ router.post('/login', (req, res) => {
   res.json({ success: true, username: user.username, token: session.issueToken(user) });
 });
 
+// ── POST /api/auth/delete-account ─────────────────────────────────────────────
+// Deleting the owner account erases every file, the account and its sessions,
+// and puts this ShareSecure back to first-run setup. The encryption key and
+// public link stay, so a new owner can start straight away.
+router.post('/delete-account', session.requireOwner, (req, res) => {
+  const password = String(req.body?.access_code || '');
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.auth.userId);
+  if (!user || !session.verifyPassword(password, user.access_code).ok) {
+    return res.status(403).json({ error: 'Wrong password' });
+  }
+
+  purgeAll();
+  db.transaction(() => {
+    db.prepare('DELETE FROM users').run();
+    try { db.prepare('DELETE FROM upload_log').run(); } catch {}
+  })();
+  // a new signing secret ends every existing session and assistant token
+  settings.set('sessionSecret', crypto.randomBytes(32).toString('hex'));
+  settings.set('acceptIncoming', false);
+  settings.set('mcpTokenHash', null);
+  res.json({ deleted: true });
+});
+
+// ── /api/auth/mcp-token: the token assistants use to connect ──────────────────
+const mcpUrl = () => `http://localhost:${process.env.PORT || 3000}/mcp`;
+
+router.get('/mcp-token', session.requireOwner, (_req, res) => {
+  res.json({ ...require('../mcp').tokenStatus(), mcpUrl: mcpUrl() });
+});
+
+router.post('/mcp-token', session.requireOwner, (_req, res) => {
+  res.json({ token: require('../mcp').createToken(), mcpUrl: mcpUrl() });
+});
+
+router.delete('/mcp-token', session.requireOwner, (_req, res) => {
+  require('../mcp').revokeToken();
+  res.json({ hasToken: false });
+});
+
 // ── GET /api/auth/user/files ──────────────────────────────────────────────────
-// The dashboard list lives in the browser. Self-hosted instances have no daily limit.
+// Live shares, so ones made by an assistant show up in the dashboard too.
+// Self-hosted instances have no daily limit.
 router.get('/user/files', session.requireOwner, (_req, res) => {
-  res.json({ files: [], dailyUploadCount: 0, unlimited: true });
+  const key = getEncKey();
+  const rows = db.prepare(`
+    SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, delete_token
+    FROM files WHERE is_active = 1 AND inbox_status IS NULL AND (expires_at IS NULL OR expires_at > ?)
+    ORDER BY uploaded_at DESC LIMIT 50
+  `).all(new Date().toISOString());
+  const plain = v => { try { return decryptString(v, key); } catch { return v; } };
+  const files = rows.map(r => ({ ...r, original_filename: plain(r.original_filename), mime_type: plain(r.mime_type) }));
+  res.json({ files, dailyUploadCount: 0, unlimited: true });
 });
 
 module.exports = router;

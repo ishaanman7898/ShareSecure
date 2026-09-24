@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Security Policy — ShareSecure</title>
+  <title>Security — ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/docs.css" />
@@ -25,123 +25,61 @@
         stroke-linecap="round" stroke-linejoin="round">
         <polyline points="15 18 9 12 15 6" />
       </svg>
-      Return to App
+      Back to ShareSecure
     </a>
   </header>
 
-  <main class="wrapper">
+  <main class="wrapper legal">
 
     <header>
-      <h1 class="page-title">Security Policy</h1>
-      <p class="page-subtitle">Architecture details, vulnerability disclosure, and known limitations</p>
+      <h1 class="page-title">Security</h1>
       <div class="page-meta">
-        <span>Updated: March 2026</span>
-        <span>Version: 1.1.0</span>
-        <span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
-          <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">Source Code</a>
-        </span>
+        <span>Last updated September 23, 2026</span>
       </div>
     </header>
 
-    <div class="alert alert-info">
-      <strong>Responsible Disclosure</strong>
-      If you discover a security vulnerability, please report it privately.
-      Email <strong>ishaanmanoor1@gmail.com</strong> with details. We acknowledge reports within 48 hours.
-    </div>
-
-    <!-- Reporting -->
-    <section id="reporting">
-      <h2><span class="section-num">1.</span> Reporting a Vulnerability</h2>
-      <div class="card">
-        <p>Please include the following in your report:</p>
-        <ul style="margin-left: 20px; list-style: disc;">
-          <li><strong>Description</strong> of the vulnerability and affected component.</li>
-          <li><strong>Steps to reproduce</strong> the issue.</li>
-          <li><strong>Potential impact</strong> — what could an attacker achieve?</li>
-        </ul>
-        <div class="alert alert-warning" style="margin-top: 24px; margin-bottom: 0;">
-          Do <strong>not</strong> open a public GitHub issue for security vulnerabilities. This protects users while
-          the issue is being resolved.
-        </div>
-      </div>
+    <section id="report">
+      <h2>Reporting a problem</h2>
+      <p>If you find a security issue, email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> instead of opening a public GitHub issue. Say what's affected, how to reproduce it, and what someone could do with it. We'll reply as soon as we can and let you know when it's fixed.</p>
     </section>
 
-    <!-- Security Features -->
-    <section id="features">
-      <h2><span class="section-num">2.</span> Implemented Security Features</h2>
-      <div class="status-grid">
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>AES-256-GCM Encryption</h3>
-          <p>Files are encrypted at rest with per-file key wrapping. Compromise of the master key does not expose past encrypted content.</p>
-        </div>
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>Metadata Stripping</h3>
-          <p>DOCX and PDF metadata is automatically scrubbed on upload. Author, computer, and revision info are removed.</p>
-        </div>
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>HMAC-SHA256 Integrity</h3>
-          <p>Content hashes are keyed with a secret salt. Prevents correlation with public file databases to track uploader identity.</p>
-        </div>
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>Zero-Knowledge Quotas</h3>
-          <p>Rate limits use pseudonymous HMAC tags. A database leak alone cannot link activity cycles to a real user account.</p>
-        </div>
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>IP Stripping Middleware</h3>
-          <p>Forwarding headers are purged before reaching route handlers. Application code never sees or logs visitor IP addresses.</p>
-        </div>
-        <div class="status-card card">
-          <span class="status-badge badge-done">Active</span>
-          <h3>Ephemeral Ephemeral</h3>
-          <p>Files auto-delete between 1m and 24h. Expired files are physically wiped from disk, not just marked inactive.</p>
-        </div>
-      </div>
+    <section id="how">
+      <h2>How files are protected</h2>
+      <ul>
+        <li><strong>Encrypted storage.</strong> Files, their names and notes are encrypted with AES-256-GCM, each with its own key derived from a server master key.</li>
+        <li><strong>Links that expire.</strong> You pick 1 hour to 10 days. After that the link stops working and the file is erased.</li>
+        <li><strong>Private uploads.</strong> Uploads from the browser you signed up in carry a proof that you have an account without saying which one, so files aren't linked to you.</li>
+        <li><strong>Not indexed.</strong> Pages tell search engines not to index or cache them, can't be embedded in other sites, and aren't cached by your browser.</li>
+        <li><strong>No tracking.</strong> No analytics or third-party scripts, and ShareSecure's code doesn't log IP addresses.</li>
+      </ul>
     </section>
 
-    <!-- Known Limitations -->
-    <section id="limitations">
-      <h2><span class="section-num">3.</span> Known Limitations</h2>
-      <div class="card" style="background: rgba(245, 158, 11, 0.05);">
-        <h3>Network-Level Visibility</h3>
-        <p>Application-layer IP stripping cannot hide your identity from the hosting provider, CDN, or ISPs. <strong>If your threat model requires IP anonymity, you must use Tor or a VPN.</strong></p>
-        <br>
-        <h3>Browser & TLS Fingerprinting</h3>
-        <p>The specific way your browser connects to the server (JA3 handshake) can be used to identify your software stack. Use the <strong>Tor Browser</strong> to mitigate fingerprinting risks.</p>
-      </div>
+    <section id="limits">
+      <h2>What it doesn't protect against</h2>
+      <ul>
+        <li><strong>The server operator.</strong> Encryption uses a key held on the server, so it isn't end-to-end. Whoever runs the server could read files while they exist. For sensitive files, run ShareSecure yourself.</li>
+        <li><strong>Anyone with the link.</strong> A link is all it takes to open a file until it expires. Share links privately and pick the shortest expiry that works.</li>
+        <li><strong>Your network.</strong> Your internet provider and the hosting company can see that you connected. Use Tor or a VPN if you need to hide that.</li>
+        <li><strong>The person you share with.</strong> They can screenshot or photograph a file even when downloads are turned off.</li>
+      </ul>
     </section>
 
-    <!-- Best Practices -->
-    <section id="practices">
-      <h2><span class="section-num">4.</span> User Security Guidelines</h2>
-      <div class="card">
-        <ul style="margin-left: 20px; list-style: disc; display: grid; gap: 12px;">
-          <li>Use the <strong>shortest possible expiry</strong> — files deleted sooner are safer.</li>
-          <li>Never share sensitive links via indexed or public channels (e.g. public Discord).</li>
-          <li>For high-stakes anonymity, Always access ShareSecure via the <strong>Tor Browser</strong>.</li>
-          <li>Use the <strong>Delete Token</strong> to manually purge files as soon as they are no longer needed.</li>
-        </ul>
-      </div>
+    <section id="tips">
+      <h2>Good habits</h2>
+      <ul>
+        <li>Use the shortest expiry you can.</li>
+        <li>Delete a share from Your shares as soon as it's been opened.</li>
+        <li>Send links through private messages, not public channels.</li>
+      </ul>
     </section>
 
     <footer class="footer">
       <div class="footer-nav">
-        <a href="/">App Home</a>
-        <a href="/terms">Terms & Conditions</a>
+        <a href="/">ShareSecure</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
         <a href="/changelog">Changelog</a>
-        <a href="https://github.com/ishaanman7898/ShareSecure/issues">Report Issue</a>
       </div>
-      <p class="footer-legal">
-        <strong>IP Notice:</strong> While ShareSecure does not log IP addresses, your identity is inherently visible to any network infrastructure in the path. Use Tor or a trusted VPN for anonymity.
-      </p>
-      <p class="footer-copyright">
-        &copy; 2026 <strong>ShareSecure</strong>. Privacy by Design. MIT Licensed.
-      </p>
     </footer>
 
   </main>

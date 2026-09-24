@@ -40,7 +40,7 @@ function createClient({ url, authToken }) {
 
       // DDL statements (CREATE TABLE, etc.) may return a response without a result object
       const resultBody = result.response?.result;
-      if (!resultBody) return { rows: [] };
+      if (!resultBody) return { rows: [], rowsAffected: 0, lastInsertRowid: null };
       const { cols, rows } = resultBody;
 
       // convert to plain row objects keyed by column name
@@ -56,7 +56,11 @@ function createClient({ url, authToken }) {
         return obj;
       });
 
-      return { rows: rowObjects };
+      return {
+        rows: rowObjects,
+        rowsAffected: resultBody.affected_row_count ?? 0,
+        lastInsertRowid: resultBody.last_insert_rowid ?? null,
+      };
     }
   };
 }

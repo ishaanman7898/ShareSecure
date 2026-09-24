@@ -38,12 +38,44 @@
 
     <div class="timeline">
 
-      <!-- v1.8.0 -->
+      <!-- v1.9.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.9.0</span>
+          <span class="release-date">September 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>AI assistants</h3>
+          <ul class="change-list">
+            <li><strong>Share files from Claude Code, Codex and other MCP clients</strong> — Choose Connect an AI assistant in the account menu to get a token and the setup command. Then ask your assistant to share a file and it gives you the link.</li>
+            <li><strong>Desktop</strong> — The desktop app runs its own MCP server on this computer, so assistants can share files straight from their path.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Accounts</h3>
+          <ul class="change-list">
+            <li><strong>Delete your account</strong> — From the account menu on the website, on your phone and in the desktop app. It erases the account and every file shared from it right away.</li>
+            <li><strong>Sign in from the desktop app</strong> — On first launch, choose to sign in to your ShareSecure account or run ShareSecure privately on your computer. You can switch later from the tray icon.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Signed out when creating a link</strong> — Accounts created recently were signed out the moment they uploaded, because their private sign-in key was never saved. That's fixed, and affected accounts repair themselves the next time you sign in.</li>
+            <li><strong>File types</strong> — The website now checks that uploads really are PDF, Word, PNG or JPG files.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.8.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.8.0</span>
           <span class="release-date">September 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
@@ -293,7 +325,8 @@
     <footer class="footer">
       <div class="footer-nav">
         <a href="/">App Home</a>
-        <a href="/security">Security Policy</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/security">Security</a>
         <a href="/terms">Terms & Conditions</a>
         <a href="https://github.com/ishaanman7898/ShareSecure/issues">Report Issue</a>
       </div>

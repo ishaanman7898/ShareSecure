@@ -92,6 +92,8 @@ app.use(express.static(PUBLIC_DIR, { maxAge: 0, etag: true }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/inbox'));
 app.use('/api', require('./routes/files'));
+// assistants (Claude Code, Codex, …) connect here to share files
+app.use('/mcp', require('./mcp').router);
 
 // ── mode endpoint (self-host detection) ───────────────────────────────────────
 // Returns selfHostMode: true so the frontend can skip auth and show admin UI.
@@ -139,7 +141,10 @@ app.get('/terms', (req, res) => {
 // legacy redirect
 app.get('/TERMS_AND_CONDITIONS.md', (req, res) => res.redirect(301, '/terms'));
 
-// ── security policy ───────────────────────────────────────────────────────────
+// ── privacy and security ──────────────────────────────────────────────────────
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'privacy.html'));
+});
 app.get('/security', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'security.html'));
 });

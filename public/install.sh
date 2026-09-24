@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_URL="${SHARESECURE_REPO:-https://github.com/ishaanman7898/ShareSecure}"
 INSTALL_DIR="${SHARESECURE_DIR:-$HOME/sharesecure}"
 PORT="${SHARESECURE_PORT:-3000}"
-MIN_NODE=18
+MIN_NODE=20
 
 # ── colours ──────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then

@@ -79,4 +79,9 @@ function purgeOrphans() {
   return removed;
 }
 
-module.exports = { purgeExpired, purgeCluster, purgeOne, purgeOrphans, shred };
+// Everything, for when the owner deletes their account.
+function purgeAll() {
+  return purgeWhere('1 = 1');
+}
+
+module.exports = { purgeExpired, purgeCluster, purgeOne, purgeOrphans, purgeAll, shred };

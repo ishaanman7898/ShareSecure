@@ -564,6 +564,46 @@ select:focus,
 .tc-content strong { color: var(--ink); }
 #accept-tc-btn { margin-top: 8px; min-height: 48px; }
 
+/* ── account dialogs (assistant connection, delete account) ── */
+.modal-content { max-height: 90vh; overflow-y: auto; }
+.modal-wide { max-width: 560px; }
+.modal-header .btn-icon { margin-right: -6px; }
+.modal-text { color: var(--ink-2); font-size: 0.93rem; line-height: 1.6; }
+.modal-block { margin-top: 18px; }
+.modal-h3 { font-size: 0.95rem; margin-top: 18px; }
+.modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.mcp-setup { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.mcp-setup .field-hint code { font-family: var(--mono); font-size: 0.95em; }
+
+.code-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--sunken);
+}
+
+.code-box code {
+  flex: 1;
+  min-width: 0;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.code-box .btn-copy { min-height: 32px; padding: 0 12px; font-size: 0.82rem; }
+
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-danger-ghost { color: var(--danger); }
+.btn-danger-ghost:hover { border-color: var(--danger); }
+
 /* ── result modal ── */
 .result-modal {
   position: fixed;
