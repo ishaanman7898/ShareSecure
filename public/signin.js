@@ -7,6 +7,13 @@ const username = $('auth-username');
 const password = $('auth-password');
 const confirm = $('auth-confirm');
 const submit = $('auth-submit');
+
+// Where to go once signed in: back to the file that asked for it, or the app.
+// Only viewer links are allowed, so the parameter can't send anyone elsewhere.
+function afterSignIn() {
+  const next = new URLSearchParams(location.search).get('next') || '';
+  return /^\/r\/[A-Za-z0-9]{4,32}$/.test(next) ? next : '/';
+}
 const errorEl = $('auth-error');
 
 // signin | signup (browser version) | setup | owner-signin (self-hosted)
@@ -91,7 +98,7 @@ async function signIn(user, pass) {
   if (!ok || !data.token) throw new Error(data.error || 'Wrong username or password.');
   sessionStorage.setItem('user_token', data.token);
   if (data.username) sessionStorage.setItem('user_name', data.username);
-  location.replace('/');
+  location.replace(afterSignIn());
 }
 
 form.addEventListener('submit', async e => {
@@ -140,7 +147,7 @@ form.addEventListener('submit', async e => {
 });
 
 (async () => {
-  if (sessionStorage.getItem('user_token')) { location.replace('/'); return; }
+  if (sessionStorage.getItem('user_token')) { location.replace(afterSignIn()); return; }
   try {
     const res = await fetch('/api/mode', { signal: AbortSignal.timeout(3000) });
     const info = res.ok ? await res.json() : {};

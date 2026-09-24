@@ -1,7 +1,7 @@
 import {
   getFilesClient, getAuthClient, verifyToken,
-  getEncKey, decryptField, decryptStr, encryptField, encryptStr,
-  getUserTag, migrateOnce
+  getEncKey, decryptStr, encryptStr,
+  getUserTag, ensureFileColumns
 } from '../../_turso.js';
 
 function generateId(length) {
@@ -57,11 +57,7 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File expired' }, { status: 410 });
   }
 
-  await migrateOnce('files-inbox', filesClient, [
-    'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
-    'ALTER TABLE files ADD COLUMN inbox_status TEXT',
-    'ALTER TABLE files ADD COLUMN inbox_note TEXT',
-  ]);
+  await ensureFileColumns(filesClient);
 
   // Files arrive as requests the recipient has to accept. Cap how many can wait
   // so nobody can flood someone's inbox.
@@ -81,40 +77,27 @@ export async function onRequestPost(context) {
   const newDeleteToken = generateId(24);
   const encKey = await getEncKey(env);
 
-  // re-encrypt under new shortId (same pattern as reshare)
-  let newFileData = file.file_data;
-  let newFilename = file.original_filename;
-  let newMime = file.mime_type;
-
-  if (file.file_data && (file.file_data.startsWith('enc:') || file.file_data.startsWith('enc2:'))) {
-    try {
-      const plain = await decryptField(file.file_data, encKey, env, params.shortId);
-      newFileData = await encryptField(plain, encKey, env, newShortId);
-    } catch {
-      return Response.json({ error: 'Re-encryption failed' }, { status: 500 });
-    }
-    if (file.original_filename?.startsWith('enc')) {
-      const fn = await decryptStr(file.original_filename, encKey, env, params.shortId);
-      newFilename = await encryptStr(fn, encKey, env, newShortId);
-    }
-    if (file.mime_type?.startsWith('enc')) {
-      const mt = await decryptStr(file.mime_type, encKey, env, params.shortId);
-      newMime = await encryptStr(mt, encKey, env, newShortId);
-    }
-  }
+  // The recipient's copy points at the original upload's data rather than
+  // copying it, and hangs off the sender's link: deleting that link withdraws it.
+  const name = await decryptStr(file.original_filename, encKey, env, params.shortId);
+  const mime = await decryptStr(file.mime_type, encKey, env, params.shortId);
 
   await filesClient.execute({
     sql: `INSERT INTO files
-            (short_id, original_filename, mime_type, size_bytes, file_data, expires_at,
+            (short_id, original_filename, mime_type, size_bytes, file_data, data_short_id, expires_at,
              delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at,
-             compressed, allow_annotations, allow_download, recipient_user_tag,
+             compressed, allow_annotations, allow_download, require_account, recipient_user_tag,
              is_active, inbox_status, inbox_note)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?)`,
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0, 'pending', ?)`,
     args: [
-      newShortId, newFilename, newMime, file.size_bytes, newFileData,
-      file.expires_at, newDeleteToken, file.integrity_hash,
-      file.cluster_id, null, new Date().toISOString(),
-      file.compressed || 0, file.allow_annotations ?? 1, file.allow_download ?? 0,
+      newShortId,
+      await encryptStr(name, encKey, env, newShortId),
+      await encryptStr(mime, encKey, env, newShortId),
+      file.size_bytes,
+      file.data_short_id || file.short_id,
+      file.expires_at, newDeleteToken, file.integrity_hash || '',
+      file.cluster_id || file.short_id, params.shortId, new Date().toISOString(),
+      file.allow_annotations ?? 1, file.allow_download ?? 0, file.require_account ?? 0,
       recipientTag,
       note ? await encryptStr(note, encKey, env, newShortId) : null
     ]

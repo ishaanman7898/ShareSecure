@@ -404,6 +404,7 @@ function buildUploadForm() {
   formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
   formData.append('allow_annotations', document.getElementById('allow-annotations')?.checked ? '1' : '0');
   formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
+  formData.append('require_account', document.getElementById('require-account').checked ? '1' : '0');
 
   // Send custom display name if the user changed it
   const displayNameInput = document.getElementById('display-name-input');
@@ -840,6 +841,8 @@ function initAuth() {
   if (username) {
     showSignedIn(username);
     document.getElementById('send-to-wrap')?.classList.remove('hidden');
+    // a self-hosted install has one account, so this only makes sense on the website
+    document.getElementById('require-account-wrap')?.classList.remove('hidden');
     updateDashboard();
     startInboxPolling();
     repairZkEnrollment();

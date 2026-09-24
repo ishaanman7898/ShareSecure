@@ -1,4 +1,4 @@
-import { getFilesClient, verifyToken, getUserTag } from '../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, deleteBranch } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
@@ -33,19 +33,8 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  // Owner → cascade-delete entire cluster (removes file for everyone)
-  // Non-owner with deleteToken → delete only this copy (removes for self only)
-  if (isOwner && file.cluster_id) {
-    await client.execute({
-      sql: 'DELETE FROM files WHERE cluster_id = ?',
-      args: [file.cluster_id]
-    });
-  } else {
-    await client.execute({
-      sql: 'DELETE FROM files WHERE short_id = ?',
-      args: [params.shortId]
-    });
-  }
-
-  return Response.json({ deleted: true, scope: isOwner ? 'everyone' : 'self' });
+  // The original upload → every link to the file goes. Any other link → that
+  // link and the ones shared onward from it; the original and other branches stay.
+  const scope = await deleteBranch(client, file);
+  return Response.json({ deleted: true, scope });
 }

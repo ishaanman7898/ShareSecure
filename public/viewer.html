@@ -126,7 +126,16 @@
 
     <div class="unsupported hidden" id="unsupported">
       <p class="unsupported-title" id="unsupported-title"></p>
-      <p class="unsupported-sub">This file couldn’t be displayed.</p>
+      <p class="unsupported-sub">This file couldn’t be displayed. Try reloading the page.</p>
+    </div>
+
+    <div class="unsupported hidden" id="signin-needed">
+      <p class="unsupported-title">Sign in to open this file</p>
+      <p class="unsupported-sub">Whoever shared it only lets people with a ShareSecure account open it.</p>
+      <div class="signin-needed-actions">
+        <a class="btn btn-primary" id="signin-needed-link" href="/signin">Sign in</a>
+        <a class="btn btn-ghost" id="signup-needed-link" href="/signin?new=1">Create an account</a>
+      </div>
     </div>
   </main>
 

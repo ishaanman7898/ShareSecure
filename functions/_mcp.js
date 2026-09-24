@@ -7,7 +7,7 @@
 // in its own shell; the upload's response contains the link. Uploads go through
 // the normal upload endpoint, so the 5-a-day limit and encryption all apply.
 
-import { getAuthClient, getFilesClient, getUserTag, signToken, sha256, getEncKey, decryptStr, migrateOnce } from './_turso.js';
+import { getAuthClient, getFilesClient, getUserTag, signToken, sha256, getEncKey, decryptStr, migrateOnce, deleteBranch } from './_turso.js';
 import { onRequestPost as uploadHandler } from './api/upload.js';
 import { onRequestPost as sendHandler } from './api/send/[shortId].js';
 
@@ -89,6 +89,7 @@ async function upload(user, file, opts, context) {
   fd.append('expires_hours', String(opts.expires_hours));
   fd.append('allow_download', opts.allow_download ? '1' : '0');
   fd.append('allow_annotations', '0');
+  fd.append('require_account', opts.require_account ? '1' : '0');
   if (opts.name) fd.append('display_name', opts.name);
   const request = new Request(new URL('/api/upload', context.request.url), {
     method: 'POST',
@@ -162,6 +163,7 @@ const TOOLS = [
         path: { type: 'string', description: 'Path to the file on this computer.' },
         expires_hours: { type: 'number', description: 'Hours until the link stops working, 1 to 240. Default 24.' },
         allow_download: { type: 'boolean', description: 'Let people who open the link download the file. Default false (view only).' },
+        require_account: { type: 'boolean', description: 'Only people signed in to ShareSecure can open the link. Default false (anyone with the link).' },
         name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
         send_to: { type: 'array', items: { type: 'string' }, description: 'ShareSecure usernames to send the file to, e.g. ["alice", "bob"]. Each gets their own copy to accept or decline. Up to 20.' },
       },
@@ -191,6 +193,7 @@ async function callTool(name, args, user, context) {
     const opts = {
       expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
       allow_download: Boolean(args.allow_download),
+      require_account: Boolean(args.require_account),
       name: args.name ? String(args.name).slice(0, 200) : null,
       send_to: toRecipients(args.send_to),
     };
@@ -235,11 +238,15 @@ async function callTool(name, args, user, context) {
   if (name === 'delete_share') {
     const id = String(args.id || '');
     const tag = await getUserTag(user.userId, env);
-    const { rowsAffected } = await getFilesClient(env).execute({
-      sql: 'DELETE FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
+    const client = getFilesClient(env);
+    const file = (await client.execute({
+      sql: 'SELECT short_id, cluster_id FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
       args: [id, tag, user.userId]
-    });
-    return rowsAffected ? { text: `Deleted ${id}. Its link no longer works.` } : { error: `No share with id ${id} on this account.` };
+    })).rows[0];
+    if (!file) return { error: `No share with id ${id} on this account.` };
+    // an upload is the original, so every link to it goes too
+    await deleteBranch(client, file);
+    return { text: `Deleted ${id}. Its link, and every link shared from it, no longer work.` };
   }
 
   return { error: `Unknown tool ${name}` };
@@ -257,7 +264,7 @@ async function handleMessage(msg, user, context) {
       return reply({
         protocolVersion: PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'sharesecure', version: '1.9.1' },
+        serverInfo: { name: 'sharesecure', version: '1.9.2' },
         instructions: 'ShareSecure shares files through private links that expire. Use share_file to share a file from this computer, then give the user the link.',
       });
     case 'ping':

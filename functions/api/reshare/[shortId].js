@@ -1,10 +1,15 @@
+// POST /api/reshare/:shortId — a new link to the same file, owned by whoever made it.
+// The new link points at the original upload's data instead of copying it, so it
+// costs almost nothing to make. It's a branch of the link it came from: deleting
+// that link (or the original) deletes this one too, and deleting this one takes
+// only its own branch with it.
 import {
   getFilesClient,
   getEncKey,
-  decryptField,
   decryptStr,
-  encryptField,
-  encryptStr
+  encryptStr,
+  ensureFileColumns,
+  signInRequired
 } from '../../_turso.js';
 
 function generateId(length) {
@@ -15,71 +20,53 @@ function generateId(length) {
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
-
   const client = getFilesClient(env);
+  await ensureFileColumns(client);
 
-  const res = await client.execute({
+  const file = (await client.execute({
     sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
     args: [params.shortId]
-  });
+  })).rows[0];
 
-  const file = res.rows[0];
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
   if (file.expires_at && new Date(file.expires_at) < new Date()) {
     return Response.json({ error: 'Link expired' }, { status: 410 });
   }
+  const denied = await signInRequired(file, request, env);
+  if (denied) return denied;
 
   const newShortId = generateId(8);
   const newDeleteToken = generateId(24);
-
   const encKey = await getEncKey(env);
 
-  // Re-encrypt under the new shortId so per-file key derivation stays consistent.
-  // Legacy 'enc:' rows decrypt with master key; we always re-encrypt as 'enc2:' going forward.
-  let newFileData = file.file_data;
-  let newFilename = file.original_filename;
-  let newMime = file.mime_type;
-
-  if (file.file_data && (file.file_data.startsWith('enc:') || file.file_data.startsWith('enc2:'))) {
-    try {
-      const plain = await decryptField(file.file_data, encKey, env, params.shortId);
-      newFileData = await encryptField(plain, encKey, env, newShortId);
-    } catch {
-      return Response.json({ error: 'Reshare failed: source decrypt error' }, { status: 500 });
-    }
-    if (file.original_filename && (file.original_filename.startsWith('enc:') || file.original_filename.startsWith('enc2:'))) {
-      const fn = await decryptStr(file.original_filename, encKey, env, params.shortId);
-      newFilename = await encryptStr(fn, encKey, env, newShortId);
-    }
-    if (file.mime_type && (file.mime_type.startsWith('enc:') || file.mime_type.startsWith('enc2:'))) {
-      const mt = await decryptStr(file.mime_type, encKey, env, params.shortId);
-      newMime = await encryptStr(mt, encKey, env, newShortId);
-    }
-  }
+  // the name and type are tiny, so they're re-encrypted under the new link's key
+  const name = await decryptStr(file.original_filename, encKey, env, params.shortId);
+  const mime = await decryptStr(file.mime_type, encKey, env, params.shortId);
 
   await client.execute({
-    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at, compressed, allow_annotations, allow_download)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, data_short_id,
+            expires_at, delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at,
+            compressed, allow_annotations, allow_download, require_account)
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     args: [
       newShortId,
-      newFilename,
-      newMime,
+      await encryptStr(name, encKey, env, newShortId),
+      await encryptStr(mime, encKey, env, newShortId),
       file.size_bytes,
-      newFileData,
+      file.data_short_id || file.short_id,
       file.expires_at,
       newDeleteToken,
-      file.integrity_hash,
-      file.cluster_id,
+      file.integrity_hash || '',
+      file.cluster_id || file.short_id,
       params.shortId,
       new Date().toISOString(),
-      file.compressed || 0,
       file.allow_annotations ?? 1,
-      file.allow_download ?? 0
+      file.allow_download ?? 0,
+      file.require_account ?? 0
     ]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;
-
   return Response.json({
     shortId: newShortId,
     shortUrl: `${baseUrl}/r/${newShortId}`,

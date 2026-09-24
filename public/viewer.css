@@ -366,3 +366,6 @@ body.viewer {
   .docx-content { padding: 32px 20px; }
   .ann-toolbar .v-group { padding: 0 8px; }
 }
+
+/* links limited to people signed in to ShareSecure */
+.signin-needed-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }

@@ -235,6 +235,55 @@ let myDeleteToken = checkOwnership();
 let isOwner = !!myDeleteToken;
 
 const $ = id => document.getElementById(id);
+
+// Links can be limited to people signed in to ShareSecure. Requests go out
+// without your sign-in unless the link asks for it, so the server only learns
+// who's looking when it has to.
+const sessionToken = (() => { try { return sessionStorage.getItem('user_token'); } catch { return null; } })();
+let sendSignIn = false;
+
+function withSignIn(init = {}) {
+  const headers = new Headers(init.headers || {});
+  if (sessionToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${sessionToken}`);
+  return { ...init, headers };
+}
+
+async function apiFetch(url, init = {}) {
+  let res = await fetch(url, sendSignIn ? withSignIn(init) : init);
+  if (res.status === 401 && !sendSignIn && sessionToken) {
+    const body = await res.clone().json().catch(() => ({}));
+    if (body.code === 'sign_in_required') {
+      sendSignIn = true;
+      res = await fetch(url, withSignIn(init));
+    }
+  }
+  return res;
+}
+
+// The file itself. One retry covers a brief hiccup on the server, which used to
+// show "couldn't be displayed" until the page was reloaded.
+async function fetchFileBytes(url) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await apiFetch(url);
+      if (res.ok) return res.arrayBuffer();
+      if (attempt >= 1 || res.status < 500) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      if (attempt >= 1) throw err;
+    }
+    await new Promise(r => setTimeout(r, 800));
+  }
+}
+
+function showSignInNeeded() {
+  hide('loader');
+  hide('zoom-group');
+  const next = encodeURIComponent(location.pathname);
+  $('signin-needed-link').href = `/signin?next=${next}`;
+  $('signup-needed-link').href = `/signin?new=1&next=${next}`;
+  $('doc-title').textContent = 'Sign in to open this file';
+  show('signin-needed');
+}
 const show = id => $(id)?.classList.remove('hidden');
 const hide = id => $(id)?.classList.add('hidden');
 
@@ -315,7 +364,9 @@ function showDeleteConfirm() {
     backdrop.innerHTML = `
       <div class="delete-modal-card">
         <p class="delete-modal-title">Delete this file?</p>
-        <p class="delete-modal-sub">The file and every link to it are erased for everyone. This can’t be undone.</p>
+        <p class="delete-modal-sub">${fileInfo?.isRoot
+          ? 'This is the original, so the file and every link to it are erased for everyone. This can’t be undone.'
+          : 'This link stops working, along with any links shared from it. The original and everyone else’s links keep working.'}</p>
         <div class="delete-modal-actions">
           <button class="delete-modal-cancel" id="del-cancel">Cancel</button>
           <button class="delete-modal-confirm" id="del-confirm">Delete</button>
@@ -338,7 +389,7 @@ function showDeleteConfirm() {
 
 async function assignFreshId() {
   try {
-    const res = await fetch(`/api/reshare/${rawShortId}`, { method: 'POST' });
+    const res = await apiFetch(`/api/reshare/${rawShortId}`, { method: 'POST' });
     const data = await res.json();
     if (data.shortId) {
       myShortId = data.shortId;
@@ -395,7 +446,8 @@ function startCountdown(expiresAt) {
 // ── load metadata ─────────────────────────────────────────────────────────────
 let fileInfo = null;
 async function loadMeta() {
-  const res = await fetch(`/api/info/${myShortId}`);
+  const res = await apiFetch(`/api/info/${myShortId}`);
+  if (res.status === 401) { showSignInNeeded(); return null; }
   if (!res.ok) { $('doc-title').textContent = 'File not found'; hide('loader'); return null; }
   return res.json();
 }
@@ -404,7 +456,7 @@ async function loadMeta() {
 function startStatusPolling() {
   setInterval(async () => {
     try {
-      const res = await fetch(`/api/info/${myShortId}`);
+      const res = await apiFetch(`/api/info/${myShortId}`);
       if (res.status === 404 || res.status === 410) fileGone();
     } catch (err) {}
   }, 5000);
@@ -423,7 +475,7 @@ async function loadPDF(url) {
       fitMode = 'width';
     }
 
-    pdfDoc = await pdfjsLib.getDocument(url).promise;
+    pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(await fetchFileBytes(url)) }).promise;
     $('page-count').textContent = pdfDoc.numPages;
     if ($('m-total-pages')) $('m-total-pages').textContent = pdfDoc.numPages;
     show('page-nav');
@@ -600,9 +652,14 @@ $('zoom-out-btn')?.addEventListener('click', () => adjustZoom(-0.25));
 $('fit-btn')?.addEventListener('click', toggleFitToWidth);
 
 // ── image ─────────────────────────────────────────────────────────────────────
-function loadImage(url) {
+async function loadImage(url) {
   const img = $('img-viewer');
-  img.src = url;
+  try {
+    img.src = URL.createObjectURL(new Blob([await fetchFileBytes(url)], { type: fileInfo?.mimeType || 'image/*' }));
+  } catch {
+    showUnsupported();
+    return;
+  }
   img.onload = () => {
     hide('loader');
     show('img-container');
@@ -623,9 +680,7 @@ function loadImage(url) {
 // ── docx ──────────────────────────────────────────────────────────────────────
 async function loadDocx(url) {
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch DOCX');
-    const arrayBuffer = await res.arrayBuffer();
+    const arrayBuffer = await fetchFileBytes(url);
     if (!window.mammoth) throw new Error('mammoth.js not loaded');
     const result = await window.mammoth.convertToHtml({ arrayBuffer });
     const docContent = $('docx-content');
@@ -688,7 +743,7 @@ function showSendDialog() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     try {
-      const res = await fetch(`/api/send/${myShortId}`, {
+      const res = await apiFetch(`/api/send/${myShortId}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ targetUsername: username, note: backdrop.querySelector('#send-note-input').value.trim() })
@@ -740,7 +795,7 @@ function openSharePanel() {
   show('share-overlay'); show('share-panel');
   show('share-generating'); hide('share-ready');
 
-  fetch(`/api/reshare/${myShortId}`, { method: 'POST' })
+  apiFetch(`/api/reshare/${myShortId}`, { method: 'POST' })
     .then(r => r.json())
     .then(data => {
       const ownerUrl = data.shortUrl;
@@ -795,7 +850,7 @@ function isMobile() { return window.innerWidth <= 800; }
 
 async function fetchAnnotations() {
   try {
-    const res = await fetch(`/api/annotations/${myShortId}`);
+    const res = await apiFetch(`/api/annotations/${myShortId}`);
     const data = await res.json();
     return data.annotations || [];
   } catch { return []; }
@@ -820,7 +875,7 @@ async function saveAnnotations() {
   });
   try {
     setAnnStatus('Saving…');
-    await fetch(`/api/annotations/${myShortId}`, {
+    await apiFetch(`/api/annotations/${myShortId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ annotations: flat }),
@@ -1041,7 +1096,7 @@ function showAnnToolbar(allowAnnotations) {
     btn.disabled = true;
     btn.querySelector('span') && (btn.querySelector('span').textContent = 'Downloading...');
     try {
-      const res = await fetch(`/api/download/${myShortId}`);
+      const res = await apiFetch(`/api/download/${myShortId}`);
       if (!res.ok) throw new Error('Download failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -1067,7 +1122,7 @@ function showAnnToolbar(allowAnnotations) {
 
     $('delete-file-btn').disabled = true;
     try {
-      const res = await fetch(`/api/delete/${myShortId}`, {
+      const res = await apiFetch(`/api/delete/${myShortId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deleteToken: myDeleteToken })
@@ -1090,6 +1145,6 @@ function showAnnToolbar(allowAnnotations) {
   if (mimeType === 'application/pdf') {
     await loadPDF(rawUrl);
   } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
-  else if (mimeType.startsWith('image/')) { loadImage(rawUrl); }
+  else if (mimeType.startsWith('image/')) { await loadImage(rawUrl); }
   else { showUnsupported(); }
 })();

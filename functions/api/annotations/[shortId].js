@@ -1,16 +1,19 @@
-import { getClientById, getEncKey, encryptStr, decryptStr, verifyToken } from '../../_turso.js';
+import { getClientById, getEncKey, encryptStr, decryptStr, verifyToken, ensureFileColumns, signInRequired } from '../../_turso.js';
 
 export async function onRequestGet(context) {
-  const { params, env } = context;
+  const { params, env, request } = context;
   const client = await getClientById(params.shortId, env);
+  await ensureFileColumns(client);
 
   const res = await client.execute({
-    sql: 'SELECT annotations, allow_annotations FROM files WHERE short_id = ? AND is_active = 1',
+    sql: 'SELECT annotations, allow_annotations, require_account FROM files WHERE short_id = ? AND is_active = 1',
     args: [params.shortId]
   });
 
   const file = res.rows[0];
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
+  const denied = await signInRequired(file, request, env);
+  if (denied) return denied;
 
   const encKey = await getEncKey(env);
   const raw = await decryptStr(file.annotations, encKey, env, params.shortId);
@@ -26,12 +29,15 @@ export async function onRequestPost(context) {
 
   // Verify the file allows annotations before accepting writes
   const client = await getClientById(params.shortId, env);
+  await ensureFileColumns(client);
   const check = await client.execute({
-    sql: 'SELECT short_id, allow_annotations FROM files WHERE short_id = ? AND is_active = 1',
+    sql: 'SELECT short_id, allow_annotations, require_account FROM files WHERE short_id = ? AND is_active = 1',
     args: [params.shortId]
   });
   const file = check.rows[0];
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
+  const denied = await signInRequired(file, request, env);
+  if (denied) return denied;
   if (file.allow_annotations === 0) {
     return Response.json({ error: 'Annotations are disabled for this file' }, { status: 403 });
   }

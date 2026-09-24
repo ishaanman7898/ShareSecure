@@ -15,7 +15,7 @@ const {
   stripDocxMetadata, stripPdfMetadata,
 } = require('../utils');
 const { requireOwner } = require('../session');
-const { purgeExpired, purgeCluster } = require('../purge');
+const { purgeExpired, purgeLink } = require('../purge');
 
 const isExpired = file => Boolean(file.expires_at && file.expires_at <= new Date().toISOString());
 
@@ -198,7 +198,7 @@ router.get('/info/:shortId', (req, res) => {
   const file = db.prepare(`
     SELECT short_id, original_filename, mime_type, size_bytes,
            expires_at, download_count, integrity_hash,
-           allow_annotations, allow_download
+           allow_annotations, allow_download, cluster_id, parent_short_id
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
 
@@ -217,6 +217,8 @@ router.get('/info/:shortId', (req, res) => {
     integrityHash: file.integrity_hash,
     allowAnnotations: file.allow_annotations ?? 1,
     allowDownload:    file.allow_download    ?? 0,
+    // the original upload: deleting it removes every link to the file
+    isRoot: !file.parent_short_id && (!file.cluster_id || file.cluster_id === file.short_id),
   });
 });
 
@@ -304,10 +306,11 @@ router.post('/delete/:shortId', (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
-  // cascade: erase this cluster (original + all reshares) and shred the stored file
-  purgeCluster(file.cluster_id || short_id);
+  // the original takes every link with it; any other link takes only its branch
+  const everyone = file.cluster_id === short_id;
+  purgeLink(file);
 
-  res.json({ deleted: true });
+  res.json({ deleted: true, scope: everyone ? 'everyone' : 'branch' });
 });
 
 // ── POST /api/reshare/:shortId ────────────────────────────────────────────────
@@ -320,23 +323,22 @@ router.post('/reshare/:shortId', (req, res) => {
 
   const newShortId      = generateId(8);
   const newDeleteToken  = generateId(24);
-  const newClusterId    = generateId(16);   // privacy: independent cluster, no link to original
   const newIntegrity    = randomHex(32);    // privacy: random hash, breaks content-fingerprint correlation
   const reshareUploadAt = quantizeToHour(); // privacy: quantize to hour boundary
   const baseUrl         = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
 
-  // reshared rows share the same stored_filename (no file copy needed)
-  // parent_short_id intentionally omitted — each reshare is a standalone, untraceable link
+  // A reshare shares the stored file (no copy) and is a branch of the link it
+  // came from: deleting that link, or the original, deletes this one too.
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, expires_at, delete_token,
-      cluster_id, uploaded_at, allow_annotations, allow_download, wrapped_key
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download, wrapped_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newShortId, file.original_filename, file.mime_type, file.size_bytes, file.stored_filename,
     newIntegrity, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
-    newClusterId, reshareUploadAt,
+    file.cluster_id || file.short_id, file.short_id, reshareUploadAt,
     file.allow_annotations, file.allow_download, file.wrapped_key || null
   );
 

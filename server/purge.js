@@ -79,9 +79,28 @@ function purgeOrphans() {
   return removed;
 }
 
+// A link and every link shared onward from it (its branch).
+function purgeBranch(shortId) {
+  return purgeWhere(`short_id IN (
+    WITH RECURSIVE branch(id) AS (
+      SELECT ?
+      UNION
+      SELECT f.short_id FROM files f JOIN branch b ON f.parent_short_id = b.id
+    )
+    SELECT id FROM branch
+  )`, [shortId]);
+}
+
+// Deleting the original upload removes every link to the file; deleting any
+// other link removes just its branch, leaving the original and other branches.
+function purgeLink(file) {
+  if (file.cluster_id && file.short_id === file.cluster_id) return purgeCluster(file.cluster_id);
+  return purgeBranch(file.short_id);
+}
+
 // Everything, for when the owner deletes their account.
 function purgeAll() {
   return purgeWhere('1 = 1');
 }
 
-module.exports = { purgeExpired, purgeCluster, purgeOne, purgeOrphans, purgeAll, shred };
+module.exports = { purgeExpired, purgeCluster, purgeOne, purgeBranch, purgeLink, purgeOrphans, purgeAll, shred };

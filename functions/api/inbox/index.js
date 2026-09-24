@@ -1,4 +1,4 @@
-import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr, migrateOnce } from '../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr, ensureFileColumns } from '../../_turso.js';
 
 export async function onRequestGet(context) {
   const { env, request } = context;
@@ -11,11 +11,7 @@ export async function onRequestGet(context) {
 
   const client = getFilesClient(env);
 
-  await migrateOnce('files-inbox', client, [
-    'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
-    'ALTER TABLE files ADD COLUMN inbox_status TEXT',
-    'ALTER TABLE files ADD COLUMN inbox_note TEXT',
-  ]);
+  await ensureFileColumns(client);
 
   const res = await client.execute({
     sql: `SELECT short_id, original_filename, mime_type, size_bytes, expires_at, delete_token, uploaded_at,

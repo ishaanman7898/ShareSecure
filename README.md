@@ -29,7 +29,8 @@ The desktop app asks which one you want the first time it opens. You can switch 
 ## Features
 
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
-- **View-only by default.** Choose per file whether people can download it or draw on it.
+- **View-only by default.** Choose per file whether people can download it or draw on it, and whether only people signed in to ShareSecure can open it.
+- **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Send to a username.** Files sent to you arrive as requests you accept or decline, and the sender isn't recorded.
 - **Unlinked uploads.** In the browser you signed up in, uploads use a zero-knowledge proof instead of your sign-in, and the stored file has no link to your account. The server can still tell which account is uploading while it checks the proof ([how it works](docs/ZK-INTEGRATION.md)).
 - **AI assistants.** Claude Code, Codex and other MCP clients can share files for you. [See below.](#ai-assistants-mcp)

@@ -98,6 +98,7 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
   'ALTER TABLE files ADD COLUMN cluster_id TEXT',
   'ALTER TABLE files ADD COLUMN parent_short_id TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
   'ALTER TABLE files ADD COLUMN delete_token TEXT',
   'ALTER TABLE files ADD COLUMN integrity_hash TEXT',
   'ALTER TABLE files ADD COLUMN compressed INTEGER DEFAULT 0',

@@ -39,12 +39,36 @@
 
     <div class="timeline">
 
-      <!-- v1.9.1 -->
+      <!-- v1.9.2 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.9.2</span>
+          <span class="release-date">September 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Bigger files</strong> — Uploads over about half a megabyte could fail on the website, and opening a link sometimes said the file couldn’t be displayed until you reloaded. Uploading, opening and resharing now do far less work, and the viewer retries once if something goes wrong.</li>
+            <li><strong>Deleting a reshared link</strong> — Deleting a link someone reshared used to be able to delete the original too. Now deleting a link removes it and the links shared onward from it, and nothing else. Deleting the original still removes every link.</li>
+            <li><strong>Downloads</strong> — Files set to view-only can no longer be downloaded directly.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>New</h3>
+          <ul class="change-list">
+            <li><strong>Choose who can open a link</strong> — Anyone with the link, as before, or only people signed in to ShareSecure. Someone who isn’t signed in is asked to sign in, then taken straight back to the file.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.9.1 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.9.1</span>
           <span class="release-date">September 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">

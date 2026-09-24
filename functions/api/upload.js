@@ -7,7 +7,7 @@ import {
   encryptStr,
   getUserTag,
   countUploadsToday,
-  migrateOnce
+  ensureFileColumns
 } from '../_turso.js';
 import { verifyProof as zkVerifyProof } from '../_zk.js';
 
@@ -33,25 +33,6 @@ function detectType(b) {
 async function sha256hex(buffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function compress(buffer) {
-  const stream = new CompressionStream('deflate');
-  const writer = stream.writable.getWriter();
-  writer.write(new Uint8Array(buffer));
-  writer.close();
-  const chunks = [];
-  const reader = stream.readable.getReader();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const c of chunks) { out.set(c, offset); offset += c.length; }
-  return out.buffer;
 }
 
 export async function onRequestPost(context) {
@@ -111,11 +92,7 @@ export async function onRequestPost(context) {
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   const client = getFilesClient(env);
 
-  await migrateOnce('files-upload', client, [
-    'ALTER TABLE files ADD COLUMN allow_annotations INTEGER DEFAULT 1',
-    'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
-    'ALTER TABLE files ADD COLUMN user_tag TEXT'
-  ]);
+  await ensureFileColumns(client);
 
   // When ZK-authenticated, we DON'T store user_tag — the nullifier already
   // proved the uploader is a registered user, and we want zero identity link.
@@ -134,6 +111,7 @@ export async function onRequestPost(context) {
 
   const allow_annotations = formData.get('allow_annotations') === '1' ? 1 : 0;
   const allow_download = formData.get('allow_download') === '1' ? 1 : 0;
+  const require_account = formData.get('require_account') === '1' ? 1 : 0;
 
   const shortId = generateId(8);
   const deleteToken = generateId(24);
@@ -147,13 +125,13 @@ export async function onRequestPost(context) {
 
   const buffer = await file.arrayBuffer();
 
-  // hash the raw bytes BEFORE compress/encrypt so we can verify after decrypt
-  const integrity_hash = await sha256hex(buffer);
-
-  // compress then encrypt with per-file derived key (HKDF salt = shortId)
-  const compressed = await compress(buffer);
+  // Encrypt with the per-file derived key (HKDF salt = shortId). No compression:
+  // PDF, DOCX, PNG and JPEG are already compressed, and deflating them only
+  // burned CPU. AES-GCM's tag detects tampering, so only unencrypted installs
+  // keep a separate content hash.
   const encKey = await getEncKey(env);
-  const file_data = await encryptField(compressed, encKey, env, shortId);
+  const integrity_hash = encKey ? '' : await sha256hex(buffer);
+  const file_data = await encryptField(buffer, encKey, env, shortId);
 
   // encrypt metadata strings with same per-file key for consistency
   const enc_filename = await encryptStr(displayName, encKey, env, shortId);
@@ -164,9 +142,9 @@ export async function onRequestPost(context) {
   // Privacy: store user_tag (HMAC pseudonym), not raw user_id, for new rows.
   // Legacy user_id column kept null on new uploads — eliminates the direct DB→account link.
   await client.execute({
-    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-    args: [shortId, enc_filename, enc_mime, file.size, file_data, expires_at, deleteToken, null, userTag, integrity_hash, shortId, allow_annotations, allow_download]
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token, user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download, require_account)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+    args: [shortId, enc_filename, enc_mime, file.size, file_data, expires_at, deleteToken, null, userTag, integrity_hash, shortId, allow_annotations, allow_download, require_account]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;

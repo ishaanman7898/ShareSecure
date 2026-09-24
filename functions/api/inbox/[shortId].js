@@ -1,7 +1,7 @@
 // POST /api/inbox/:shortId  { action: 'accept' | 'decline' }
 // Only the recipient can act on a file request. Accepting makes the file
 // viewable; declining erases it immediately.
-import { getFilesClient, verifyToken, getUserTag } from '../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, deleteBranch } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { env, request, params } = context;
@@ -35,6 +35,7 @@ export async function onRequestPost(context) {
     return Response.json({ accepted: true });
   }
 
-  await client.execute({ sql: 'DELETE FROM files WHERE short_id = ?', args: [params.shortId] });
+  // declining erases this copy and anything reshared from it
+  await deleteBranch(client, { short_id: params.shortId, cluster_id: null });
   return Response.json({ declined: true });
 }

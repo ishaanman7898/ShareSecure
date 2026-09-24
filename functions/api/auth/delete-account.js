@@ -28,9 +28,12 @@ export async function onRequestPost(context) {
 
   const userTag = await getUserTag(auth.userId, env);
   const files = getFilesClient(env);
+  // every link to the account's uploads, including ones other people reshared
   await files.execute({
-    sql: 'DELETE FROM files WHERE user_tag = ? OR (user_tag IS NULL AND user_id = ?)',
-    args: [userTag, auth.userId]
+    sql: `DELETE FROM files WHERE cluster_id IN (
+             SELECT cluster_id FROM files WHERE cluster_id IS NOT NULL AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
+           ) OR user_tag = ? OR (user_tag IS NULL AND user_id = ?)`,
+    args: [userTag, auth.userId, userTag, auth.userId]
   });
   // the inbox column only exists once someone has sent a file
   try {

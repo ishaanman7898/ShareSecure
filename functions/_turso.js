@@ -77,6 +77,27 @@ export async function migrateOnce(key, client, statements) {
   migrated.add(key);
 }
 
+// Every column added to files since the original schema, in one place. Endpoints
+// call ensureFileColumns before reading them; it only runs once per instance.
+const FILE_COLUMNS = [
+  'ALTER TABLE files ADD COLUMN allow_annotations INTEGER DEFAULT 1',
+  'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
+  'ALTER TABLE files ADD COLUMN user_tag TEXT',
+  'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
+  'ALTER TABLE files ADD COLUMN inbox_status TEXT',
+  'ALTER TABLE files ADD COLUMN inbox_note TEXT',
+  // reshares and files sent to people point at the original's stored data
+  'ALTER TABLE files ADD COLUMN data_short_id TEXT',
+  // 1 = only people signed in to ShareSecure can open the link
+  'ALTER TABLE files ADD COLUMN require_account INTEGER DEFAULT 0',
+  'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
+  'CREATE INDEX IF NOT EXISTS idx_files_cluster ON files(cluster_id)',
+];
+
+export function ensureFileColumns(client) {
+  return migrateOnce('files', client, FILE_COLUMNS);
+}
+
 // ── DB clients ───────────────────────────────────────────────────────────────
 
 const TURSO_FALLBACK_URL = 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io';
@@ -271,13 +292,25 @@ export async function countUploadsToday(userId, userTag, env) {
 // ── AES-GCM helpers ──────────────────────────────────────────────────────────
 // Requires ENCRYPTION_KEY env secret: 64 hex chars (32 bytes / AES-256)
 
+// Base64 in both directions. Files are stored as base64 text, so this runs over
+// every byte of every upload and view: use the runtime's native version when it
+// has one, and a plain loop otherwise (a per-byte callback blew the CPU limit).
 function bufToB64(buffer) {
   const bytes = new Uint8Array(buffer);
+  if (typeof bytes.toBase64 === 'function') return bytes.toBase64();
   let str = '';
   for (let i = 0; i < bytes.length; i += 8192) {
     str += String.fromCharCode(...bytes.subarray(i, i + 8192));
   }
   return btoa(str);
+}
+
+function b64ToBytes(b64) {
+  if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 export async function getEncKey(env) {
@@ -344,19 +377,15 @@ export async function decryptField(stored, key, env, shortId) {
     if (!env || !shortId) throw new Error('enc2 field needs env+shortId for key derivation');
     const fileKey = await deriveFileKey(env, shortId);
     if (!fileKey) throw new Error('Per-file decryption requested but ENCRYPTION_KEY is not set');
-    const bytes = Uint8Array.from(atob(stored.slice(5)), c => c.charCodeAt(0));
-    const iv = bytes.slice(0, 12);
-    const ct = bytes.slice(12);
-    return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fileKey, ct);
+    const bytes = b64ToBytes(stored.slice(5));
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, fileKey, bytes.subarray(12));
   }
   if (stored.startsWith('enc:')) {
     if (!key) throw new Error('Data is encrypted but ENCRYPTION_KEY is not set');
-    const bytes = Uint8Array.from(atob(stored.slice(4)), c => c.charCodeAt(0));
-    const iv = bytes.slice(0, 12);
-    const ct = bytes.slice(12);
-    return crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    const bytes = b64ToBytes(stored.slice(4));
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes.subarray(0, 12) }, key, bytes.subarray(12));
   }
-  return Uint8Array.from(atob(stored), c => c.charCodeAt(0)).buffer;
+  return b64ToBytes(stored).buffer;
 }
 
 // Encrypt a short string (filename, mime_type, annotations)
@@ -380,4 +409,59 @@ export async function decryptStr(stored, key, env, shortId) {
   if (!key || !stored.startsWith('enc:')) return stored ?? '';
   const buf = await decryptField(stored, key);
   return new TextDecoder().decode(buf);
+}
+
+// ── stored file bytes ────────────────────────────────────────────────────────
+async function inflate(buffer) {
+  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Response(stream).arrayBuffer();
+}
+
+// A link's file, decrypted. Reshares and files sent to people hold no copy of
+// their own: they point at the original upload (data_short_id), whose id is
+// what that data's encryption key was derived from. Older links carry a copy.
+export async function loadFileBytes(client, file, env) {
+  let holder = file;
+  if (!file.file_data && file.data_short_id) {
+    holder = (await client.execute({
+      sql: 'SELECT short_id, file_data, compressed FROM files WHERE short_id = ?',
+      args: [file.data_short_id]
+    })).rows[0];
+    if (!holder?.file_data) return null;
+  }
+  if (!holder.file_data) return null;
+  const encKey = await getEncKey(env);
+  let buffer = await decryptField(holder.file_data, encKey, env, holder.short_id);
+  if (holder.compressed) buffer = await inflate(buffer);
+  return { buffer, wasEncrypted: /^enc2?:/.test(holder.file_data) };
+}
+
+// Links can be limited to people signed in to ShareSecure. Returns the response
+// to send when the viewer isn't signed in, or null when they may continue.
+export async function signInRequired(file, request, env) {
+  if (!file?.require_account) return null;
+  if (await verifyToken(request.headers.get('Authorization'), env)) return null;
+  return Response.json(
+    { error: 'Sign in to ShareSecure to open this file.', code: 'sign_in_required' },
+    { status: 401 }
+  );
+}
+
+// Deleting a link removes it and every link shared onward from it (its branch).
+// Deleting the original upload removes every link to the file.
+export async function deleteBranch(client, file) {
+  if (file.cluster_id && file.short_id === file.cluster_id) {
+    await client.execute({ sql: 'DELETE FROM files WHERE cluster_id = ?', args: [file.cluster_id] });
+    return 'everyone';
+  }
+  await client.execute({
+    sql: `WITH RECURSIVE branch(id) AS (
+            SELECT ?
+            UNION
+            SELECT f.short_id FROM files f JOIN branch b ON f.parent_short_id = b.id
+          )
+          DELETE FROM files WHERE short_id IN (SELECT id FROM branch)`,
+    args: [file.short_id]
+  });
+  return 'branch';
 }

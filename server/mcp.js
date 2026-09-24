@@ -14,7 +14,7 @@ const path = require('path');
 const { db } = require('./db');
 const settings = require('./settings');
 const { decryptString, getEncKey } = require('./utils');
-const { purgeOne } = require('./purge');
+const { purgeLink } = require('./purge');
 const { storeFile } = require('./routes/files');
 
 const router = express.Router();
@@ -136,7 +136,10 @@ function callTool(name, args, req) {
 
   if (name === 'delete_share') {
     const id = String(args.id || '');
-    return purgeOne(id) ? { text: `Deleted ${id}. Its link no longer works.` } : { error: `No share with id ${id}.` };
+    const file = db.prepare('SELECT short_id, cluster_id FROM files WHERE short_id = ?').get(id);
+    if (!file) return { error: `No share with id ${id}.` };
+    purgeLink(file);
+    return { text: `Deleted ${id}. Its link, and every link shared from it, no longer work.` };
   }
 
   return { error: `Unknown tool ${name}` };
