@@ -5,7 +5,8 @@ import {
   getEncKey,
   encryptField,
   encryptStr,
-  getUserTag
+  getUserTag,
+  countUploadsToday
 } from '../_turso.js';
 import { verifyProof as zkVerifyProof } from '../_zk.js';
 
@@ -102,14 +103,8 @@ export async function onRequestPost(context) {
   const userTag = (zkValidated || !auth) ? null : await getUserTag(auth.userId, env);
 
   if (auth && !zkValidated) {
-    // count by both user_tag (new) and user_id (legacy rows) so the limit holds across the migration
-    const recentUploads = await client.execute({
-      sql: `SELECT COUNT(*) as count FROM files
-            WHERE (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
-              AND uploaded_at > datetime('now', '-1 day')`,
-      args: [userTag, auth.userId]
-    });
-    if (recentUploads.rows[0].count >= 5) {
+    // includes ZK uploads, so falling back from ZK can't double the daily limit
+    if (await countUploadsToday(auth.userId, userTag, env) >= 5) {
       return Response.json({ error: 'Upload limit reached (5 files per 24h)' }, { status: 429 });
     }
   }

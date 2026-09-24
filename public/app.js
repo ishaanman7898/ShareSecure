@@ -6,10 +6,13 @@ function escapeHtml(str) {
 }
 
 // ── landing rosette: guilloché bands like the ones printed on banknotes ───────
+// It doubles as a vault dial: circle the cursor around it to turn the dial,
+// and one full turn unlocks it. Tapping (or clicking) opens it too.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 function drawRosette() {
   const svg = document.getElementById('rosette');
   if (!svg || svg.childElementCount) return;
-  const NS = 'http://www.w3.org/2000/svg';
   const C = 200, STEPS = 480;
   // each band is a set of phase-shifted sine rings woven around a base radius
   const bands = [
@@ -18,7 +21,10 @@ function drawRosette() {
     { base: 88,  amp: 20, k: 12, n: 9,  cls: 'band-3' },
     { base: 44,  amp: 16, k: 8,  n: 7,  cls: 'band-4' },
   ];
-  bands.forEach((b, bi) => {
+  const groups = bands.map((b, bi) => {
+    // the group carries the turning, the paths carry the engraving
+    const group = document.createElementNS(SVG_NS, 'g');
+    svg.appendChild(group);
     for (let i = 0; i < b.n; i++) {
       const phase = (i / b.n) * Math.PI * 2;
       let d = '';
@@ -27,14 +33,128 @@ function drawRosette() {
         const r = b.base + b.amp * Math.sin(b.k * t + phase) * Math.cos(t * 2 + phase / 3);
         d += (s ? 'L' : 'M') + (C + r * Math.cos(t)).toFixed(2) + ' ' + (C + r * Math.sin(t)).toFixed(2);
       }
-      const path = document.createElementNS(NS, 'path');
+      const path = document.createElementNS(SVG_NS, 'path');
       path.setAttribute('d', d + 'Z');
       path.setAttribute('pathLength', '1');
       path.setAttribute('class', b.cls);
       path.style.setProperty('--d', (bi * 0.18 + i * 0.05).toFixed(2) + 's');
-      svg.appendChild(path);
+      group.appendChild(path);
     }
+    return group;
   });
+
+  // dial: safe-style ticks around the edge, and an arc that fills as you turn
+  const dial = document.createElementNS(SVG_NS, 'g');
+  dial.setAttribute('class', 'dial');
+  let ticks = '';
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2, major = i % 6 === 0;
+    const r1 = major ? 184 : 188, r2 = 193;
+    ticks += `<line class="${major ? 'major' : ''}" x1="${(C + r1 * Math.cos(a)).toFixed(2)}" y1="${(C + r1 * Math.sin(a)).toFixed(2)}" x2="${(C + r2 * Math.cos(a)).toFixed(2)}" y2="${(C + r2 * Math.sin(a)).toFixed(2)}"/>`;
+  }
+  dial.innerHTML = `<g class="ticks">${ticks}</g>`
+    + `<circle class="track" cx="${C}" cy="${C}" r="198"/>`
+    + `<circle class="progress" cx="${C}" cy="${C}" r="198" pathLength="1" stroke-dasharray="0 1" transform="rotate(-90 ${C} ${C})"/>`;
+  svg.appendChild(dial);
+
+  const lock = document.createElementNS(SVG_NS, 'g');
+  lock.setAttribute('class', 'lock');
+  lock.innerHTML = `<circle class="pulse" cx="${C}" cy="${C}" r="24"/>`
+    + `<circle class="lock-face" cx="${C}" cy="${C}" r="24"/>`
+    + `<path class="shackle" d="M193 199 V191 a7 7 0 0 1 14 0 V199"/>`
+    + `<rect class="lock-body" x="186" y="197" width="28" height="19" rx="3"/>`
+    + `<circle class="lock-hole" cx="${C}" cy="205" r="2.4"/>`
+    + `<rect class="lock-hole" x="199" y="205" width="2" height="6" rx="1"/>`;
+  svg.appendChild(lock);
+
+  initVault(svg, groups, dial.querySelector('.ticks'), dial.querySelector('.progress'));
+}
+
+function initVault(svg, bands, ticks, progress) {
+  const art = svg.closest('.landing-art');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const RATIO = [-0.3, 0.5, -0.8, 1.2];     // how far each band turns with the dial
+  const DRIFT = [0.3, -0.5, 0.7, -1];       // idle turning when nobody's touching it
+  const SPREAD = [1.03, 1.08, 1.16, 1.34];  // how far each band opens when unlocked
+  const rot = bands.map(() => 0), scale = bands.map(() => 1), base = bands.map(() => 0);
+  let dial = 0, drift = 0, turned = 0, last = null, open = false, inside = false, lastMove = 0, relockTimer = 0;
+
+  const place = (el, r, s = 1) => el.setAttribute('transform',
+    `translate(200 200) rotate(${r.toFixed(2)}) scale(${s.toFixed(3)}) translate(-200 -200)`);
+
+  function setOpen(value) {
+    clearTimeout(relockTimer);
+    if (value && !open) {
+      // spin every band home to where it was engraved, then carry on from there
+      bands.forEach((_, i) => {
+        base[i] += Math.round(rot[i] / 360) * 360 - (dial * RATIO[i] + drift * DRIFT[i] + base[i]);
+      });
+      turned = 1;
+    }
+    if (!value) turned = 0;
+    open = value;
+    svg.classList.toggle('unlocked', value);
+    art.classList.toggle('is-open', value);
+    if (still) bands.forEach((g, i) => place(g, 0, value ? SPREAD[i] : 1));
+  }
+
+  function relockIn(ms) {
+    clearTimeout(relockTimer);
+    relockTimer = setTimeout(() => setOpen(false), ms);
+  }
+
+  art.addEventListener('click', () => {
+    setOpen(!open);
+    if (open && !inside) relockIn(3500);  // a tap on a phone springs shut again
+  });
+
+  if (still) return;
+
+  art.addEventListener('pointermove', e => {
+    if (e.pointerType === 'touch') return;
+    inside = true;
+    if (open) { clearTimeout(relockTimer); return; }
+    const r = svg.getBoundingClientRect();
+    const x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    const dist = Math.hypot(x, y) / (r.width / 2);
+    // too close to the middle to read an angle reliably
+    if (dist < 0.15) { last = null; return; }
+    const angle = Math.atan2(y, x) * 180 / Math.PI;
+    if (last !== null) {
+      let delta = angle - last;
+      if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
+      dial += delta;
+      turned = Math.min(1, turned + Math.abs(delta) / 360);
+      lastMove = performance.now();
+      if (turned >= 1) setOpen(true);
+    }
+    last = angle;
+  });
+
+  art.addEventListener('pointerleave', () => {
+    inside = false;
+    last = null;
+    if (open) relockIn(1600);
+  });
+
+  function frame(now) {
+    if (!open) {
+      if (!inside) drift += 0.04;
+      // the dial slowly unwinds if you stop turning it
+      if (now - lastMove > 700) turned = Math.max(0, turned - 0.004);
+    }
+    bands.forEach((g, i) => {
+      const target = dial * RATIO[i] + drift * DRIFT[i] + base[i];
+      rot[i] += (target - rot[i]) * (open ? 0.08 : 0.12);
+      scale[i] += ((open ? SPREAD[i] : 1) - scale[i]) * 0.08;
+      place(g, rot[i], scale[i]);
+    });
+    place(ticks, open ? 0 : dial * 0.6 + drift * 0.2);
+    progress.setAttribute('stroke-dasharray', `${turned.toFixed(4)} 1`);
+    progress.style.opacity = turned < 0.01 ? '0' : '';
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 }
 
 // ── toast notification system ─────────────────────────────────────────────────
@@ -93,7 +213,6 @@ const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
 
 // --- auth & dashboard elements ---
-const authStatus = document.getElementById('auth-status');
 const dashboardCard = document.getElementById('dashboard-card');
 const fileList = document.getElementById('file-list');
 const uploadCount = document.getElementById('upload-count');
@@ -541,21 +660,67 @@ function tokenUsername() {
   }
 }
 
+// ── profile menu: everything account-related lives behind the avatar ─────────
+const profile = document.getElementById('profile');
+const profileBtn = document.getElementById('profile-btn');
+const profileMenu = document.getElementById('profile-menu');
+
+function menuItems() {
+  return [...profileMenu.querySelectorAll('.menu-item:not(.hidden):not(:disabled)')];
+}
+
+function openMenu(focusFirst) {
+  profileMenu.classList.remove('hidden');
+  profileBtn.setAttribute('aria-expanded', 'true');
+  if (focusFirst) menuItems()[0]?.focus();
+}
+
+function closeMenu(returnFocus) {
+  if (profileMenu.classList.contains('hidden')) return;
+  profileMenu.classList.add('hidden');
+  profileBtn.setAttribute('aria-expanded', 'false');
+  if (returnFocus) profileBtn.focus();
+}
+
+profileBtn.addEventListener('click', () => {
+  if (profileMenu.classList.contains('hidden')) openMenu(false);
+  else closeMenu(false);
+});
+
+profileBtn.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); openMenu(true); }
+});
+
+profileMenu.addEventListener('keydown', e => {
+  const items = menuItems();
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+  else if (e.key === 'Home') { e.preventDefault(); items[0]?.focus(); }
+  else if (e.key === 'End') { e.preventDefault(); items[items.length - 1]?.focus(); }
+  else if (e.key === 'Tab') closeMenu(false);
+});
+
+document.addEventListener('click', e => {
+  if (!profile.contains(e.target)) closeMenu(false);
+});
+
+document.getElementById('menu-inbox').addEventListener('click', () => {
+  closeMenu(false);
+  const title = document.getElementById('inbox-title');
+  title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  title?.focus({ preventScroll: true });
+});
+
+document.getElementById('logout-btn').addEventListener('click', logout);
+
 function showSignedIn(username) {
-  authStatus.innerHTML = `
-    <button class="btn-icon inbox-bell" id="inbox-bell" aria-label="No file requests" title="Files sent to you">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      <span class="bell-badge hidden" id="inbox-badge"></span>
-    </button>
-    <span class="user-name">Signed in as <strong>${escapeHtml(username)}</strong></span>
-    <button class="btn btn-ghost" id="logout-btn">Sign out</button>
-  `;
-  document.getElementById('logout-btn').addEventListener('click', logout);
-  document.getElementById('inbox-bell').addEventListener('click', () => {
-    const title = document.getElementById('inbox-title');
-    title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    title?.focus({ preventScroll: true });
-  });
+  document.getElementById('signin-link').classList.add('hidden');
+  document.getElementById('profile-name').textContent = username;
+  document.getElementById('profile-menu-name').textContent = username;
+  document.getElementById('profile-avatar').textContent = username.charAt(0).toUpperCase();
+  profileBtn.setAttribute('aria-label', `Account menu for ${username}`);
+  profile.classList.remove('hidden');
   document.body.classList.add('is-logged-in');
   landingPage.classList.add('hidden');
   document.getElementById('app-grid')?.classList.remove('hidden');
@@ -570,7 +735,6 @@ function initAuth() {
     startInboxPolling();
   } else {
     if (userToken) logout();
-    authStatus.innerHTML = `<a class="btn btn-ghost" href="/signin">Sign in</a>`;
     document.body.classList.remove('is-logged-in');
     landingPage.classList.remove('hidden');
     drawRosette();
@@ -635,7 +799,8 @@ function renderNotifyToggle() {
   if (!('Notification' in window)) { notifyToggle.classList.add('hidden'); return; }
   notifyToggle.classList.remove('hidden');
   notifyToggle.disabled = Notification.permission === 'denied';
-  notifyToggle.textContent = Notification.permission === 'denied'
+  notifyToggle.setAttribute('aria-checked', String(notificationsOn()));
+  document.getElementById('notify-label').textContent = Notification.permission === 'denied'
     ? 'Notifications blocked'
     : notificationsOn() ? 'Notifications on' : 'Turn on notifications';
   notifyToggle.title = Notification.permission === 'denied'
@@ -659,13 +824,14 @@ notifyToggle?.addEventListener('click', async () => {
 
 function setPendingBadge(count) {
   pendingCount = count;
-  const bell = document.getElementById('inbox-bell');
-  const badge = document.getElementById('inbox-badge');
-  if (badge) {
-    badge.textContent = count > 9 ? '9+' : String(count);
-    badge.classList.toggle('hidden', count === 0);
-  }
-  if (bell) bell.setAttribute('aria-label', count ? `${count} file ${count === 1 ? 'request' : 'requests'} waiting` : 'No file requests');
+  const menuCount = document.getElementById('menu-inbox-count');
+  menuCount.textContent = count > 9 ? '9+' : String(count);
+  menuCount.classList.toggle('hidden', count === 0);
+  document.getElementById('profile-dot').classList.toggle('hidden', count === 0);
+  const name = document.getElementById('profile-name').textContent;
+  profileBtn.setAttribute('aria-label', count
+    ? `Account menu for ${name}, ${count} file ${count === 1 ? 'request' : 'requests'} waiting`
+    : `Account menu for ${name}`);
   document.title = count ? `(${count}) ${BASE_TITLE}` : BASE_TITLE;
 }
 
@@ -958,6 +1124,13 @@ function renderUpdates(s) {
       : 'Docker installs update by rebuilding the container.';
     return;
   }
+  if (s.blockedReason === 'desktop') {
+    updateStatus.textContent = s.updateAvailable
+      ? `Version ${s.latest} is out. The app downloads it and installs it the next time you quit.`
+      : `${s.latest ? 'You’re up to date. ' : ''}The app installs new versions by itself.`;
+    autoUpdateInput.closest('.switch').classList.add('hidden');
+    return;
+  }
   if (s.status === 'updating') { updateStatus.textContent = `Installing version ${s.latest}…`; return; }
   if (s.status === 'restarting') { updateStatus.textContent = 'Restarting with the new version…'; return; }
   if (s.status === 'restart-required') { updateStatus.textContent = `Version ${s.latest} is installed. Restart ShareSecure to finish.`; return; }
@@ -1035,6 +1208,7 @@ autoUpdateInput?.addEventListener('change', async () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (!profileMenu.classList.contains('hidden')) { closeMenu(true); return; }
   if (!resultCard.classList.contains('hidden')) {
     if (countdownInterval) clearInterval(countdownInterval);
     resultCard.classList.add('hidden');

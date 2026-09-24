@@ -31,7 +31,35 @@
       <span>ShareSecure</span>
     </a>
     <div id="auth-status">
-      <a class="btn btn-ghost" href="/signin">Sign in</a>
+      <a class="btn btn-ghost" href="/signin" id="signin-link">Sign in</a>
+      <div class="profile hidden" id="profile">
+        <button class="profile-btn" id="profile-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+          <span class="avatar" id="profile-avatar" aria-hidden="true"></span>
+          <span class="profile-name" id="profile-name"></span>
+          <svg class="profile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          <span class="profile-dot hidden" id="profile-dot" aria-hidden="true"></span>
+        </button>
+        <div class="profile-menu hidden" id="profile-menu" role="menu" aria-labelledby="profile-btn">
+          <div class="profile-head">
+            <span class="profile-head-label">Signed in as</span>
+            <strong id="profile-menu-name"></strong>
+          </div>
+          <button class="menu-item" role="menuitem" id="menu-inbox">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+            <span>Sent to you</span>
+            <span class="menu-count hidden" id="menu-inbox-count"></span>
+          </button>
+          <button class="menu-item hidden" role="menuitemcheckbox" aria-checked="false" id="notify-toggle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span id="notify-label"></span>
+          </button>
+          <div class="menu-sep" role="separator"></div>
+          <button class="menu-item menu-item-danger" role="menuitem" id="logout-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>Sign out</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -40,16 +68,11 @@
     <section id="landing-page" class="landing hidden">
       <div class="landing-copy">
         <h1 class="landing-headline">Share a file.<br />Choose when it disappears.</h1>
-        <p class="landing-lede">Upload a PDF, Word document or image and get a private link that stops working at the time you set. Files are encrypted at rest, never indexed, and never used to train AI.</p>
+        <p class="landing-lede">Private, encrypted links that expire when you say.</p>
         <div class="landing-actions">
           <a class="btn btn-primary btn-lg" href="/signin?new=1">Create an account</a>
-          <a href="/self-host" class="btn btn-ghost btn-lg">Host it yourself</a>
+          <a href="/self-host" class="btn btn-ghost btn-lg">Get the desktop app</a>
         </div>
-        <ul class="landing-facts">
-          <li><strong>1 hour to 10 days</strong><span>Links expire on your schedule</span></li>
-          <li><strong>Encrypted storage</strong><span>No trackers or analytics</span></li>
-          <li><strong>Your call</strong><span>Allow annotations or downloads per file</span></li>
-        </ul>
       </div>
       <div class="landing-art" aria-hidden="true">
         <svg id="rosette" viewBox="0 0 400 400"></svg>
@@ -63,7 +86,8 @@
 
         <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose a file to share">
           <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
-          <p class="drop-label">Drop a file here, or <span class="drop-browse">browse</span></p>
+          <p class="drop-label drop-label-fine">Drop a file here, or <span class="drop-browse">browse</span></p>
+          <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose a file</span></p>
           <p class="drop-limit">PDF, DOCX, PNG or JPG, up to 10 MB</p>
           <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
         </div>
@@ -143,7 +167,6 @@
         <div id="inbox-section" class="inbox-section">
           <div class="list-header">
             <h2 class="panel-title" id="inbox-title" tabindex="-1">Sent to you</h2>
-            <button class="link-btn hidden" id="notify-toggle"></button>
           </div>
           <div id="inbox-requests" class="inbox-requests"></div>
           <div id="inbox-list" class="file-list">

@@ -2,26 +2,112 @@
   "name": "sharesecure",
   "version": "1.7.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
-  "main": "server/index.js",
+  "main": "desktop/main.js",
   "type": "commonjs",
   "scripts": {
     "start": "node server/launcher.js",
     "dev": "nodemon server/index.js",
+    "desktop": "electron-builder install-app-deps && electron .",
+    "postdesktop": "npm rebuild better-sqlite3",
+    "dist": "electron-builder --publish never",
+    "postdist": "npm rebuild better-sqlite3",
     "generate-key": "node -e \"console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
     "deploy": "wrangler pages deploy public --project-name sharesecure"
   },
   "keywords": [],
-  "author": "",
+  "author": "Ishaan",
   "license": "ISC",
   "dependencies": {
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "localtunnel": "^2.0.2",
     "multer": "^2.1.1"
   },
   "devDependencies": {
+    "electron": "^43.7.5",
+    "electron-builder": "^26.15.3",
     "nodemon": "^3.1.14"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ishaanman7898/ShareSecure.git"
+  },
+  "build": {
+    "appId": "app.sharesecure.desktop",
+    "productName": "ShareSecure",
+    "directories": {
+      "output": "dist",
+      "buildResources": "desktop"
+    },
+    "icon": "desktop/icon.png",
+    "files": [
+      "desktop/**",
+      "server/**",
+      "public/**",
+      ".env.example",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "ishaanman7898",
+      "repo": "ShareSecure"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ShareSecure-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ShareSecure"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity",
+      "artifactName": "ShareSecure-mac-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Utility",
+      "artifactName": "ShareSecure-linux.${ext}"
+    }
   }
 }

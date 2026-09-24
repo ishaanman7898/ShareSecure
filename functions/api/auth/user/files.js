@@ -1,4 +1,4 @@
-import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr } from '../../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr, countUploadsToday } from '../../../_turso.js';
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -21,12 +21,7 @@ export async function onRequestGet(context) {
       args: [userTag, auth.userId]
     });
 
-    const dailyResult = await db.execute({
-      sql: `SELECT COUNT(*) as count FROM files
-            WHERE (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
-              AND uploaded_at > datetime('now', '-1 day')`,
-      args: [userTag, auth.userId]
-    });
+    const dailyUploadCount = await countUploadsToday(auth.userId, userTag, env);
 
     const encKey = await getEncKey(env);
 
@@ -48,7 +43,7 @@ export async function onRequestGet(context) {
       };
     }));
 
-    return Response.json({ files, dailyUploadCount: Number(dailyResult.rows[0].count) });
+    return Response.json({ files, dailyUploadCount });
   } catch (err) {
     return Response.json({ error: 'Failed to load files' }, { status: 500 });
   }

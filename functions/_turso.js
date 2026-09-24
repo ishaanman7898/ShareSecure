@@ -230,6 +230,28 @@ export async function getUserTag(userId, env) {
   return hmacHex(secret, `u:${userId}`);
 }
 
+// ── Uploads in the last 24h ──────────────────────────────────────────────────
+// ZK uploads store no user_tag, so they can't be counted from the files table.
+// Each one costs a challenge, and zk_challenge_log is per user, so the total is
+// tagged uploads + challenges issued. Both paths share the one 5/day budget.
+export async function countUploadsToday(userId, userTag, env) {
+  const files = await getFilesClient(env).execute({
+    sql: `SELECT COUNT(*) as count FROM files
+          WHERE (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
+            AND uploaded_at > datetime('now', '-1 day')`,
+    args: [userTag, userId]
+  });
+  let zk = 0;
+  try {
+    const log = await getAuthClient(env).execute({
+      sql: "SELECT COUNT(*) as count FROM zk_challenge_log WHERE user_id = ? AND issued_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
+      args: [userId]
+    });
+    zk = Number(log.rows[0].count);
+  } catch { /* no ZK uploads yet, so the table may not exist */ }
+  return Number(files.rows[0].count) + zk;
+}
+
 // ── AES-GCM helpers ──────────────────────────────────────────────────────────
 // Requires ENCRYPTION_KEY env secret: 64 hex chars (32 bytes / AES-256)
 

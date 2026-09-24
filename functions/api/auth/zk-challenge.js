@@ -5,7 +5,7 @@
 // user_tag, this challenge limit is the only place upload abuse is bounded
 // for the ZK path.
 
-import { verifyToken, getAuthClient } from '../../_turso.js';
+import { verifyToken, getAuthClient, getUserTag, countUploadsToday } from '../../_turso.js';
 import { issueChallenge, purgeExpiredChallenges } from '../../_zk.js';
 
 const MAX_CHALLENGES_PER_DAY = 5;
@@ -32,11 +32,9 @@ export async function onRequestPost(context) {
             )`,
       args: []
     });
-    const recent = await client.execute({
-      sql: "SELECT COUNT(*) as count FROM zk_challenge_log WHERE user_id = ? AND issued_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
-      args: [auth.userId]
-    });
-    if (recent.rows[0].count >= MAX_CHALLENGES_PER_DAY) {
+    // counts Bearer uploads too, so both paths draw on the same daily budget
+    const used = await countUploadsToday(auth.userId, await getUserTag(auth.userId, env), env);
+    if (used >= MAX_CHALLENGES_PER_DAY) {
       return Response.json({ error: 'Challenge limit reached (5 per 24h)' }, { status: 429 });
     }
     await client.execute({

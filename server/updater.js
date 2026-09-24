@@ -34,6 +34,8 @@ const state = {
 
 const inDocker = fs.existsSync('/.dockerenv') || process.env.SHARESECURE_DOCKER === '1';
 const underLauncher = process.env.SHARESECURE_LAUNCHER === '1';
+// the desktop app's program files are read-only; it updates itself through electron-updater
+const inDesktop = process.env.SHARESECURE_DESKTOP === '1';
 const isGitInstall = fs.existsSync(path.join(ROOT, '.git'));
 
 function newer(a, b) {
@@ -75,6 +77,7 @@ async function check() {
 function status() {
   let blockedReason = null;
   if (inDocker) blockedReason = 'docker';
+  else if (inDesktop) blockedReason = 'desktop';
   return {
     current: currentVersion,
     latest: state.latest,
@@ -164,6 +167,7 @@ let restartHook = () => process.exit(RESTART_CODE);
 async function apply() {
   if (state.status === 'updating' || state.status === 'restarting') return status();
   if (inDocker) throw new Error('Docker installs update by rebuilding the container.');
+  if (inDesktop) throw new Error('The desktop app installs its own updates.');
   await check();
   if (!status().updateAvailable) return status();
 

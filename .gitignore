@@ -7,3 +7,4 @@ users.db
 wrangler.toml
 turso_info.json
 .wrangler/
+dist/
