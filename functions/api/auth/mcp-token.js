@@ -10,18 +10,21 @@ async function signedIn(context) {
 }
 
 const mcpUrl = request => new URL('/mcp', request.url).href;
+// where apps like Claude and ChatGPT reach this server, and whether the
+// custom GPT actions exist here
+const reach = request => ({ publicUrl: new URL(request.url).origin, gptActions: true });
 
 export async function onRequestGet(context) {
   const auth = await signedIn(context);
   if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  return Response.json({ ...(await tokenStatus(auth.userId, context.env)), mcpUrl: mcpUrl(context.request) });
+  return Response.json({ ...(await tokenStatus(auth.userId, context.env)), mcpUrl: mcpUrl(context.request), ...reach(context.request) });
 }
 
 export async function onRequestPost(context) {
   const auth = await signedIn(context);
   if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const token = await createToken(auth.userId, context.env);
-  return Response.json({ token, mcpUrl: mcpUrl(context.request) });
+  return Response.json({ token, mcpUrl: mcpUrl(context.request), ...reach(context.request) });
 }
 
 export async function onRequestDelete(context) {

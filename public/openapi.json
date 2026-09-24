@@ -1,0 +1,139 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ShareSecure",
+    "description": "Share files attached in the conversation through private ShareSecure links that expire.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "https://sharesecure-du8.pages.dev" }],
+  "paths": {
+    "/api/gpt/share": {
+      "post": {
+        "operationId": "shareFiles",
+        "summary": "Share files the user attached in this conversation",
+        "description": "Uploads the attached files to ShareSecure and returns a private link for each. Supports PDF, DOCX, PNG and JPG up to 10 MB. The account can share 5 files a day.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["openaiFileIdRefs"],
+                "properties": {
+                  "openaiFileIdRefs": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "The files the user attached that should be shared."
+                  },
+                  "expires_hours": { "type": "number", "description": "Hours until the link stops working, 1 to 240. Default 24." },
+                  "allow_download": { "type": "boolean", "description": "Let people who open the link download the file. Default false (view only)." },
+                  "require_account": { "type": "boolean", "description": "Only people signed in to ShareSecure can open the link. Default false." },
+                  "name": { "type": "string", "description": "Name shown to people who open the link, when sharing one file." },
+                  "send_to": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "ShareSecure usernames to send the file to. Each gets their own copy to accept or decline."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The links that were created, and any files that couldn't be shared.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shares": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "url": { "type": "string" },
+                          "name": { "type": "string" },
+                          "expires_at": { "type": "string" },
+                          "id": { "type": "string" },
+                          "sent_to": { "type": "array", "items": { "type": "string" } }
+                        }
+                      }
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": { "type": "object", "properties": { "file": { "type": "string" }, "error": { "type": "string" } } }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpt/shares": {
+      "get": {
+        "operationId": "listShares",
+        "summary": "List the account's live shares",
+        "responses": {
+          "200": {
+            "description": "Live shares with their links and expiry times.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shares": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": { "type": "string" },
+                          "name": { "type": "string" },
+                          "url": { "type": "string" },
+                          "expires_at": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gpt/delete": {
+      "post": {
+        "operationId": "deleteShare",
+        "summary": "Delete a share so its link stops working",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id"],
+                "properties": { "id": { "type": "string", "description": "The share id from listShares or shareFiles." } }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Deleted.",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "deleted": { "type": "boolean" } } } } }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "ShareSecureToken": { "type": "http", "scheme": "bearer" }
+    }
+  },
+  "security": [{ "ShareSecureToken": [] }]
+}

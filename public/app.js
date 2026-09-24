@@ -1,3 +1,6 @@
+// Inside the desktop app, hide links to download or self-host ShareSecure.
+if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
+
 // The zero-knowledge prover and the QR code library are only needed when you
 // upload, so they load on first use instead of slowing down every page.
 let zkModule = null;
@@ -737,7 +740,26 @@ function renderMcp(state, token) {
     `claude mcp add --transport http sharesecure ${state.mcpUrl} --header "Authorization: Bearer ${token}"`;
   document.getElementById('mcp-codex').textContent =
     `[mcp_servers.sharesecure]\nurl = "${state.mcpUrl}"\nbearer_token_env_var = "SHARESECURE_TOKEN"`;
+
+  // Claude's and ChatGPT's apps connect over the internet, and their connector
+  // form only takes a URL, so the token rides in the connector URL
+  const connector = document.getElementById('mcp-connector');
+  connector.textContent = state.publicUrl ? `${state.publicUrl}/connect/${token}` : '';
+  connector.closest('.code-box').classList.toggle('hidden', !state.publicUrl);
+  document.querySelector('.mcp-no-public').classList.toggle('hidden', Boolean(state.publicUrl));
+  document.querySelector('.mcp-gpt').classList.toggle('hidden', !state.gptActions);
+  if (state.gptActions) {
+    document.getElementById('mcp-openapi').textContent = `${state.publicUrl}/openapi.json`;
+    document.getElementById('mcp-privacy').textContent = `${state.publicUrl}/privacy`;
+  }
 }
+
+document.querySelector('.mcp-tabs').addEventListener('click', e => {
+  const tab = e.target.closest('.mcp-tab');
+  if (!tab) return;
+  for (const t of document.querySelectorAll('.mcp-tab')) t.setAttribute('aria-selected', String(t === tab));
+  for (const p of document.querySelectorAll('.mcp-panel')) p.classList.toggle('hidden', p.dataset.panel !== tab.dataset.tab);
+});
 
 async function mcpCall(method) {
   const res = await fetch('/api/auth/mcp-token', { method, headers: authHeaders() });
@@ -754,7 +776,7 @@ document.getElementById('menu-mcp').addEventListener('click', async () => {
 async function createMcpToken() {
   try {
     const data = await mcpCall('POST');
-    renderMcp({ hasToken: true, mcpUrl: data.mcpUrl }, data.token);
+    renderMcp({ ...data, hasToken: true }, data.token);
   } catch { showToast('Couldn’t create a token. Try again.', 'error'); }
 }
 
@@ -1306,6 +1328,13 @@ function renderUpdates(s) {
     updateStatus.textContent = s.updateAvailable
       ? `Version ${s.latest} is out. Rebuild the container to update.`
       : 'Docker installs update by rebuilding the container.';
+    return;
+  }
+  if (s.blockedReason === 'development') {
+    updateStatus.textContent = s.updateAvailable
+      ? `Version ${s.latest} is out. This is a development copy, so update it with git.`
+      : 'This is a development copy, so it doesn’t update itself. Update it with git.';
+    autoUpdateInput.closest('.switch').classList.add('hidden');
     return;
   }
   if (s.blockedReason === 'desktop') {

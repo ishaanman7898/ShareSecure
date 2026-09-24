@@ -40,6 +40,17 @@
     .choice strong { display: block; font-size: 1.02rem; }
     .choice span { display: block; margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
     .note { margin-top: 20px; color: var(--muted); font-size: 0.84rem; }
+    .choice-account { padding: 18px 20px; border: 1px solid var(--line-strong); border-radius: 12px; }
+    .choice-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 40px; padding: 0 18px; border-radius: 10px;
+      border: 1px solid var(--line-strong); color: var(--ink);
+      font-weight: 600; font-size: 0.92rem; text-decoration: none;
+    }
+    .btn:hover, .btn:focus-visible { border-color: var(--ink); outline: none; }
+    .btn-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+    .btn-primary:hover, .btn-primary:focus-visible { opacity: 0.88; }
   </style>
 </head>
 <body>
@@ -48,10 +59,14 @@
     <h1>Welcome to ShareSecure</h1>
     <p class="lede">How do you want to use it?</p>
     <div class="choices">
-      <a class="choice" href="#account">
-        <strong>Sign in to my ShareSecure account</strong>
-        <span>Use the account you have on the website, or create one. Your links work any time, even with this app closed.</span>
-      </a>
+      <div class="choice choice-account">
+        <strong>Use a ShareSecure account</strong>
+        <span>The same account as the website. Your links work any time, even with this app closed.</span>
+        <div class="choice-actions">
+          <a class="btn btn-primary" href="#account">Sign in</a>
+          <a class="btn" href="#account-new">Create an account</a>
+        </div>
+      </div>
       <a class="choice" href="#local">
         <strong>Run it privately on this computer</strong>
         <span>Your files and encryption key never leave this computer, with no upload limit. Links work while the app is running.</span>

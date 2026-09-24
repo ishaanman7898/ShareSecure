@@ -12,7 +12,8 @@ import { onRequestPost as uploadHandler } from './api/upload.js';
 import { onRequestPost as sendHandler } from './api/send/[shortId].js';
 
 const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
-const TICKET_TTL_MS = 10 * 60 * 1000;
+// long enough for a person to open the upload page, pick a file and send it
+const TICKET_TTL_MS = 30 * 60 * 1000;
 const ALLOWED = /\.(pdf|docx|png|jpe?g)$/i;
 
 function randomToken(bytes = 30) {
@@ -60,7 +61,7 @@ export async function revokeToken(userId, env) {
 }
 
 // "Bearer ss_…" → { userId, username } or null
-async function userForToken(header, env) {
+export async function userForToken(header, env) {
   const token = (header || '').replace(/^Bearer\s+/i, '');
   if (!token.startsWith('ss_')) return null;
   await ensureTables(env);
@@ -83,7 +84,7 @@ function withRequest(context, request, params = {}) {
   return { request, env: context.env, params, waitUntil: p => context.waitUntil(p) };
 }
 
-async function upload(user, file, opts, context) {
+export async function upload(user, file, opts, context) {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('expires_hours', String(opts.expires_hours));
@@ -122,7 +123,7 @@ async function upload(user, file, opts, context) {
 }
 
 // "alice, bob", "@alice bob" or ["alice", "bob"] → ["alice", "bob"], at most 20
-function toRecipients(value) {
+export function toRecipients(value) {
   const list = Array.isArray(value) ? value : String(value || '').split(/[\s,;]+/);
   return [...new Set(list.map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
 }
@@ -152,22 +153,57 @@ export async function redeemTicket(ticket, context) {
   return Response.json(result);
 }
 
+// ── shares (used by the MCP tools and the ChatGPT actions) ──────────────────
+// Live links the server can tie to the account. Private uploads from the
+// browser the account was made in have no account link, so they aren't here.
+export async function liveShares(user, context) {
+  const { env, request } = context;
+  const tag = await getUserTag(user.userId, env);
+  const rows = (await getFilesClient(env).execute({
+    sql: `SELECT short_id, original_filename, expires_at FROM files
+          WHERE is_active = 1 AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
+            AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+          ORDER BY uploaded_at DESC LIMIT 50`,
+    args: [tag, user.userId]
+  })).rows;
+  const key = await getEncKey(env);
+  const base = new URL(request.url).origin;
+  return Promise.all(rows.map(async r => {
+    let name = r.original_filename;
+    try { name = await decryptStr(r.original_filename, key, env, r.short_id); } catch {}
+    return { id: r.short_id, name, url: `${base}/r/${r.short_id}`, expires_at: r.expires_at };
+  }));
+}
+
+// Deletes one of the account's shares; it's an original, so every link to it goes.
+export async function deleteShare(user, id, context) {
+  const { env } = context;
+  const tag = await getUserTag(user.userId, env);
+  const client = getFilesClient(env);
+  const file = (await client.execute({
+    sql: 'SELECT short_id, cluster_id FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
+    args: [id, tag, user.userId]
+  })).rows[0];
+  if (!file) return false;
+  await deleteBranch(client, file);
+  return true;
+}
+
 // ── tools ────────────────────────────────────────────────────────────────────
 const TOOLS = [
   {
     name: 'share_file',
-    description: 'Share a file from this computer through ShareSecure and get a private link that expires. Returns a one-time upload command: run it in a shell and its output contains the link. Supports PDF, DOCX, PNG and JPG up to 10 MB. Counts toward the 5 uploads a day limit.',
+    description: 'Share a file from this computer through ShareSecure and get a private link that expires. Returns a one-time upload page for the user to open and pick the file, and, when you give a path and can run shell commands, a curl command that uploads it and prints the link. Supports PDF, DOCX, PNG and JPG up to 10 MB. Counts toward the 5 uploads a day limit.',
     inputSchema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Path to the file on this computer.' },
+        path: { type: 'string', description: 'Path to the file on this computer, if you can run shell commands. Leave it out in chat apps; the user picks the file on the upload page instead.' },
         expires_hours: { type: 'number', description: 'Hours until the link stops working, 1 to 240. Default 24.' },
         allow_download: { type: 'boolean', description: 'Let people who open the link download the file. Default false (view only).' },
         require_account: { type: 'boolean', description: 'Only people signed in to ShareSecure can open the link. Default false (anyone with the link).' },
         name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
         send_to: { type: 'array', items: { type: 'string' }, description: 'ShareSecure usernames to send the file to, e.g. ["alice", "bob"]. Each gets their own copy to accept or decline. Up to 20.' },
       },
-      required: ['path'],
     },
   },
   {
@@ -187,9 +223,8 @@ const shellQuote = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
 async function callTool(name, args, user, context) {
   const { env, request } = context;
   if (name === 'share_file') {
-    const path = String(args.path || '');
-    if (!path) return { error: 'path is required' };
-    if (!ALLOWED.test(path)) return { error: 'Only PDF, DOCX, PNG and JPG files can be shared.' };
+    const path = String(args.path || '').trim();
+    if (path && !ALLOWED.test(path)) return { error: 'Only PDF, DOCX, PNG and JPG files can be shared.' };
     const opts = {
       expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
       allow_download: Boolean(args.allow_download),
@@ -202,51 +237,44 @@ async function callTool(name, args, user, context) {
       sql: 'INSERT INTO mcp_tickets (ticket_hash, user_id, options, expires_at) VALUES (?, ?, ?, ?)',
       args: [await sha256(ticket), user.userId, JSON.stringify(opts), new Date(Date.now() + TICKET_TTL_MS).toISOString()]
     });
-    const url = new URL(`/api/mcp/upload/${ticket}`, request.url).href;
-    return {
-      text: [
-        `Run this command to upload ${path} (it works once, within 10 minutes):`,
-        '',
-        `curl -fsS -F ${shellQuote('file=@' + path)} ${url}`,
-        '',
-        `It prints JSON: "url" is the share link and "expires_at" is when it stops working.${opts.send_to.length ? ` "sent_to" lists who it was sent to (${opts.send_to.join(', ')}), and "not_sent" lists anyone it couldn't reach and why.` : ''}`,
-        'On Windows PowerShell, use curl.exe instead of curl.',
-      ].join('\n'),
-    };
+    const origin = new URL(request.url).origin;
+    const uploadUrl = `${origin}/api/mcp/upload/${ticket}`;
+    const pageUrl = `${origin}/drop/${ticket}`;
+    const sent = opts.send_to.length
+      ? ` "sent_to" lists who it was sent to (${opts.send_to.join(', ')}), and "not_sent" lists anyone it couldn't reach and why.`
+      : '';
+    const lines = path
+      ? [
+          `Run this command to upload ${path} (it works once, within 30 minutes):`,
+          '',
+          `curl -fsS -F ${shellQuote('file=@' + path)} ${uploadUrl}`,
+          '',
+          `It prints JSON: "url" is the share link and "expires_at" is when it stops working.${sent}`,
+          'On Windows PowerShell, use curl.exe instead of curl.',
+          '',
+          `If you can't run commands, give the user this page to pick the file instead: ${pageUrl}`,
+        ]
+      : [
+          'Give the user this link. They open it, pick the file, and get the share link on the page (it works once, within 30 minutes):',
+          '',
+          pageUrl,
+          '',
+          'Once they say it’s uploaded, call list_shares if they want you to have the link.',
+        ];
+    return { text: lines.join('\n') };
   }
 
   if (name === 'list_shares') {
-    const tag = await getUserTag(user.userId, env);
-    const rows = (await getFilesClient(env).execute({
-      sql: `SELECT short_id, original_filename, expires_at FROM files
-            WHERE is_active = 1 AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
-              AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-            ORDER BY uploaded_at DESC LIMIT 50`,
-      args: [tag, user.userId]
-    })).rows;
-    if (!rows.length) return { text: 'No live shares.' };
-    const key = await getEncKey(env);
-    const base = new URL(request.url).origin;
-    const lines = await Promise.all(rows.map(async r => {
-      let fname = r.original_filename;
-      try { fname = await decryptStr(r.original_filename, key, env, r.short_id); } catch {}
-      return `- ${fname} — ${base}/r/${r.short_id} (id ${r.short_id}, expires ${r.expires_at})`;
-    }));
-    return { text: lines.join('\n') };
+    const shares = await liveShares(user, context);
+    if (!shares.length) return { text: 'No live shares.' };
+    return { text: shares.map(x => `- ${x.name} — ${x.url} (id ${x.id}, expires ${x.expires_at})`).join('\n') };
   }
 
   if (name === 'delete_share') {
     const id = String(args.id || '');
-    const tag = await getUserTag(user.userId, env);
-    const client = getFilesClient(env);
-    const file = (await client.execute({
-      sql: 'SELECT short_id, cluster_id FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
-      args: [id, tag, user.userId]
-    })).rows[0];
-    if (!file) return { error: `No share with id ${id} on this account.` };
-    // an upload is the original, so every link to it goes too
-    await deleteBranch(client, file);
-    return { text: `Deleted ${id}. Its link, and every link shared from it, no longer work.` };
+    return (await deleteShare(user, id, context))
+      ? { text: `Deleted ${id}. Its link, and every link shared from it, no longer work.` }
+      : { error: `No share with id ${id} on this account.` };
   }
 
   return { error: `Unknown tool ${name}` };
@@ -286,12 +314,14 @@ async function handleMessage(msg, user, context) {
   }
 }
 
-export async function handleMcp(context) {
+// pathToken: apps like Claude and ChatGPT only take a URL when adding a
+// connector, so their connector URL carries the token (/connect/<token>).
+export async function handleMcp(context, pathToken = null) {
   const { request, env } = context;
   if (request.method !== 'POST') {
     return new Response('ShareSecure MCP endpoint. Connect with an MCP client using POST.', { status: 405, headers: { Allow: 'POST' } });
   }
-  const user = await userForToken(request.headers.get('Authorization'), env);
+  const user = await userForToken(pathToken ? `Bearer ${pathToken}` : request.headers.get('Authorization'), env);
   if (!user) {
     return Response.json(
       { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Missing or invalid ShareSecure token. Create one in the account menu under Connect an AI assistant.' } },

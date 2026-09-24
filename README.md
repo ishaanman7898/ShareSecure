@@ -59,7 +59,13 @@ url = "https://sharesecure-du8.pages.dev/mcp"
 bearer_token_env_var = "SHARESECURE_TOKEN"
 ```
 
-In the desktop app's “this computer” mode and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one).
+**Claude app** (web and desktop): open **Settings → Connectors → Add custom connector**, name it ShareSecure, and paste your connector URL, `https://sharesecure-du8.pages.dev/connect/<your token>`. The token is part of the URL because the connector form has no other place for it, so keep the URL private.
+
+**ChatGPT**: make a custom GPT that shares files you attach in the chat. In **GPTs → Create → Configure**, add an action by importing `https://sharesecure-du8.pages.dev/openapi.json`, set authentication to API key (Bearer) with your token, and use `https://sharesecure-du8.pages.dev/privacy` as the privacy policy. The dialog has instructions to paste in. If your plan supports connectors in developer mode, you can add the connector URL there instead.
+
+Assistants that can't run commands (the Claude and ChatGPT apps) get a one-time upload page from `share_file`: you open it, pick the file, and the link appears there.
+
+In the desktop app's “this computer” mode and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one). The Claude app connector works there too through the public link.
 
 | Tool | What it does |
 |---|---|

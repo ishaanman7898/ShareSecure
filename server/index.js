@@ -94,6 +94,7 @@ app.use('/api', require('./routes/inbox'));
 app.use('/api', require('./routes/files'));
 // assistants (Claude Code, Codex, …) connect here to share files
 app.use('/mcp', require('./mcp').router);
+app.use('/connect', require('./mcp').connectRouter);
 
 // ── mode endpoint (self-host detection) ───────────────────────────────────────
 // Returns selfHostMode: true so the frontend can skip auth and show admin UI.

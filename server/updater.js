@@ -37,6 +37,9 @@ const underLauncher = process.env.SHARESECURE_LAUNCHER === '1';
 // the desktop app's program files are read-only; it updates itself through electron-updater
 const inDesktop = process.env.SHARESECURE_DESKTOP === '1';
 const isGitInstall = fs.existsSync(path.join(ROOT, '.git'));
+// A clone someone is developing in (it has the dev tools installed). Updating it
+// would check out a release tag and strip those tools, so it never self-updates.
+const isDevCheckout = isGitInstall && fs.existsSync(path.join(ROOT, 'node_modules', 'electron'));
 
 function newer(a, b) {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
@@ -78,6 +81,7 @@ function status() {
   let blockedReason = null;
   if (inDocker) blockedReason = 'docker';
   else if (inDesktop) blockedReason = 'desktop';
+  else if (isDevCheckout) blockedReason = 'development';
   return {
     current: currentVersion,
     latest: state.latest,
@@ -116,6 +120,10 @@ function protectLegacyDb() {
 }
 
 async function installFromGit(tag) {
+  // checking out with --force would throw away anything edited in the install
+  if ((await run('git', ['status', '--porcelain', '--untracked-files=no'], ROOT)).trim()) {
+    throw new Error('Files in the install folder were changed, so the update was skipped to keep them. Commit or undo the changes, then try again.');
+  }
   const previous = (await run('git', ['rev-parse', 'HEAD'], ROOT)).trim();
   require('./db').db.pragma('wal_checkpoint(TRUNCATE)');
   const restoreDb = protectLegacyDb();
@@ -168,6 +176,7 @@ async function apply() {
   if (state.status === 'updating' || state.status === 'restarting') return status();
   if (inDocker) throw new Error('Docker installs update by rebuilding the container.');
   if (inDesktop) throw new Error('The desktop app installs its own updates.');
+  if (isDevCheckout) throw new Error('This is a development copy. Update it with git instead.');
   await check();
   if (!status().updateAvailable) return status();
 

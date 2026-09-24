@@ -141,8 +141,9 @@ function openWindow(url, size) {
   return w;
 }
 
-function mainUrl() {
-  return mode === 'account' ? `${CLOUD}/signin` : origin;
+function mainUrl(newAccount = false) {
+  if (mode !== 'account') return origin;
+  return newAccount ? `${CLOUD}/signin?new=1` : `${CLOUD}/signin`;
 }
 
 function createMain(url) {
@@ -183,10 +184,11 @@ function showWelcome() {
   win.loadFile(path.join(__dirname, 'welcome.html'));
   win.webContents.on('did-navigate-in-page', async (_e, url) => {
     const choice = new URL(url).hash.slice(1);
-    if (choice !== 'account' && choice !== 'local') return;
-    saveMode(choice);
-    await start(choice);
-    win.loadURL(mainUrl());
+    if (!['account', 'account-new', 'local'].includes(choice)) return;
+    const chosen = choice === 'local' ? 'local' : 'account';
+    saveMode(chosen);
+    await start(chosen);
+    win.loadURL(mainUrl(choice === 'account-new'));
     buildTrayMenu();
   });
 }
@@ -256,6 +258,8 @@ app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
+  // lets pages hide their "get the app" and "host it yourself" links in here
+  app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
   const saved = readMode();
   if (saved) await start(saved);
   createTray();

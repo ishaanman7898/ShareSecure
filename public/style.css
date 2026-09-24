@@ -1253,3 +1253,25 @@ select:focus,
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ── assistant upload page (/drop/<ticket>) ── */
+.drop-panel { max-width: 460px; }
+.drop-panel .auth-form { display: flex; flex-direction: column; gap: 16px; }
+.drop-done { display: flex; flex-direction: column; padding: 22px 28px 26px; }
+.drop-done.hidden { display: none; }
+.drop-done-title { font-weight: 600; font-size: 1.1rem; }
+.drop-done .result-url { margin-top: 12px; }
+
+/* assistant setup tabs */
+.mcp-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 14px; padding: 3px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--sunken); }
+.mcp-tab { flex: 1 1 auto; min-height: 34px; padding: 0 10px; border: none; border-radius: var(--r-sm); background: transparent; color: var(--muted); font: inherit; font-size: 0.84rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.mcp-tab:hover { color: var(--ink); }
+.mcp-tab[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line-strong); }
+.mcp-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.mcp-panel.hidden { display: none; }
+.mcp-steps { margin: 6px 0 0 18px; display: grid; gap: 10px; font-size: 0.86rem; color: var(--ink-2); }
+.mcp-steps .code-box { margin-top: 6px; }
+.mcp-steps code, .mcp-panel .field-hint code { font-family: var(--mono); font-size: 0.92em; }
+
+/* inside the desktop app: no "get the app" or "host it yourself" links */
+.is-desktop .web-only { display: none !important; }

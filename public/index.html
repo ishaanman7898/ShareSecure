@@ -89,7 +89,7 @@
         <p class="landing-lede">Private, encrypted links that expire when you say.</p>
         <div class="landing-actions">
           <a class="btn btn-primary btn-lg" href="/signin?new=1">Create an account</a>
-          <a href="/self-host" class="btn btn-ghost btn-lg">Get the desktop app</a>
+          <a href="/self-host" class="btn btn-ghost btn-lg web-only">Get the desktop app</a>
         </div>
       </div>
       <div class="landing-art" aria-hidden="true">
@@ -217,16 +217,48 @@
       <div id="mcp-on" class="modal-block hidden">
         <p class="modal-text" id="mcp-status"></p>
         <div id="mcp-setup" class="mcp-setup hidden">
-          <p class="field-hint">Copy your token now. It won’t be shown again.</p>
+          <p class="field-hint">Copy your token now. It won’t be shown again. Anyone with it can share files as you, so treat it like a password.</p>
           <div class="code-box"><code id="mcp-token"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-token">Copy</button></div>
 
-          <h3 class="modal-h3">Claude Code</h3>
-          <p class="field-hint">Run this in a terminal.</p>
-          <div class="code-box"><code id="mcp-claude"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-claude">Copy</button></div>
+          <div class="mcp-tabs" role="tablist" aria-label="Assistant">
+            <button class="mcp-tab" role="tab" data-tab="claude-code" aria-selected="true">Claude Code</button>
+            <button class="mcp-tab" role="tab" data-tab="codex" aria-selected="false">Codex</button>
+            <button class="mcp-tab" role="tab" data-tab="claude-app" aria-selected="false">Claude app</button>
+            <button class="mcp-tab" role="tab" data-tab="chatgpt" aria-selected="false">ChatGPT</button>
+          </div>
 
-          <h3 class="modal-h3">Codex</h3>
-          <p class="field-hint">Add this to <code>~/.codex/config.toml</code>, and set <code>SHARESECURE_TOKEN</code> to your token.</p>
-          <div class="code-box"><code id="mcp-codex"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-codex">Copy</button></div>
+          <div class="mcp-panel" data-panel="claude-code" role="tabpanel">
+            <p class="field-hint">Run this in a terminal. Then ask Claude Code to share a file by its path.</p>
+            <div class="code-box"><code id="mcp-claude"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-claude">Copy</button></div>
+          </div>
+
+          <div class="mcp-panel hidden" data-panel="codex" role="tabpanel">
+            <p class="field-hint">Add this to <code>~/.codex/config.toml</code>, and set <code>SHARESECURE_TOKEN</code> to your token.</p>
+            <div class="code-box"><code id="mcp-codex"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-codex">Copy</button></div>
+          </div>
+
+          <div class="mcp-panel hidden" data-panel="claude-app" role="tabpanel">
+            <p class="field-hint" id="mcp-app-steps">In Claude on the web or the desktop app, open <strong>Settings → Connectors → Add custom connector</strong>. Name it <strong>ShareSecure</strong> and paste this as the MCP server URL. When you ask Claude to share something, it gives you a page to pick the file.</p>
+            <div class="code-box"><code id="mcp-connector"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-connector">Copy</button></div>
+            <p class="field-hint mcp-no-public hidden">Apps like Claude need a public https address. Turn on the public link (<code>USE_LOCAL_TUNNEL</code>) or set <code>BASE_URL</code> to your domain, then create the token again.</p>
+          </div>
+
+          <div class="mcp-panel hidden" data-panel="chatgpt" role="tabpanel">
+            <div class="mcp-gpt">
+              <p class="field-hint"><strong>Make a ShareSecure GPT</strong> that shares files you attach in the chat. In ChatGPT, open <strong>GPTs → Create → Configure</strong>, then:</p>
+              <ol class="mcp-steps">
+                <li>Paste these as the GPT’s <strong>Instructions</strong>:
+                  <div class="code-box"><code id="mcp-gpt-instructions">You share files through ShareSecure. When the user asks to share a file, make sure it is attached to the conversation, then call shareFiles with it. If they don’t say how long the link should last, use 24 hours. Give them the link from the response, and mention when it expires. Use listShares to show their links and deleteShare to remove one.</code><button class="btn btn-ghost btn-copy" data-copy="mcp-gpt-instructions">Copy</button></div>
+                </li>
+                <li>Under <strong>Actions</strong>, choose <strong>Create new action → Import from URL</strong> and enter:
+                  <div class="code-box"><code id="mcp-openapi"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-openapi">Copy</button></div>
+                </li>
+                <li>Set <strong>Authentication</strong> to <strong>API Key</strong>, auth type <strong>Bearer</strong>, and paste your token.</li>
+                <li>Set the privacy policy to <code id="mcp-privacy"></code>, then save the GPT (keep it private, or share it with a link).</li>
+              </ol>
+            </div>
+            <p class="field-hint">If your ChatGPT plan lets you add connectors in developer mode, you can add ShareSecure there instead, using the connector URL from the Claude app tab with no authentication.</p>
+          </div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost" id="mcp-rotate">Replace token</button>

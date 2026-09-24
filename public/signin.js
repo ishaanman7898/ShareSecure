@@ -1,3 +1,6 @@
+// Inside the desktop app, hide links to download or self-host ShareSecure.
+if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
+
 // the zero-knowledge code is only needed to create an account, so it loads then
 const loadZK = () => import('/zk-client.js');
 

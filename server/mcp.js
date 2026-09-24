@@ -89,7 +89,7 @@ const TOOLS = [
 
 function callTool(name, args, req) {
   if (name === 'share_file') {
-    if (!fromThisComputer(req)) return { error: 'Files can only be shared by path from this computer. Connect to http://localhost instead of the public link.' };
+    if (!fromThisComputer(req)) return { error: 'This ShareSecure runs on the user’s own computer, so files can only be shared by path from there. Ask them to upload it in the ShareSecure app, then call list_shares to get the link.' };
     const filePath = path.resolve(String(args.path || ''));
     let stat;
     try { stat = fs.statSync(filePath); } catch { return { error: `No file at ${filePath}` }; }
@@ -177,11 +177,13 @@ function handleMessage(msg, req) {
   }
 }
 
-router.all('/', express.json({ limit: '1mb' }), (req, res) => {
+// pathToken: apps like Claude and ChatGPT only take a URL when adding a
+// connector, so their connector URL carries the token (/connect/<token>).
+function handle(req, res, pathToken = null) {
   if (req.method !== 'POST') {
     return res.status(405).set('Allow', 'POST').send('ShareSecure MCP endpoint. Connect with an MCP client using POST.');
   }
-  if (!tokenOk(req.headers.authorization)) {
+  if (!tokenOk(pathToken ? `Bearer ${pathToken}` : req.headers.authorization)) {
     return res.status(401).set('WWW-Authenticate', 'Bearer').json({
       jsonrpc: '2.0', id: null,
       error: { code: -32001, message: 'Missing or invalid ShareSecure token. Create one in the account menu under Connect an AI assistant.' },
@@ -191,6 +193,12 @@ router.all('/', express.json({ limit: '1mb' }), (req, res) => {
   const out = Array.isArray(body) ? body.map(m => handleMessage(m, req)).filter(Boolean) : handleMessage(body, req);
   if (!out || (Array.isArray(out) && !out.length)) return res.status(202).end();
   res.json(out);
-});
+}
 
-module.exports = { router, tokenStatus, createToken, revokeToken };
+router.all('/', express.json({ limit: '1mb' }), (req, res) => handle(req, res));
+
+// /connect/<token>: the connector URL for apps that only accept a URL
+const connectRouter = express.Router();
+connectRouter.all('/:token', express.json({ limit: '1mb' }), (req, res) => handle(req, res, req.params.token));
+
+module.exports = { router, connectRouter, tokenStatus, createToken, revokeToken };

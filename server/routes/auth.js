@@ -96,13 +96,18 @@ router.post('/delete-account', session.requireOwner, (req, res) => {
 
 // ── /api/auth/mcp-token: the token assistants use to connect ──────────────────
 const mcpUrl = () => `http://localhost:${process.env.PORT || 3000}/mcp`;
+// apps like Claude and ChatGPT need a public https address: the tunnel, or your domain
+const reach = () => ({
+  publicUrl: /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null,
+  gptActions: false,
+});
 
 router.get('/mcp-token', session.requireOwner, (_req, res) => {
-  res.json({ ...require('../mcp').tokenStatus(), mcpUrl: mcpUrl() });
+  res.json({ ...require('../mcp').tokenStatus(), mcpUrl: mcpUrl(), ...reach() });
 });
 
 router.post('/mcp-token', session.requireOwner, (_req, res) => {
-  res.json({ token: require('../mcp').createToken(), mcpUrl: mcpUrl() });
+  res.json({ token: require('../mcp').createToken(), mcpUrl: mcpUrl(), ...reach() });
 });
 
 router.delete('/mcp-token', session.requireOwner, (_req, res) => {
