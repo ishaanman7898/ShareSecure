@@ -1,4 +1,4 @@
-import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr } from '../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, getEncKey, decryptStr, migrateOnce } from '../../_turso.js';
 
 export async function onRequestGet(context) {
   const { env, request } = context;
@@ -11,14 +11,11 @@ export async function onRequestGet(context) {
 
   const client = getFilesClient(env);
 
-  // idempotent schema migrations
-  for (const sql of [
+  await migrateOnce('files-inbox', client, [
     'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
     'ALTER TABLE files ADD COLUMN inbox_status TEXT',
     'ALTER TABLE files ADD COLUMN inbox_note TEXT',
-  ]) {
-    try { await client.execute({ sql, args: [] }); } catch {}
-  }
+  ]);
 
   const res = await client.execute({
     sql: `SELECT short_id, original_filename, mime_type, size_bytes, expires_at, delete_token, uploaded_at,

@@ -1,4 +1,21 @@
-import * as ZK from '/zk-client.js';
+// The zero-knowledge prover and the QR code library are only needed when you
+// upload, so they load on first use instead of slowing down every page.
+let zkModule = null;
+const loadZK = () => (zkModule ??= import('/zk-client.js'));
+const hasZKCredentials = () => {
+  try { return Boolean(localStorage.getItem('zk_secret') && localStorage.getItem('zk_commitment')); } catch { return false; }
+};
+
+let qrScript = null;
+function loadQRCode() {
+  return (qrScript ??= new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = '/qrcode.min.js';
+    el.onload = resolve;
+    el.onerror = reject;
+    document.head.appendChild(el);
+  }));
+}
 
 // ── html escaping for user-supplied strings (filenames, usernames) ──────────
 function escapeHtml(str) {
@@ -145,7 +162,6 @@ const saveQrBtn = document.getElementById('save-qr-btn');
 // --- auth & dashboard elements ---
 const dashboardCard = document.getElementById('dashboard-card');
 const fileList = document.getElementById('file-list');
-const uploadCount = document.getElementById('upload-count');
 
 const landingPage = document.getElementById('landing-page');
 
@@ -326,6 +342,9 @@ function setFile(file) {
     return;
   }
   selectedFile = file;
+  // fetch what "Create link" needs while the person fills in the form
+  loadQRCode().catch(() => {});
+  if (userToken && hasZKCredentials()) loadZK().catch(() => {});
   fileName.textContent = file.name;
   fileSize.textContent = formatSize(file.size);
   document.getElementById('file-icon').innerHTML = getFileIcon(file.type);
@@ -449,9 +468,9 @@ uploadBtn.addEventListener('click', async () => {
   // logging in the request chain) cannot link the upload to a specific user_id.
   // The proof is multi-KB so it goes in the form data, not headers.
   let zkFields = null;
-  if (userToken && ZK.hasZKCredentials()) {
+  if (userToken && hasZKCredentials()) {
     try {
-      zkFields = await ZK.prepareUploadFields(userToken);
+      zkFields = await (await loadZK()).prepareUploadFields(userToken);
     } catch {
       // ZK prep failed (challenge limit, network, etc.) — fall back to Bearer
       zkFields = null;
@@ -478,10 +497,13 @@ uploadBtn.addEventListener('click', async () => {
     const sendTo = selfHostMode ? '' : (document.getElementById('send-to-input')?.value.trim() || '');
     showResult(data, selectedFile);
     if (sendTo) {
-      sendToUser(data.shortId, sendTo);
+      sendToUsers(data.shortId, sendTo);
       document.getElementById('send-to-input').value = '';
     }
     showToast('Link created.', 'success');
+    // ready for the next file
+    clearSelection();
+    progressWrap.classList.add('hidden');
     if (userToken) updateDashboard();
     if (selfHostMode) renderFileList(loadUploadHistory());
   } else if (result.status === 401 && !(await sessionStillValid())) {
@@ -512,19 +534,9 @@ function showResult(data, file) {
   // show the owner's direct url — same link they'll view the file at
   const ownerUrl = data.shortUrl;
   shortLink.textContent = ownerUrl;
-
-  if (ownerUrl.includes('localhost') || ownerUrl.includes('127.0.0.1')) {
-    let warningText = document.getElementById('localhost-warn');
-    if (!warningText) {
-      warningText = document.createElement('div');
-      warningText.id = 'localhost-warn';
-      warningText.style.color = 'var(--warn)';
-      warningText.style.fontSize = '0.82rem';
-      warningText.style.padding = '4px 0 2px';
-      warningText.textContent = 'This link points to localhost, so other devices can’t open it. Use your local network IP (e.g. 192.168.x.x) or a tunnel to share it.';
-      shortLink.parentNode.appendChild(warningText);
-    }
-  }
+  shortLink.href = ownerUrl;
+  document.getElementById('open-link-btn').href = ownerUrl;
+  document.getElementById('localhost-warn').classList.toggle('hidden', !/\/\/(localhost|127\.0\.0\.1)[:/]/.test(ownerUrl));
 
   // auto-open the file in a new tab
   window.open(ownerUrl, '_blank', 'noopener,noreferrer');
@@ -555,11 +567,13 @@ function showResult(data, file) {
 
   // generate qr entirely client-side — no third party ever sees the url
   qrCanvasEl.innerHTML = '';
-  qrInstance = new QRCode(qrCanvasEl, {
-    text: data.shortUrl, width: 200, height: 200,
-    colorDark: '#000000', colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.M
-  });
+  loadQRCode().then(() => {
+    qrInstance = new QRCode(qrCanvasEl, {
+      text: data.shortUrl, width: 200, height: 200,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }).catch(() => {});
 
   saveQrBtn.onclick = () => {
     const img = qrCanvasEl.querySelector('img') || qrCanvasEl.querySelector('canvas');
@@ -578,7 +592,7 @@ copyBtn.addEventListener('click', () => {
     copyBtn.classList.add('copied');
     showToast('Link copied.', 'success', 2500);
     setTimeout(() => {
-      copyBtn.textContent = 'Copy';
+      copyBtn.textContent = 'Copy link';
       copyBtn.classList.remove('copied');
     }, 2000);
   }).catch(() => {
@@ -684,7 +698,7 @@ function closeModal(modal) {
   modalReturnFocus?.focus();
 }
 
-for (const modal of document.querySelectorAll('#mcp-modal, #delete-modal')) {
+for (const modal of document.querySelectorAll('[data-dialog]')) {
   modal.addEventListener('click', e => {
     if (e.target === modal || e.target.closest('[data-close]')) closeModal(modal);
   });
@@ -703,6 +717,10 @@ document.addEventListener('click', e => {
 });
 
 // ── connect an AI assistant (MCP) ─────────────────────────────────────────────
+// desktop / self-hosted settings that live in the account menu
+document.getElementById('menu-receive').addEventListener('click', () => openModal(document.getElementById('receive-modal')));
+document.getElementById('menu-updates').addEventListener('click', () => openModal(document.getElementById('updates-modal')));
+
 const mcpModal = document.getElementById('mcp-modal');
 
 function renderMcp(state, token) {
@@ -787,7 +805,7 @@ deleteForm.addEventListener('submit', async e => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deleteToken: f.delete_token || localStorage.getItem('owner_' + f.short_id) }),
       })));
-      ZK.clearCredentials();
+      try { localStorage.removeItem('zk_secret'); localStorage.removeItem('zk_commitment'); } catch {}
     }
     try {
       localStorage.removeItem(HISTORY_KEY);
@@ -841,11 +859,11 @@ function initAuth() {
 // Accounts created before the sign-up fix never had their private-upload
 // commitment saved. Save this browser's now; the server ignores it if one exists.
 function repairZkEnrollment() {
-  if (!ZK.hasZKCredentials()) return;
+  if (!hasZKCredentials()) return;
   fetch('/api/auth/zk-enroll', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ commitment: ZK.getStoredCommitment() }),
+    body: JSON.stringify({ commitment: localStorage.getItem('zk_commitment') }),
   }).catch(() => {});
 }
 
@@ -856,7 +874,6 @@ function initSelfHost() {
   if (!username) { location.replace('/signin'); return; }
 
   showSignedIn(username);
-  if (uploadCount) uploadCount.textContent = 'No limit';
   updateDashboard();
   startInboxPolling();
   initReceive();
@@ -877,7 +894,6 @@ async function updateDashboard() {
     if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
     const data = await res.json();
-    uploadCount.textContent = data.unlimited ? 'No limit' : `${data.dailyUploadCount ?? 0}/5 today`;
     if (mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
   } catch { /* network error — keep showing cached list */ }
 }
@@ -1085,24 +1101,33 @@ function renderInbox(files) {
     </div>`).join('');
 }
 
-// ── web version: send a new upload straight to someone ───────────────────────
-async function sendToUser(shortId, username) {
-  try {
-    const res = await fetch(`/api/send/${encodeURIComponent(shortId)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ targetUsername: username }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (data.sent) showToast(`Sent to ${username}. They’ll accept or decline it.`, 'success', 5000);
-    else showToast(data.error === 'User not found' ? `There’s no user called ${username}.` : (data.error || 'Couldn’t send the file.'), 'error', 6000);
-  } catch {
-    showToast('Couldn’t send the file. Try again from the file’s Share panel.', 'error', 6000);
+// ── web version: send a new upload straight to people ────────────────────────
+// "alice, bob" or "@alice bob"; each person gets their own copy to accept.
+async function sendToUsers(shortId, input) {
+  const names = [...new Set(input.split(/[\s,;]+/).map(u => u.replace(/^@/, '')).filter(Boolean))].slice(0, 20);
+  const sent = [], missing = [], failed = [];
+  for (const username of names) {
+    try {
+      const res = await fetch(`/api/send/${encodeURIComponent(shortId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ targetUsername: username }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.sent) sent.push(username);
+      else if (data.error === 'User not found') missing.push(username);
+      else failed.push(username);
+    } catch {
+      failed.push(username);
+    }
   }
+  if (sent.length) showToast(`Sent to ${sent.join(', ')}. They’ll accept or decline it.`, 'success', 5000);
+  if (missing.length) showToast(`There’s no user called ${missing.join(', ')}.`, 'error', 6000);
+  if (failed.length) showToast(`Couldn’t send it to ${failed.join(', ')}. Try again.`, 'error', 6000);
 }
 
 // ── desktop version: let people send the owner files ─────────────────────────
-const receiveSection = document.getElementById('receive-section');
+const receiveMenu = document.getElementById('menu-receive');
 const receiveToggle = document.getElementById('receive-toggle');
 
 function renderReceive(s) {
@@ -1113,11 +1138,11 @@ function renderReceive(s) {
 }
 
 async function initReceive() {
-  if (!receiveSection) return;
+  if (!receiveMenu) return;
   try {
     const res = await fetch('/api/settings/incoming', { headers: authHeaders() });
     if (!res.ok) return;
-    receiveSection.classList.remove('hidden');
+    receiveMenu.classList.remove('hidden');
     renderReceive(await res.json());
   } catch {}
 }
@@ -1247,7 +1272,7 @@ function logout() {
 }
 
 // ── updates (self-hosted) ─────────────────────────────────────────────────────
-const updatesSection = document.getElementById('updates-section');
+const updatesMenu = document.getElementById('menu-updates');
 const updateVersion = document.getElementById('update-version');
 const updateStatus = document.getElementById('update-status');
 const updateBtn = document.getElementById('update-btn');
@@ -1268,6 +1293,7 @@ async function updateCall(path, body) {
 
 function renderUpdates(s) {
   updateVersion.textContent = `Version ${s.current}`;
+  document.getElementById('menu-update-badge').classList.toggle('hidden', !s.updateAvailable);
   autoUpdateInput.checked = !!s.autoUpdate;
   autoUpdateInput.disabled = !s.canUpdate;
   updateBtn.classList.add('hidden');
@@ -1320,14 +1346,14 @@ async function waitForRestart(fromVersion) {
 }
 
 async function initUpdates() {
-  if (!updatesSection) return;
-  updatesSection.classList.remove('hidden');
+  if (!updatesMenu) return;
+  updatesMenu.classList.remove('hidden');
   try {
     let s = await updateCall('/api/update/status');
     renderUpdates(s);
     if (!s.checkedAt) renderUpdates(s = await updateCall('/api/update/check', {}));
   } catch {
-    updatesSection.classList.add('hidden');
+    updatesMenu.classList.add('hidden');
   }
 }
 
@@ -1364,7 +1390,7 @@ autoUpdateInput?.addEventListener('change', async () => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!profileMenu.classList.contains('hidden')) { closeMenu(true); return; }
-  const openDialog = document.querySelector('#mcp-modal:not(.hidden), #delete-modal:not(.hidden)');
+  const openDialog = document.querySelector('[data-dialog]:not(.hidden)');
   if (openDialog) { closeModal(openDialog); return; }
   if (!resultCard.classList.contains('hidden')) {
     if (countdownInterval) clearInterval(countdownInterval);

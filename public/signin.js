@@ -1,4 +1,5 @@
-import * as ZK from '/zk-client.js';
+// the zero-knowledge code is only needed to create an account, so it loads then
+const loadZK = () => import('/zk-client.js');
 
 const $ = id => document.getElementById(id);
 const form = $('auth-form');
@@ -122,11 +123,11 @@ form.addEventListener('submit', async e => {
       // Browser version: enroll ZK credentials in this browser; only the commitment is sent.
       let zk_commitment = null;
       if (!selfHost) {
-        try { zk_commitment = (await ZK.generateCredentials()).commitment; } catch {}
+        try { zk_commitment = (await (await loadZK()).generateCredentials()).commitment; } catch {}
       }
       const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass, zk_commitment });
       if (!ok) {
-        if (!selfHost) ZK.clearCredentials();
+        if (!selfHost) { try { localStorage.removeItem('zk_secret'); localStorage.removeItem('zk_commitment'); } catch {} }
         throw new Error(data.error || 'Couldn’t create the account. Try again.');
       }
     }

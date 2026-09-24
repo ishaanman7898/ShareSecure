@@ -8,7 +8,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 - Files, their names and notes are encrypted with AES-256-GCM. Each file has its own key, derived from a server master key.
 - Links expire after 1 hour to 10 days. Expired files are erased.
-- Uploads from the browser an account was created in carry a zero-knowledge proof of membership, so the file isn't linked to the account. See [ZK-INTEGRATION.md](ZK-INTEGRATION.md).
+- Uploads from the browser an account was created in use a zero-knowledge proof instead of the session token, and the stored file row has no account link. The server does learn which account is uploading while it verifies (the challenge is issued to an account, and the proof carries that account's commitment); it just doesn't persist it on the file. See [ZK-INTEGRATION.md](ZK-INTEGRATION.md).
 - The self-hosted server checks file types by their contents, not their names, and strips author and editing metadata from PDF and DOCX files.
 - Pages send `noindex`, `no-store` and `frame-ancestors 'none'`, and there are no analytics or third-party scripts.
 

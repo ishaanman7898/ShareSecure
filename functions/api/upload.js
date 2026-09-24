@@ -6,7 +6,8 @@ import {
   encryptField,
   encryptStr,
   getUserTag,
-  countUploadsToday
+  countUploadsToday,
+  migrateOnce
 } from '../_turso.js';
 import { verifyProof as zkVerifyProof } from '../_zk.js';
 
@@ -110,12 +111,11 @@ export async function onRequestPost(context) {
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   const client = getFilesClient(env);
 
-  // one-time schema migrations — safe to run every request (idempotent)
-  for (const col of [
+  await migrateOnce('files-upload', client, [
     'ALTER TABLE files ADD COLUMN allow_annotations INTEGER DEFAULT 1',
     'ALTER TABLE files ADD COLUMN allow_download INTEGER DEFAULT 0',
     'ALTER TABLE files ADD COLUMN user_tag TEXT'
-  ]) { try { await client.execute({ sql: col, args: [] }); } catch {} }
+  ]);
 
   // When ZK-authenticated, we DON'T store user_tag — the nullifier already
   // proved the uploader is a registered user, and we want zero identity link.

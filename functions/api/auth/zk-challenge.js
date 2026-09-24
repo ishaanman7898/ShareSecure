@@ -5,7 +5,7 @@
 // user_tag, this challenge limit is the only place upload abuse is bounded
 // for the ZK path.
 
-import { verifyToken, getAuthClient, getUserTag, countUploadsToday } from '../../_turso.js';
+import { verifyToken, getAuthClient, getUserTag, countUploadsToday, migrateOnce } from '../../_turso.js';
 import { issueChallenge, purgeExpiredChallenges } from '../../_zk.js';
 
 const MAX_CHALLENGES_PER_DAY = 5;
@@ -25,13 +25,12 @@ export async function onRequestPost(context) {
   // row per issuance independent of the active challenge table.
   try {
     const client = getAuthClient(env);
-    await client.execute({
-      sql: `CREATE TABLE IF NOT EXISTS zk_challenge_log (
-              user_id INTEGER NOT NULL,
-              issued_at TEXT NOT NULL
-            )`,
-      args: []
-    });
+    await migrateOnce('zk-log', client, [
+      `CREATE TABLE IF NOT EXISTS zk_challenge_log (
+         user_id INTEGER NOT NULL,
+         issued_at TEXT NOT NULL
+       )`,
+    ]);
     // counts Bearer uploads too, so both paths draw on the same daily budget
     const used = await countUploadsToday(auth.userId, await getUserTag(auth.userId, env), env);
     if (used >= MAX_CHALLENGES_PER_DAY) {

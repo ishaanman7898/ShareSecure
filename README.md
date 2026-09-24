@@ -24,14 +24,14 @@ Upload a PDF, Word document or image, choose how long the link lasts (1 hour to 
 | **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: this computer | Only your computer | While the app is running | 10 MB each, no daily limit |
 | **[Self-hosted](#self-hosting)** (command line or Docker) | Only your machine or server | While the server is running | 10 MB each, no daily limit |
 
-The desktop app asks which one you want the first time it opens. You can switch later from its tray icon. The installers aren't code-signed yet: on Windows choose **More info → Run anyway**, and on a Mac right-click the app and choose **Open** the first time.
+The desktop app asks which one you want the first time it opens. You can switch later from its tray icon. The installers aren't code-signed yet: on Windows choose **More info → Run anyway**, and on a Mac open the app once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
 
 ## Features
 
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **View-only by default.** Choose per file whether people can download it or draw on it.
 - **Send to a username.** Files sent to you arrive as requests you accept or decline, and the sender isn't recorded.
-- **Private uploads.** In the browser you signed up in, uploads carry a zero-knowledge proof that you have an account without saying which one ([how it works](docs/ZK-INTEGRATION.md)).
+- **Unlinked uploads.** In the browser you signed up in, uploads use a zero-knowledge proof instead of your sign-in, and the stored file has no link to your account. The server can still tell which account is uploading while it checks the proof ([how it works](docs/ZK-INTEGRATION.md)).
 - **AI assistants.** Claude Code, Codex and other MCP clients can share files for you. [See below.](#ai-assistants-mcp)
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
 - **No tracking.** No analytics, ads or cookies.
@@ -62,7 +62,7 @@ In the desktop app's “this computer” mode and on self-hosted installs, the a
 
 | Tool | What it does |
 |---|---|
-| `share_file` | Shares a file by its path. It takes `path`, plus optional `expires_hours` (1–240, default 24), `allow_download`, `name` and `send_to` (website only). On the website it returns a one-time `curl` upload command that the assistant runs, and the output contains the link. Locally it reads the file directly. |
+| `share_file` | Shares a file by its path. It takes `path`, plus optional `expires_hours` (1–240, default 24), `allow_download`, `name` and `send_to` (a list of usernames, website only). On the website it returns a one-time `curl` upload command that the assistant runs, and the output contains the link. Locally it reads the file directly. |
 | `list_shares` | Lists live shares with their links and time left. |
 | `delete_share` | Deletes a share so its link stops working. |
 

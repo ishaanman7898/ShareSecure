@@ -10,6 +10,7 @@
   <title>Changelog — ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/docs.css" />
 </head>
 
@@ -38,12 +39,38 @@
 
     <div class="timeline">
 
-      <!-- v1.9.0 -->
+      <!-- v1.9.1 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.9.1</span>
+          <span class="release-date">September 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Mac app “is damaged”</strong> — The Mac app is now signed, so it opens instead of being reported as damaged. The first time, open it, then choose Open Anyway in System Settings → Privacy &amp; Security.</li>
+            <li><strong>Link created</strong> — The link gets its own full-width line instead of being squeezed next to the Copy button, with Copy link and Open underneath. The upload form resets for your next file.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Changes</h3>
+          <ul class="change-list">
+            <li><strong>Send to several people</strong> — Enter usernames separated by commas, or ask your AI assistant to share with a list of people. Each gets their own copy to accept.</li>
+            <li><strong>Tidier desktop app</strong> — Receiving files and Updates moved into the account menu.</li>
+            <li><strong>No upload counter</strong> — The daily counter next to Your shares is gone. The limit still applies and you’ll be told if you reach it.</li>
+            <li><strong>Faster</strong> — Fonts load from ShareSecure itself instead of Google, the browser keeps the site’s code and fonts between visits, the encryption tools load only when you upload, and uploads make fewer database round trips.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.9.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.9.0</span>
           <span class="release-date">September 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">

@@ -7,7 +7,7 @@
 // in its own shell; the upload's response contains the link. Uploads go through
 // the normal upload endpoint, so the 5-a-day limit and encryption all apply.
 
-import { getAuthClient, getFilesClient, getUserTag, signToken, sha256, getEncKey, decryptStr } from './_turso.js';
+import { getAuthClient, getFilesClient, getUserTag, signToken, sha256, getEncKey, decryptStr, migrateOnce } from './_turso.js';
 import { onRequestPost as uploadHandler } from './api/upload.js';
 import { onRequestPost as sendHandler } from './api/send/[shortId].js';
 
@@ -21,8 +21,7 @@ function randomToken(bytes = 30) {
 }
 
 async function ensureTables(env) {
-  const db = getAuthClient(env);
-  for (const sql of [
+  await migrateOnce('mcp', getAuthClient(env), [
     `CREATE TABLE IF NOT EXISTS api_tokens (
        user_id    INTEGER PRIMARY KEY,
        token_hash TEXT UNIQUE NOT NULL,
@@ -34,7 +33,7 @@ async function ensureTables(env) {
        options     TEXT NOT NULL,
        expires_at  TEXT NOT NULL
      )`,
-  ]) await db.execute({ sql, args: [] });
+  ]);
 }
 
 // ── personal tokens ──────────────────────────────────────────────────────────
@@ -101,17 +100,30 @@ async function upload(user, file, opts, context) {
   if (!res.ok) return { error: data.error || `Upload failed (${res.status})` };
 
   const result = { url: data.shortUrl, name: opts.name || data.filename, expires_at: data.expiresAt, id: data.shortId };
-  if (opts.send_to) {
-    const sendReq = new Request(new URL(`/api/send/${data.shortId}`, context.request.url), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: await sessionHeader(user, context.env) },
-      body: JSON.stringify({ targetUsername: opts.send_to }),
-    });
-    const sent = await (await sendHandler(withRequest(context, sendReq, { shortId: data.shortId }))).json().catch(() => ({}));
-    result.sent_to = sent.sent ? opts.send_to : null;
-    if (!sent.sent) result.send_error = sent.error || 'Couldn’t send it';
+  // each recipient gets their own copy as a request they accept or decline
+  const recipients = toRecipients(opts.send_to);
+  if (recipients.length) {
+    const auth = await sessionHeader(user, context.env);
+    result.sent_to = [];
+    result.not_sent = [];
+    for (const username of recipients) {
+      const sendReq = new Request(new URL(`/api/send/${data.shortId}`, context.request.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: auth },
+        body: JSON.stringify({ targetUsername: username }),
+      });
+      const sent = await (await sendHandler(withRequest(context, sendReq, { shortId: data.shortId }))).json().catch(() => ({}));
+      if (sent.sent) result.sent_to.push(username);
+      else result.not_sent.push({ username, reason: sent.error === 'User not found' ? 'No user with that name' : (sent.error || 'Couldn’t send it') });
+    }
   }
   return result;
+}
+
+// "alice, bob", "@alice bob" or ["alice", "bob"] → ["alice", "bob"], at most 20
+function toRecipients(value) {
+  const list = Array.isArray(value) ? value : String(value || '').split(/[\s,;]+/);
+  return [...new Set(list.map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
 }
 
 // POST /api/mcp/upload/:ticket (multipart, field "file"): the command share_file hands out.
@@ -151,7 +163,7 @@ const TOOLS = [
         expires_hours: { type: 'number', description: 'Hours until the link stops working, 1 to 240. Default 24.' },
         allow_download: { type: 'boolean', description: 'Let people who open the link download the file. Default false (view only).' },
         name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
-        send_to: { type: 'string', description: 'A ShareSecure username to send the file to. They accept or decline it.' },
+        send_to: { type: 'array', items: { type: 'string' }, description: 'ShareSecure usernames to send the file to, e.g. ["alice", "bob"]. Each gets their own copy to accept or decline. Up to 20.' },
       },
       required: ['path'],
     },
@@ -180,7 +192,7 @@ async function callTool(name, args, user, context) {
       expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
       allow_download: Boolean(args.allow_download),
       name: args.name ? String(args.name).slice(0, 200) : null,
-      send_to: args.send_to ? String(args.send_to).trim() : null,
+      send_to: toRecipients(args.send_to),
     };
     const ticket = randomToken(32);
     await getAuthClient(env).execute({
@@ -194,7 +206,7 @@ async function callTool(name, args, user, context) {
         '',
         `curl -fsS -F ${shellQuote('file=@' + path)} ${url}`,
         '',
-        `It prints JSON: "url" is the share link, "expires_at" is when it stops working${opts.send_to ? ', and "sent_to" confirms it was sent to ' + opts.send_to : ''}.`,
+        `It prints JSON: "url" is the share link and "expires_at" is when it stops working.${opts.send_to.length ? ` "sent_to" lists who it was sent to (${opts.send_to.join(', ')}), and "not_sent" lists anyone it couldn't reach and why.` : ''}`,
         'On Windows PowerShell, use curl.exe instead of curl.',
       ].join('\n'),
     };
@@ -245,7 +257,7 @@ async function handleMessage(msg, user, context) {
       return reply({
         protocolVersion: PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'sharesecure', version: '1.9.0' },
+        serverInfo: { name: 'sharesecure', version: '1.9.1' },
         instructions: 'ShareSecure shares files through private links that expire. Use share_file to share a file from this computer, then give the user the link.',
       });
     case 'ping':

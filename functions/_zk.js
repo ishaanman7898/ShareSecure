@@ -14,15 +14,14 @@
 // user_id is only used to look up which commitment to verify against —
 // the upload row itself stores NO user identifier.
 
-import { getAuthClient, getFilesClient } from './_turso.js';
+import { getAuthClient, getFilesClient, migrateOnce } from './_turso.js';
 import { verify as zkVerify, Field as F } from './lib/unigroth/index.js';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // Run once per request — idempotent schema migrations
 async function ensureSchema(env) {
-  const client = getAuthClient(env);
-  for (const sql of [
+  await migrateOnce('zk', getAuthClient(env), [
     'ALTER TABLE users ADD COLUMN zk_commitment TEXT',
     `CREATE TABLE IF NOT EXISTS zk_nullifiers (
        nullifier TEXT PRIMARY KEY,
@@ -34,9 +33,7 @@ async function ensureSchema(env) {
        issued_at   TEXT NOT NULL,
        expires_at  TEXT NOT NULL
      )`,
-  ]) {
-    try { await client.execute({ sql, args: [] }); } catch {}
-  }
+  ]);
 }
 
 // Generate a cryptographically random nonce in the bn254 scalar field, tied to a user_id.

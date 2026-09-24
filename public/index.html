@@ -9,6 +9,7 @@
   <title>ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -56,6 +57,15 @@
           <button class="menu-item" role="menuitem" id="menu-mcp">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
             <span>Connect an AI assistant</span>
+          </button>
+          <button class="menu-item hidden" role="menuitem" id="menu-receive">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Receiving files</span>
+          </button>
+          <button class="menu-item hidden" role="menuitem" id="menu-updates">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Updates</span>
+            <span class="menu-count hidden" id="menu-update-badge">New</span>
           </button>
           <div class="menu-sep" role="separator"></div>
           <button class="menu-item" role="menuitem" id="logout-btn">
@@ -118,8 +128,8 @@
           </div>
 
           <div id="send-to-wrap" class="field hidden">
-            <label for="send-to-input">Send to a user <span class="label-optional">optional</span></label>
-            <input type="text" id="send-to-input" class="text-input" placeholder="Their username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="32" />
+            <label for="send-to-input">Send to people <span class="label-optional">optional</span></label>
+            <input type="text" id="send-to-input" class="text-input" placeholder="Usernames, separated by commas" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="400" />
             <span class="field-hint">They get a request and choose whether to accept it. They won’t see who sent it.</span>
           </div>
 
@@ -166,7 +176,6 @@
       <aside class="panel panel-side" id="dashboard-card" aria-labelledby="files-title">
         <div class="list-header">
           <h2 class="panel-title" id="files-title">Your shares</h2>
-          <span class="pill" id="upload-count">0/5 today</span>
         </div>
         <div id="file-list" class="file-list">
           <p class="empty-msg">Nothing shared yet.</p>
@@ -181,47 +190,12 @@
             <p class="empty-msg">No files received.</p>
           </div>
         </div>
-
-        <div id="receive-section" class="receive-section hidden">
-          <div class="list-header">
-            <h2 class="panel-title">Receiving files</h2>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="receive-toggle" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Let people send me files</span>
-          </label>
-          <div class="receive-info hidden" id="receive-info">
-            <p>Share this page. People enter your username, <strong id="receive-username"></strong>, and you accept or decline each file.</p>
-            <div class="link-box receive-link">
-              <span id="receive-url"></span>
-              <button class="btn btn-ghost btn-copy" id="receive-copy">Copy</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="updates-section" class="updates-section hidden">
-          <div class="list-header">
-            <h2 class="panel-title">Updates</h2>
-            <span class="pill pill-quiet" id="update-version"></span>
-          </div>
-          <p class="update-status" id="update-status" aria-live="polite"></p>
-          <div class="update-actions">
-            <button class="btn btn-primary hidden" id="update-btn"></button>
-            <button class="btn btn-ghost" id="update-check-btn">Check now</button>
-          </div>
-          <label class="switch">
-            <input type="checkbox" id="auto-update" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Install updates automatically</span>
-          </label>
-        </div>
       </aside>
     </div>
   </main>
 
   <!-- connect an AI assistant over MCP -->
-  <div class="modal hidden" id="mcp-modal" role="dialog" aria-modal="true" aria-labelledby="mcp-title">
+  <div class="modal hidden" id="mcp-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="mcp-title">
     <div class="modal-content modal-wide">
       <div class="modal-header">
         <h2 id="mcp-title">Connect an AI assistant</h2>
@@ -258,7 +232,7 @@
   </div>
 
   <!-- delete account -->
-  <div class="modal hidden" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+  <div class="modal hidden" id="delete-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="delete-title">
     <div class="modal-content">
       <div class="modal-header">
         <h2 id="delete-title">Delete your account</h2>
@@ -281,6 +255,58 @@
     </div>
   </div>
 
+  <!-- receiving files (desktop / self-hosted) -->
+  <div class="modal hidden" id="receive-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="receive-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="receive-title">Receiving files</h2>
+        <button class="btn-icon" data-close aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="modal-text">Let people send you files through your own /send page. Each one waits until you accept it.</p>
+      <div class="modal-block receive-section">
+        <label class="switch">
+          <input type="checkbox" id="receive-toggle" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-text">Let people send me files</span>
+        </label>
+        <div class="receive-info hidden" id="receive-info">
+          <p>Share this page. People enter your username, <strong id="receive-username"></strong>, and you accept or decline each file.</p>
+          <div class="link-box receive-link">
+            <span id="receive-url"></span>
+            <button class="btn btn-ghost btn-copy" id="receive-copy">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- updates (desktop / self-hosted) -->
+  <div class="modal hidden" id="updates-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="updates-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="updates-title">Updates</h2>
+        <button class="btn-icon" data-close aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="updates-section">
+        <span class="pill pill-quiet" id="update-version"></span>
+        <p class="update-status" id="update-status" aria-live="polite"></p>
+        <div class="update-actions">
+          <button class="btn btn-primary hidden" id="update-btn"></button>
+          <button class="btn btn-ghost" id="update-check-btn">Check now</button>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="auto-update" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-text">Install updates automatically</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
   <!-- upload result modal (shown after successful upload) -->
   <div class="result-modal hidden" id="result-card" role="dialog" aria-modal="true" aria-labelledby="result-title">
     <div class="result-modal-backdrop" id="result-modal-backdrop"></div>
@@ -292,9 +318,11 @@
       <h2 class="result-title" id="result-title">Link created</h2>
       <p class="result-sub"><span id="result-filename"></span><span id="result-size"></span></p>
 
-      <div class="link-box">
-        <span id="short-link"></span>
-        <button class="btn btn-primary btn-copy" id="copy-btn">Copy</button>
+      <a class="result-url" id="short-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+      <p class="result-warn hidden" id="localhost-warn">This link points to this computer, so other devices can’t open it. Use your network address (e.g. 192.168.x.x) or turn on the public link to share it.</p>
+      <div class="result-actions">
+        <button class="btn btn-primary" id="copy-btn">Copy link</button>
+        <a class="btn btn-ghost" id="open-link-btn" href="#" target="_blank" rel="noopener noreferrer">Open</a>
       </div>
       <p class="result-expires" id="result-expires"></p>
 
@@ -320,8 +348,6 @@
     </nav>
     <p class="footer-note">Your IP address is visible to the server. Use Tor or a VPN if you need anonymity.</p>
   </footer>
-
-  <script src="/qrcode.min.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

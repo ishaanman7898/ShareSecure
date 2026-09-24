@@ -2,9 +2,20 @@ export async function onRequest(context) {
   const response = await context.next();
   const h = new Headers(response.headers);
 
-  // never cache anything — no browser history of file content
-  h.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  h.set('Pragma', 'no-cache');
+  // Pages, the API and file content are never cached (no browser history of
+  // anything shared). The site's own code, fonts and icons contain nothing
+  // private, so browsers keep them: fonts and icons for a week, scripts and
+  // styles revalidated on every load so a deploy is picked up at once.
+  const path = new URL(context.request.url).pathname;
+  const isOwnAsset = !path.startsWith('/api/') && !path.startsWith('/r/');
+  if (isOwnAsset && /\.(woff2|png|ico|svg)$/.test(path)) {
+    h.set('Cache-Control', 'public, max-age=604800');
+  } else if (isOwnAsset && /\.(js|css)$/.test(path)) {
+    h.set('Cache-Control', 'public, no-cache');
+  } else {
+    h.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    h.set('Pragma', 'no-cache');
+  }
 
   // don't leak referrer to any third-party (qr api sees no referrer)
   h.set('Referrer-Policy', 'no-referrer');

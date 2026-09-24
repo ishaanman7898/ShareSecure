@@ -1,4 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* fonts are served from this site: faster than a Google Fonts round trip,
+   and nobody else sees who loads the page */
+@font-face { font-family: 'Schibsted Grotesk'; font-style: normal; font-weight: 400 900; font-display: swap; src: url('/fonts/schibsted-grotesk.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/ibm-plex-mono-400.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/ibm-plex-mono-500.woff2') format('woff2'); }
 
 /* ── tokens ──────────────────────────────────────────────────────────────────
    Monochrome: pure black and white, greys only for hierarchy.
@@ -664,19 +668,31 @@ select:focus,
   background: var(--sunken);
 }
 
-#short-link {
-  flex: 1;
-  min-width: 0;
-  align-self: center;
-  font-family: var(--mono);
-  font-size: 0.86rem;
-  color: var(--ink);
-  word-break: break-all;
-}
-
 .btn-copy { min-height: 38px; padding: 0 16px; }
 
-#localhost-warn { flex-basis: 100%; }
+/* the link gets a full-width line of its own, so it never has to squeeze */
+.result-url {
+  display: block;
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--sunken);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.result-url:hover { border-color: var(--ink); }
+
+.result-warn { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+
+.result-actions { display: flex; gap: 8px; margin-top: 12px; }
+.result-actions .btn { flex: 1; }
 
 .result-expires {
   margin-top: 10px;
@@ -940,7 +956,7 @@ select:focus,
 }
 
 /* ── updates (self-hosted) ── */
-.updates-section { margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.updates-section { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; margin-top: 4px; }
 .update-status { font-size: 0.88rem; color: var(--ink-2); }
 .update-status:empty { display: none; }
 .update-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1123,7 +1139,7 @@ select:focus,
 .request-actions { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .request-actions .btn { flex: 1; min-height: 34px; padding: 0 12px; font-size: 0.86rem; }
 
-.receive-section { margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.receive-section { display: flex; flex-direction: column; gap: 14px; }
 .receive-info { display: flex; flex-direction: column; gap: 10px; font-size: 0.86rem; color: var(--ink-2); }
 .receive-link { margin-top: 0; padding: 4px 4px 4px 12px; }
 .receive-link span { flex: 1; min-width: 0; font-family: var(--mono); font-size: 0.78rem; word-break: break-all; }

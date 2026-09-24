@@ -1,7 +1,7 @@
 import {
   getFilesClient, getAuthClient, verifyToken,
   getEncKey, decryptField, decryptStr, encryptField, encryptStr,
-  getUserTag
+  getUserTag, migrateOnce
 } from '../../_turso.js';
 
 function generateId(length) {
@@ -57,14 +57,11 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File expired' }, { status: 410 });
   }
 
-  // idempotent schema migrations
-  for (const sql of [
+  await migrateOnce('files-inbox', filesClient, [
     'ALTER TABLE files ADD COLUMN recipient_user_tag TEXT',
     'ALTER TABLE files ADD COLUMN inbox_status TEXT',
     'ALTER TABLE files ADD COLUMN inbox_note TEXT',
-  ]) {
-    try { await filesClient.execute({ sql, args: [] }); } catch {}
-  }
+  ]);
 
   // Files arrive as requests the recipient has to accept. Cap how many can wait
   // so nobody can flood someone's inbox.

@@ -10,6 +10,7 @@
   <title>Security — ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/docs.css" />
 </head>
 
@@ -48,7 +49,7 @@
       <ul>
         <li><strong>Encrypted storage.</strong> Files, their names and notes are encrypted with AES-256-GCM, each with its own key derived from a server master key.</li>
         <li><strong>Links that expire.</strong> You pick 1 hour to 10 days. After that the link stops working and the file is erased.</li>
-        <li><strong>Private uploads.</strong> Uploads from the browser you signed up in carry a proof that you have an account without saying which one, so files aren't linked to you.</li>
+        <li><strong>Unlinked uploads.</strong> Uploads from the browser you signed up in are stored with no link to your account. The server still sees which account is uploading while it checks the upload; it just doesn't keep that with the file.</li>
         <li><strong>Not indexed.</strong> Pages tell search engines not to index or cache them, can't be embedded in other sites, and aren't cached by your browser.</li>
         <li><strong>No tracking.</strong> No analytics or third-party scripts, and ShareSecure's code doesn't log IP addresses.</li>
       </ul>

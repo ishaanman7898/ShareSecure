@@ -65,6 +65,18 @@ function createClient({ url, authToken }) {
   };
 }
 
+// ── schema migrations ────────────────────────────────────────────────────────
+// Idempotent "add column / create table" statements only need to run once per
+// worker instance, not on every request. Each one is a round trip to Turso.
+const migrated = new Set();
+export async function migrateOnce(key, client, statements) {
+  if (migrated.has(key)) return;
+  for (const sql of statements) {
+    try { await client.execute({ sql, args: [] }); } catch { /* already applied */ }
+  }
+  migrated.add(key);
+}
+
 // ── DB clients ───────────────────────────────────────────────────────────────
 
 const TURSO_FALLBACK_URL = 'libsql://fileshare-node-1-ishman.aws-us-east-2.turso.io';

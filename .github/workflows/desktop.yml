@@ -35,8 +35,10 @@ jobs:
 
       - run: npm ci
 
-      # macOS builds are signed and notarized once the Apple secrets exist;
-      # until then (and on Windows and Linux) they build unsigned. See docs/SIGNING.md.
+      # macOS builds are signed with a Developer ID and notarized once the Apple
+      # secrets exist. Until then they're signed ad hoc: Apple Silicon Macs refuse
+      # to run completely unsigned code and call the app "damaged". Windows and
+      # Linux build unsigned. See docs/SIGNING.md.
       # Missing secrets arrive as empty strings, which electron-builder would read
       # as a certificate path, so unset them.
       - name: Build
@@ -45,10 +47,21 @@ jobs:
           for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
             if [ -z "${!v}" ]; then unset "$v"; fi
           done
+          args=()
           if [ -z "${CSC_LINK:-}" ]; then
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            if [ "$RUNNER_OS" = "macOS" ]; then args+=("-c.mac.identity=-"); fi
           fi
-          npx electron-builder --publish never
+          npx electron-builder --publish never "${args[@]}"
+
+      - name: Check the macOS apps are signed
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          for app in dist/mac*/ShareSecure.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv "$app" 2>&1 | grep -E 'Signature|Identifier|flags'
+          done
         env:
           CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 || '' }}
           CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_PASSWORD || '' }}
