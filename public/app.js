@@ -45,6 +45,12 @@ function drawRosette() {
     // the outer div follows the cursor; the svg inside turns slowly on its own
     const ring = document.createElement('div');
     ring.className = 'ring';
+    ring.style.setProperty('--bloom-delay', `${(3 - bi) * 0.12}s`);
+    ring.style.setProperty('--breathe-delay', `${bi * -2}s`);
+    const bloom = document.createElement('div');
+    bloom.className = 'ring-bloom';
+    const drift = document.createElement('div');
+    drift.className = 'ring-drift';
     const svg = document.createElementNS(SVG_NS, 'svg');
     svg.setAttribute('viewBox', '0 0 400 400');
     svg.setAttribute('class', `ring-spin ring-spin-${bi + 1}`);
@@ -60,51 +66,103 @@ function drawRosette() {
       path.setAttribute('d', d + 'Z');
       path.setAttribute('pathLength', '1');
       path.setAttribute('class', b.cls);
-      path.style.setProperty('--d', (bi * 0.18 + i * 0.05).toFixed(2) + 's');
+      path.style.setProperty('--d', ((3 - bi) * 0.12 + i * 0.025).toFixed(2) + 's');
       svg.appendChild(path);
     }
-    ring.appendChild(svg);
+    drift.appendChild(svg);
+    bloom.appendChild(drift);
+    ring.appendChild(bloom);
     host.appendChild(ring);
     return ring;
   });
   followPointer(host, rings);
 }
 
-// Circling the cursor around the rosette turns the bands, each by a different
-// amount and in alternating directions. The loop only runs while they're moving.
+// Ease each band toward the pointer with a little depth. Time-based damping
+// keeps the response consistent across refresh rates; stop once it settles.
 function followPointer(host, rings) {
-  if (!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches) return;
+  const motion = matchMedia('(prefers-reduced-motion: no-preference)');
+  const pointer = matchMedia('(hover: hover) and (pointer: fine)');
   const art = host.closest('.landing-art');
   const RATIO = [-0.15, 0.25, -0.4, 0.6];
   const rot = rings.map(() => 0);
-  let dial = 0, last = null, frame = 0;
+  let dial = 0, last = null, frame = 0, previousTime = 0;
+  let targetX = 0, targetY = 0, x = 0, y = 0, visible = true;
 
-  function step() {
+  function step(time) {
+    const dt = previousTime ? Math.min(time - previousTime, 50) : 16.67;
+    previousTime = time;
+    const ease = 1 - Math.exp(-dt / 150);
+    x += (targetX - x) * ease;
+    y += (targetY - y) * ease;
     let moving = false;
     rings.forEach((ring, i) => {
       const diff = dial * RATIO[i] - rot[i];
-      if (Math.abs(diff) > 0.02) { rot[i] += diff * 0.1; moving = true; }
+      if (Math.abs(diff) > 0.02) { rot[i] += diff * ease; moving = true; }
       else rot[i] += diff;
-      ring.style.transform = `rotate(${rot[i].toFixed(3)}deg)`;
+      const depth = 3 + i * 2;
+      ring.style.transform = `translate3d(${(x * depth).toFixed(3)}px, ${(y * depth).toFixed(3)}px, 0) rotate(${rot[i].toFixed(3)}deg)`;
     });
+    moving ||= Math.abs(targetX - x) + Math.abs(targetY - y) > 0.001;
     frame = moving ? requestAnimationFrame(step) : 0;
+    if (!moving) previousTime = 0;
+  }
+
+  function start() {
+    if (!frame && motion.matches && pointer.matches && visible && !document.hidden) {
+      frame = requestAnimationFrame(step);
+    }
+  }
+
+  function resetPointer() {
+    last = null;
+    targetX = targetY = 0;
+    start();
+  }
+
+  function syncMotion() {
+    const paused = !visible || document.hidden || !motion.matches;
+    host.classList.toggle('is-paused', paused);
+    if (paused || !pointer.matches) {
+      cancelAnimationFrame(frame);
+      frame = previousTime = 0;
+      last = null;
+      targetX = targetY = x = y = dial = 0;
+      rot.fill(0);
+      rings.forEach(ring => { ring.style.transform = ''; });
+    }
   }
 
   art.addEventListener('pointermove', e => {
+    if (!motion.matches || !pointer.matches || !visible || document.hidden || e.pointerType === 'touch') return;
     const r = host.getBoundingClientRect();
-    const x = e.clientX - (r.left + r.width / 2), y = e.clientY - (r.top + r.height / 2);
+    if (!r.width) return;
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    targetX = Math.max(-1, Math.min(1, dx / (r.width / 2)));
+    targetY = Math.max(-1, Math.min(1, dy / (r.height / 2)));
+    start();
     // near the middle the angle swings wildly, so ignore it there
-    if (Math.hypot(x, y) < r.width * 0.1) { last = null; return; }
-    const angle = Math.atan2(y, x) * 180 / Math.PI;
+    if (Math.hypot(dx, dy) < r.width * 0.15) { last = null; return; }
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
     if (last !== null) {
       let delta = angle - last;
       if (delta > 180) delta -= 360; else if (delta < -180) delta += 360;
-      dial += delta;
-      if (!frame) frame = requestAnimationFrame(step);
+      dial += Math.max(-20, Math.min(20, delta));
     }
     last = angle;
   });
-  art.addEventListener('pointerleave', () => { last = null; });
+  art.addEventListener('pointerleave', resetPointer);
+  art.addEventListener('pointercancel', resetPointer);
+  motion.addEventListener('change', syncMotion);
+  pointer.addEventListener('change', syncMotion);
+  document.addEventListener('visibilitychange', syncMotion);
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver(([entry]) => {
+      visible = entry.isIntersecting;
+      syncMotion();
+    }).observe(host);
+  }
+  syncMotion();
 }
 
 // ── toast notification system ─────────────────────────────────────────────────

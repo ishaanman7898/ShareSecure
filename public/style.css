@@ -185,7 +185,9 @@ body:has(#landing-page:not(.hidden)) .container {
 .rosette { position: relative; width: 100%; max-width: min(460px, 66vh); aspect-ratio: 1; max-height: 100%; }
 
 /* each band is its own compositor layer, so turning it never repaints the paths */
-.rosette .ring { position: absolute; inset: 0; will-change: transform; }
+.rosette .ring { position: absolute; inset: 0; }
+.rosette .ring-bloom,
+.rosette .ring-drift { width: 100%; height: 100%; }
 .rosette .ring-spin { display: block; width: 100%; height: 100%; overflow: visible; }
 .rosette path { fill: none; stroke: currentColor; stroke-width: 0.6; }
 .rosette .band-1 { opacity: 0.85; }
@@ -194,20 +196,49 @@ body:has(#landing-page:not(.hidden)) .container {
 .rosette .band-4 { opacity: 0.4; }
 
 @media (prefers-reduced-motion: no-preference) {
+  .landing-copy > * {
+    animation: landing-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .landing-copy > .landing-lede { animation-delay: 90ms; }
+  .landing-copy > .landing-actions { animation-delay: 180ms; }
+  .landing-copy > .landing-legal { animation-delay: 260ms; }
+
+  .rosette .ring { will-change: transform; }
+  .rosette .ring-bloom {
+    animation: rosette-bloom 1.8s cubic-bezier(0.22, 1, 0.36, 1) var(--bloom-delay) both;
+  }
+  .rosette .ring-drift {
+    animation: rosette-breathe 10s ease-in-out var(--breathe-delay) infinite;
+  }
   .rosette path {
     stroke-dasharray: 1;
     stroke-dashoffset: 1;
-    animation: engrave 2.4s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+    animation: engrave 1.8s cubic-bezier(0.45, 0, 0.2, 1) forwards;
     animation-delay: var(--d, 0s);
   }
 
   /* once engraved, the bands keep turning slowly against each other */
-  .rosette .ring-spin { will-change: transform; animation: turn 140s linear 2.4s infinite; }
-  .rosette .ring-spin-2 { animation-duration: 100s; animation-direction: reverse; }
-  .rosette .ring-spin-3 { animation-duration: 80s; }
-  .rosette .ring-spin-4 { animation-duration: 60s; animation-direction: reverse; }
+  .rosette .ring-spin { will-change: transform; animation: turn 120s linear infinite; }
+  .rosette .ring-spin-2 { animation-duration: 90s; animation-direction: reverse; }
+  .rosette .ring-spin-3 { animation-duration: 72s; }
+  .rosette .ring-spin-4 { animation-duration: 54s; animation-direction: reverse; }
+
+  .rosette.is-paused * { animation-play-state: paused; }
+  .rosette.is-paused .ring,
+  .rosette.is-paused .ring-spin { will-change: auto; }
+
+  .landing-actions .btn { transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms, border-color 150ms; }
+  .landing-actions .btn:active { transform: translateY(0) scale(0.98); }
 }
 
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .landing-actions .btn:hover { transform: translateY(-2px); }
+  .landing-actions .btn:active { transform: translateY(0) scale(0.98); }
+}
+
+@keyframes landing-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes rosette-bloom { from { opacity: 0; transform: scale(0.82) rotate(-12deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes rosette-breathe { 0%, 100% { transform: scale(0.985); } 50% { transform: scale(1.015); } }
 @keyframes engrave { to { stroke-dashoffset: 0; } }
 @keyframes turn { to { transform: rotate(360deg); } }
 
