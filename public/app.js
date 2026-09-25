@@ -1510,6 +1510,7 @@ async function startApp() {
   } else {
     initAuth();
   }
+  document.dispatchEvent(new Event('sharesecure:ready'));
 }
 
 function initApp() {
@@ -1519,6 +1520,7 @@ function initApp() {
     landingPage.classList.add('hidden');
     dashboardCard.classList.add('hidden');
     uploadCard.classList.add('hidden');
+    document.dispatchEvent(new Event('sharesecure:ready'));
   } else {
     startApp();
   }

@@ -13,6 +13,21 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <div class="page-loader" id="page-loader" role="status" aria-label="Loading ShareSecure" hidden>
+    <div class="page-loader-content" aria-hidden="true">
+      <div class="page-loader-mark">
+        <svg class="page-loader-orbit" viewBox="0 0 120 120" fill="none">
+          <circle class="page-loader-track" cx="60" cy="60" r="54" />
+          <circle class="page-loader-arc" cx="60" cy="60" r="54" pathLength="100" />
+        </svg>
+        <img src="/app-icon.png" alt="" width="48" height="48" />
+      </div>
+      <span class="page-loader-name">ShareSecure</span>
+      <span class="page-loader-caption">Getting things ready<span class="page-loader-dots">...</span></span>
+    </div>
+  </div>
+  <script src="/page-loading.js"></script>
+
   <!-- terms modal -->
   <div class="modal hidden tc-modal" id="tc-modal" role="dialog" aria-modal="true" aria-labelledby="tc-title">
     <div class="modal-content tc-modal-content">
