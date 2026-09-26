@@ -646,7 +646,7 @@ export async function liveShares(user, context) {
 async function ownShare(user, id, env) {
   const tag = await getUserTag(user.userId, env);
   return (await getFilesClient(env).execute({
-    sql: 'SELECT short_id, cluster_id, delete_token, expires_at, is_active FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
+    sql: 'SELECT short_id, delete_token, expires_at, is_active FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
     args: [id, tag, user.userId]
   })).rows[0];
 }
@@ -655,7 +655,7 @@ async function ownShare(user, id, env) {
 export async function deleteShare(user, id, context) {
   const file = await ownShare(user, id, context.env);
   if (!file) return false;
-  await deleteBranch(getFilesClient(context.env), file);
+  await deleteBranch(getFilesClient(context.env), file.short_id, context.env);
   return true;
 }
 

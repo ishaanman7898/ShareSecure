@@ -5,7 +5,7 @@
 // account link by design, so the browser deletes those itself with the delete
 // keys it holds before calling this.
 
-import { verifyToken, getAuthClient, getFilesClient, getUserTag, checkAccessCode } from '../../_turso.js';
+import { verifyToken, getAuthClient, getFilesClient, getUserTag, checkAccessCode, deleteBranch } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -29,12 +29,11 @@ export async function onRequestPost(context) {
   const userTag = await getUserTag(auth.userId, env);
   const files = getFilesClient(env);
   // every link to the account's uploads, including ones other people reshared
-  await files.execute({
-    sql: `DELETE FROM files WHERE cluster_id IN (
-             SELECT cluster_id FROM files WHERE cluster_id IS NOT NULL AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
-           ) OR user_tag = ? OR (user_tag IS NULL AND user_id = ?)`,
-    args: [userTag, auth.userId, userTag, auth.userId]
-  });
+  const own = (await files.execute({
+    sql: 'SELECT short_id FROM files WHERE user_tag = ? OR (user_tag IS NULL AND user_id = ?)',
+    args: [userTag, auth.userId]
+  })).rows;
+  for (const { short_id } of own) await deleteBranch(files, short_id, env);
   // the inbox column only exists once someone has sent a file
   try {
     await files.execute({ sql: 'DELETE FROM files WHERE recipient_user_tag = ?', args: [userTag] });

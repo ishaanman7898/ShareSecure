@@ -325,6 +325,19 @@ router.get('/download/:shortId', (req, res) => {
 });
 
 // ── POST /api/delete/:shortId ─────────────────────────────────────────────────
+// ── POST /api/alive { ids } → { alive } ──────────────────────────────────────
+// Which of these links still work, so "Your shares" drops ones deleted elsewhere.
+router.post('/alive', (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).filter(id => /^[A-Za-z0-9]{4,32}$/.test(id)).slice(0, 100);
+  if (!ids.length) return res.json({ alive: [] });
+  const rows = db.prepare(`
+    SELECT short_id FROM files
+    WHERE short_id IN (${ids.map(() => '?').join(',')})
+      AND (is_active = 1 OR inbox_status = 'pending') AND (expires_at IS NULL OR expires_at > ?)
+  `).all(...ids, new Date().toISOString());
+  res.json({ alive: rows.map(r => r.short_id) });
+});
+
 router.post('/delete/:shortId', (req, res) => {
   const auth         = decodeToken(req.headers.authorization);
   const deleteToken  = req.body && req.body.deleteToken;

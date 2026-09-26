@@ -741,10 +741,19 @@ async function loadDocx(url) {
     hide('loader');
     show('docx-container');
     hide('zoom-group');
+    attachDocCanvas();
   } catch (err) {
     console.error('DOCX Load Error:', err);
     showUnsupported();
   }
+}
+
+// Text and Word documents get one drawing layer over the whole document.
+function attachDocCanvas() {
+  if (!annEnabled) return;
+  const content = $('docx-content');
+  content.style.position = 'relative';
+  attachAnnCanvas(content, 1);
 }
 
 // ── text ──────────────────────────────────────────────────────────────────────
@@ -763,6 +772,7 @@ async function loadText(url) {
     hide('loader');
     show('docx-container');
     hide('zoom-group');
+    attachDocCanvas();
   } catch (err) {
     console.error('Text Load Error:', err);
     showUnsupported();
@@ -1041,6 +1051,10 @@ function attachAnnCanvas(wrapper, n) {
   } else if (imgEl) {
     canvas.width = imgEl.naturalWidth || imgEl.offsetWidth;
     canvas.height = imgEl.naturalHeight || imgEl.offsetHeight;
+  } else {
+    // text and Word documents: one layer over the whole document as shown
+    canvas.width = wrapper.offsetWidth;
+    canvas.height = wrapper.offsetHeight;
   }
   wrapper.appendChild(canvas);
   redrawPage(n);
@@ -1163,10 +1177,12 @@ function showAnnToolbar(allowAnnotations) {
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
 
-  // Pen and highlighter draw over PDF pages and images only, and only the
-  // link's owner (who holds its delete token) can keep notes on it.
+  // Pen and highlighter draw over PDFs, images, Word documents and text, and
+  // only the link's owner (who holds its delete token) can keep notes on it.
   const baseMime = (mimeType || '').split(';')[0].trim().toLowerCase();
-  const drawable = baseMime === 'application/pdf' || baseMime.startsWith('image/');
+  const drawable = baseMime === 'application/pdf' || baseMime.startsWith('image/')
+    || baseMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || TEXT_TYPES.includes(baseMime);
   showAnnToolbar(allowAnnotations && drawable && !!myDeleteToken);
   if (annEnabled) {
     const saved = await fetchAnnotations();

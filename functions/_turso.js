@@ -91,6 +91,10 @@ const FILE_COLUMNS = [
   // 1 = only people signed in to ShareSecure can open the link
   'ALTER TABLE files ADD COLUMN require_account INTEGER DEFAULT 0',
   'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
+  // untraceable branches: a keyed hash of the parent's id, and the data pointer encrypted
+  'ALTER TABLE files ADD COLUMN parent_key TEXT',
+  'ALTER TABLE files ADD COLUMN data_ref TEXT',
+  'CREATE INDEX IF NOT EXISTS idx_files_parent_key ON files(parent_key)',
   'CREATE INDEX IF NOT EXISTS idx_files_cluster ON files(cluster_id)',
 ];
 
@@ -295,9 +299,7 @@ export async function getUserTag(userId, env) {
 }
 
 // ── Uploads in the last 24h ──────────────────────────────────────────────────
-// ZK uploads store no user_tag, so they can't be counted from the files table.
-// Each one costs a challenge, and zk_challenge_log is per user, so the total is
-// tagged uploads + challenges issued. Both paths share the one 5/day budget.
+// Every upload is tagged to its account, so the files table is the whole count.
 export async function countUploadsToday(userId, userTag, env) {
   const files = await getFilesClient(env).execute({
     sql: `SELECT COUNT(*) as count FROM files
@@ -305,15 +307,7 @@ export async function countUploadsToday(userId, userTag, env) {
             AND uploaded_at > datetime('now', '-1 day')`,
     args: [userTag, userId]
   });
-  let zk = 0;
-  try {
-    const log = await getAuthClient(env).execute({
-      sql: "SELECT COUNT(*) as count FROM zk_challenge_log WHERE user_id = ? AND issued_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')",
-      args: [userId]
-    });
-    zk = Number(log.rows[0].count);
-  } catch { /* no ZK uploads yet, so the table may not exist */ }
-  return Number(files.rows[0].count) + zk;
+  return Number(files.rows[0].count);
 }
 
 // ── AES-GCM helpers ──────────────────────────────────────────────────────────
@@ -444,23 +438,70 @@ async function inflate(buffer) {
   return new Response(stream).arrayBuffer();
 }
 
-// A link's file, decrypted. Reshares and files sent to people hold no copy of
-// their own: they point at the original upload (data_short_id), whose id is
-// what that data's encryption key was derived from. Older links carry a copy.
+// ── branches ─────────────────────────────────────────────────────────────────
+// A reshare, or a copy sent to someone, is a branch of the link it came from.
+// It doesn't store which link that was, only a keyed hash of its id, and its
+// pointer to the upload holding the bytes is encrypted under its own key. The
+// server can still find a link's branches and read its file; a copy of the
+// database alone can't tell which links belong together.
+function parentKey(env, shortId) {
+  return hmacHex(env.TAG_SECRET || env.TOKEN_SECRET || '', `parent:${shortId}`);
+}
+
+// The upload whose row holds a link's bytes (older links store the id in plain).
+async function dataIdOf(file, env) {
+  if (file.file_data) return file.short_id;
+  if (file.data_ref) return decryptStr(file.data_ref, await getEncKey(env), env, file.short_id);
+  return file.data_short_id || file.short_id;
+}
+
+// Columns for a new link branching off `parent`.
+export async function branchFrom(parent, childId, env) {
+  return {
+    parent_key: await parentKey(env, parent.short_id),
+    data_ref: await encryptStr(await dataIdOf(parent, env), await getEncKey(env), env, childId),
+  };
+}
+
+// A link's file, decrypted.
 export async function loadFileBytes(client, file, env) {
-  let holder = file;
-  if (!file.file_data && file.data_short_id) {
-    holder = (await client.execute({
-      sql: 'SELECT short_id, file_data, compressed FROM files WHERE short_id = ?',
-      args: [file.data_short_id]
-    })).rows[0];
-    if (!holder?.file_data) return null;
-  }
-  if (!holder.file_data) return null;
+  const dataId = await dataIdOf(file, env);
+  const holder = dataId === file.short_id ? file : (await client.execute({
+    sql: 'SELECT short_id, file_data, compressed FROM files WHERE short_id = ?',
+    args: [dataId]
+  })).rows[0];
+  if (!holder?.file_data) return null;
   const encKey = await getEncKey(env);
   let buffer = await decryptField(holder.file_data, encKey, env, holder.short_id);
   if (holder.compressed) buffer = await inflate(buffer);
   return { buffer, wasEncrypted: /^enc2?:/.test(holder.file_data) };
+}
+
+// Deletes a link and every link shared onward from it. Deleting an original
+// upload therefore removes every link to the file. Returns 'everyone' for an
+// original, 'branch' otherwise, or null if there's no such link.
+export async function deleteBranch(client, shortId, env) {
+  const file = (await client.execute({
+    sql: 'SELECT short_id, parent_key, parent_short_id FROM files WHERE short_id = ?',
+    args: [shortId]
+  })).rows[0];
+  if (!file) return null;
+  const ids = [shortId];
+  for (let i = 0; i < ids.length && ids.length < 5000; i++) {
+    const kids = (await client.execute({
+      sql: 'SELECT short_id FROM files WHERE parent_key = ? OR parent_short_id = ?',
+      args: [await parentKey(env, ids[i]), ids[i]]
+    })).rows;
+    for (const k of kids) if (!ids.includes(k.short_id)) ids.push(k.short_id);
+  }
+  const original = !file.parent_key && !file.parent_short_id;
+  // links made before branches were tracked are grouped under the original
+  if (original) await client.execute({ sql: 'DELETE FROM files WHERE cluster_id = ?', args: [shortId] });
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    await client.execute({ sql: `DELETE FROM files WHERE short_id IN (${chunk.map(() => '?').join(',')})`, args: chunk });
+  }
+  return original ? 'everyone' : 'branch';
 }
 
 // Links can be limited to people signed in to ShareSecure. Returns the response
@@ -478,21 +519,3 @@ export async function signInRequired(file, request, env) {
   );
 }
 
-// Deleting a link removes it and every link shared onward from it (its branch).
-// Deleting the original upload removes every link to the file.
-export async function deleteBranch(client, file) {
-  if (file.cluster_id && file.short_id === file.cluster_id) {
-    await client.execute({ sql: 'DELETE FROM files WHERE cluster_id = ?', args: [file.cluster_id] });
-    return 'everyone';
-  }
-  await client.execute({
-    sql: `WITH RECURSIVE branch(id) AS (
-            SELECT ?
-            UNION
-            SELECT f.short_id FROM files f JOIN branch b ON f.parent_short_id = b.id
-          )
-          DELETE FROM files WHERE short_id IN (SELECT id FROM branch)`,
-    args: [file.short_id]
-  });
-  return 'branch';
-}

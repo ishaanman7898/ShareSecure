@@ -235,13 +235,29 @@ let customExpiryHours = null;
 let selfHostMode = false;
 
 // ── localStorage upload history (client-side dashboard) ───────────────────────
-const HISTORY_KEY = 'ss_upload_history';
+// Each account on this browser keeps its own list, so signing in as someone
+// else never shows (or lets them delete) another account's shares.
+const LEGACY_HISTORY_KEY = 'ss_upload_history';
+
+function historyKey() {
+  const who = (sessionStorage.getItem('user_name') || tokenUsername() || '').toLowerCase();
+  const key = `${LEGACY_HISTORY_KEY}:${who}`;
+  try {
+    // the list used to be shared by the whole browser: it goes to whoever signs in first
+    const legacy = localStorage.getItem(LEGACY_HISTORY_KEY);
+    if (who && legacy !== null) {
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, legacy);
+      localStorage.removeItem(LEGACY_HISTORY_KEY);
+    }
+  } catch {}
+  return key;
+}
 
 const HISTORY_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 function loadUploadHistory() {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(historyKey());
     if (!raw) return [];
     const items = JSON.parse(raw);
     if (!Array.isArray(items)) return [];
@@ -255,7 +271,7 @@ function loadUploadHistory() {
       return true;
     });
     // write the pruned list back so expired entries don't linger in storage
-    if (live.length !== items.length) localStorage.setItem(HISTORY_KEY, JSON.stringify(live));
+    if (live.length !== items.length) localStorage.setItem(historyKey(), JSON.stringify(live));
     return live;
   } catch { return []; }
 }
@@ -264,29 +280,14 @@ function saveUploadToHistory(record) {
   try {
     const history = loadUploadHistory();
     history.unshift(record);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 50)));
-  } catch {}
-}
-
-// Purge stale owner_* tokens from localStorage so they don't accumulate forever.
-// Runs once on startup; removes tokens whose matching history entry no longer exists.
-function purgeStaleOwnerTokens() {
-  try {
-    const history = loadUploadHistory();
-    const activeIds = new Set(history.map(f => f.short_id));
-    Object.keys(localStorage)
-      .filter(k => k.startsWith('owner_'))
-      .forEach(k => {
-        const id = k.slice(6);
-        if (!activeIds.has(id)) localStorage.removeItem(k);
-      });
+    localStorage.setItem(historyKey(), JSON.stringify(history.slice(0, 50)));
   } catch {}
 }
 
 function removeFromHistory(shortId) {
   try {
     const history = loadUploadHistory().filter(f => f.short_id !== shortId);
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    localStorage.setItem(historyKey(), JSON.stringify(history));
   } catch {}
 }
 
@@ -984,7 +985,7 @@ deleteForm.addEventListener('submit', async e => {
       try { localStorage.removeItem('zk_secret'); localStorage.removeItem('zk_commitment'); } catch {}
     }
     try {
-      localStorage.removeItem(HISTORY_KEY);
+      localStorage.removeItem(historyKey());
       localStorage.removeItem(NOTIFY_KEY);
       Object.keys(localStorage).filter(k => k.startsWith('owner_')).forEach(k => localStorage.removeItem(k));
     } catch {}
@@ -1051,9 +1052,8 @@ async function updateDashboard() {
   // Render localStorage cache instantly so the UI is never blank during the round-trip
   renderFileList(loadUploadHistory());
 
-  // The upload count, plus any shares the server can tie to this account (ones
-  // made by an assistant, or from another browser) that this browser hasn't seen.
-  // Private uploads have no server-side link, so those only live in this list.
+  // Shares the server can tie to this account (ones made by an assistant, or
+  // from another browser) that this browser hasn't seen yet.
   try {
     const res = await fetch('/api/auth/user/files', { headers: authHeaders() });
     if (res.status === 401) { logout(); return; }
@@ -1062,6 +1062,23 @@ async function updateDashboard() {
     if (selfHostMode && 'publicUrl' in data) publicBase = data.publicUrl || null;
     if (mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
   } catch { /* network error — keep showing cached list */ }
+  pruneDeletedShares();
+}
+
+// Drops shares deleted somewhere else: by a link they came from, or on another device.
+async function pruneDeletedShares() {
+  const history = loadUploadHistory();
+  if (!history.length) return;
+  try {
+    const res = await fetch('/api/alive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: history.map(f => f.short_id) }),
+    });
+    if (!res.ok) return;
+    const alive = new Set((await res.json()).alive || []);
+    history.filter(f => !alive.has(f.short_id)).forEach(f => forgetShare(f.short_id));
+  } catch { /* offline: try again next time */ }
 }
 
 // SQLite timestamps ("2026-09-23 14:00:00") are UTC but carry no zone.
@@ -1088,7 +1105,7 @@ function mergeServerShares(files) {
   if (!fresh.length) return false;
   try {
     const merged = [...history, ...fresh].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(merged.slice(0, 50)));
+    localStorage.setItem(historyKey(), JSON.stringify(merged.slice(0, 50)));
   } catch {}
   return true;
 }
@@ -1197,7 +1214,7 @@ async function updateInbox() {
 function startInboxPolling() {
   renderNotifyToggle();
   updateInbox().finally(() => {
-    if (!inboxTimer) inboxTimer = setInterval(updateInbox, 30 * 1000);
+    if (!inboxTimer) inboxTimer = setInterval(() => { updateInbox(); pruneDeletedShares(); }, 30 * 1000);
   });
 }
 
@@ -1254,6 +1271,11 @@ function renderInbox(files) {
   if (!files.length) {
     list.innerHTML = pendingCount ? '' : emptyInbox();
     return;
+  }
+  // An accepted copy is the recipient's own link: keeping its key lets them
+  // draw on it in the viewer when the sender allowed annotations.
+  for (const f of files) {
+    if (f.delete_token) { try { localStorage.setItem('owner_' + f.short_id, f.delete_token); } catch {} }
   }
   list.innerHTML = files.map(f => `
     <div class="file-item">
@@ -1708,7 +1730,6 @@ async function startApp() {
 }
 
 function initApp() {
-  purgeStaleOwnerTokens();
   if (localStorage.getItem('tc_accepted') !== 'true') {
     tcModal.classList.remove('hidden');
     landingPage.classList.add('hidden');

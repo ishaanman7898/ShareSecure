@@ -9,7 +9,6 @@ import {
   countUploadsToday,
   ensureFileColumns
 } from '../_turso.js';
-import { verifyProof as zkVerifyProof } from '../_zk.js';
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
@@ -103,36 +102,9 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
   }
 
-  // Older clients may still submit experimental proofs. The disabled adapter
-  // rejects them with zk_rejected so those clients retry with their session.
-  const zkProofRaw  = formData.get('zk_proof');
-  const zkNullifier = formData.get('zk_nullifier');
-  const zkNonce     = formData.get('zk_nonce');
-  const usingZK     = Boolean(zkProofRaw && zkNullifier && zkNonce);
-
-  let zkValidated = false;
-  if (usingZK) {
-    let zkProof;
-    try {
-      zkProof = JSON.parse(zkProofRaw.toString());
-    } catch {
-      return Response.json({ error: 'ZK proof malformed (invalid JSON)' }, { status: 400 });
-    }
-    const result = await zkVerifyProof(
-      { proof: zkProof, nullifier: zkNullifier.toString(), nonce: zkNonce.toString() },
-      env
-    );
-    if (!result.valid) {
-      // 403, not 401: the session is fine, only the proof failed. The app retries
-      // with its normal sign-in instead of treating this as being signed out.
-      return Response.json({ error: `ZK proof rejected: ${result.error}`, code: 'zk_rejected' }, { status: 403 });
-    }
-    zkValidated = true;
-  }
-
-  // Only people with an account can share: a valid session or a valid proof.
+  // Only people with an account can share.
   const auth = await verifyToken(request.headers.get('Authorization'), env);
-  if (!auth && !zkValidated) {
+  if (!auth) {
     return Response.json({ error: 'Sign in to share files.' }, { status: 401 });
   }
 
@@ -148,15 +120,9 @@ export async function onRequestPost(context) {
 
   await ensureFileColumns(client);
 
-  // When ZK-authenticated, we DON'T store user_tag — the nullifier already
-  // proved the uploader is a registered user, and we want zero identity link.
-  const userTag = (zkValidated || !auth) ? null : await getUserTag(auth.userId, env);
-
-  if (auth && !zkValidated) {
-    // includes ZK uploads, so falling back from ZK can't double the daily limit
-    if (await countUploadsToday(auth.userId, userTag, env) >= 5) {
-      return Response.json({ error: 'Upload limit reached (5 files per 24h)' }, { status: 429 });
-    }
+  const userTag = await getUserTag(auth.userId, env);
+  if (await countUploadsToday(auth.userId, userTag, env) >= 5) {
+    return Response.json({ error: 'Upload limit reached (5 files per 24h)' }, { status: 429 });
   }
 
   const rawHours = parseFloat(formData.get('expires_hours')) || 1;
@@ -199,7 +165,7 @@ export async function onRequestPost(context) {
 
   // Count again now this upload is in, so several at once can't all slip under
   // the limit; one that went over is taken back out.
-  if (auth && !zkValidated && await countUploadsToday(auth.userId, userTag, env) > 5) {
+  if (await countUploadsToday(auth.userId, userTag, env) > 5) {
     await client.execute({ sql: 'DELETE FROM files WHERE short_id = ?', args: [shortId] });
     return Response.json({ error: 'Upload limit reached (5 files per 24h)' }, { status: 429 });
   }

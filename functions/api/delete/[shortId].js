@@ -5,7 +5,7 @@ export async function onRequestPost(context) {
   const client = getFilesClient(env);
 
   const res = await client.execute({
-    sql: 'SELECT short_id, user_id, user_tag, delete_token, cluster_id FROM files WHERE short_id = ?',
+    sql: 'SELECT short_id, user_id, user_tag, delete_token FROM files WHERE short_id = ?',
     args: [params.shortId]
   });
 
@@ -35,6 +35,6 @@ export async function onRequestPost(context) {
 
   // The original upload → every link to the file goes. Any other link → that
   // link and the ones shared onward from it; the original and other branches stay.
-  const scope = await deleteBranch(client, file);
+  const scope = await deleteBranch(client, file.short_id, env);
   return Response.json({ deleted: true, scope });
 }

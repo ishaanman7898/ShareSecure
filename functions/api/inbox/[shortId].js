@@ -45,6 +45,6 @@ export async function onRequestPost(context) {
   }
 
   // declining erases this copy and anything reshared from it
-  await deleteBranch(client, { short_id: params.shortId, cluster_id: null });
+  await deleteBranch(client, params.shortId, env);
   return Response.json({ declined: true });
 }

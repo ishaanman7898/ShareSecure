@@ -143,3 +143,34 @@ test('MCP refuses private URL literals and unsafe schemes before networking',asy
     assert((await mcp.fetchFile(url,context('/mcp'))).error,url);
   }
 });
+
+test('branches: deleting a reshared link removes its onward links, never the original', async () => {
+  const deleteHandler = (await load('api/delete/[shortId].js')).onRequestPost;
+  const call = (handler, id, init = {}) => handler(context('/api/x/' + id, { user: null, params: { shortId: id }, headers: { 'Content-Type': 'application/json' }, ...init }));
+  const alive = async id => (await infoHandler(context('/api/info/' + id, { user: null, method: 'GET', params: { shortId: id } }))).status === 200;
+  const a = await upload('tree.txt', 'Branch audit');
+  const b = await (await call(reshareHandler, a.shortId, { body: '{}' })).json();   // B opens A's link
+  const c = await (await call(reshareHandler, b.shortId, { body: '{}' })).json();   // C opens B's link
+  const d = await (await call(reshareHandler, a.shortId, { body: '{}' })).json();   // D opens A's link
+  // untraceable: nothing in B's or C's row names the link it came from
+  for (const [row, parents] of [[b, [a]], [c, [a, b]]]) {
+    const stored = JSON.stringify(db.prepare('SELECT * FROM files WHERE short_id = ?').get(row.shortId));
+    for (const p of parents) assert(!stored.includes(p.shortId), `${row.shortId}'s row mentions ${p.shortId}`);
+  }
+  const del = await call(deleteHandler, b.shortId, { body: JSON.stringify({ deleteToken: b.deleteToken }) });
+  assert.equal(del.status, 200, await del.clone().text());
+  assert.deepEqual([await alive(a.shortId), await alive(b.shortId), await alive(c.shortId), await alive(d.shortId)], [true, false, false, true]);
+  // D's view still reads the original's bytes
+  assert.equal(await (await rawHandler(context('/api/raw/' + d.shortId, { user: null, method: 'GET', params: { shortId: d.shortId } }))).text(), 'Branch audit');
+  // deleting the original removes every link
+  await call(deleteHandler, a.shortId, { body: JSON.stringify({ deleteToken: a.deleteToken }) });
+  assert.deepEqual([await alive(a.shortId), await alive(d.shortId)], [false, false]);
+
+  // a copy sent to someone is a branch too: the sender deleting withdraws it
+  const e = await upload('sent.txt', 'Sent audit');
+  assert.equal((await send(e.shortId, 'bob', e.deleteToken)).status, 200);
+  const copy = db.prepare("SELECT short_id FROM files WHERE inbox_status = 'pending' ORDER BY rowid DESC").get();
+  assert(!JSON.stringify(db.prepare('SELECT * FROM files WHERE short_id = ?').get(copy.short_id)).includes(e.shortId));
+  await call(deleteHandler, e.shortId, { body: JSON.stringify({ deleteToken: e.deleteToken }) });
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE short_id = ?').get(copy.short_id).n, 0);
+});

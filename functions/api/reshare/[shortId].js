@@ -2,14 +2,16 @@
 // The new link points at the original upload's data instead of copying it, so it
 // costs almost nothing to make. It's a branch of the link it came from: deleting
 // that link (or the original) deletes this one too, and deleting this one takes
-// only its own branch with it.
+// only its own branch with it. Which link it came from isn't stored in the clear
+// (see branchFrom), so the database can't be used to trace who shared with whom.
 import {
   getFilesClient,
   getEncKey,
   decryptStr,
   encryptStr,
   ensureFileColumns,
-  signInRequired
+  signInRequired,
+  branchFrom
 } from '../../_turso.js';
 
 function generateId(length) {
@@ -45,23 +47,23 @@ export async function onRequestPost(context) {
   // the name and type are tiny, so they're re-encrypted under the new link's key
   const name = await decryptStr(file.original_filename, encKey, env, params.shortId);
   const mime = await decryptStr(file.mime_type, encKey, env, params.shortId);
+  const branch = await branchFrom(file, newShortId, env);
 
   await client.execute({
-    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, data_short_id,
-            expires_at, delete_token, integrity_hash, cluster_id, parent_short_id, uploaded_at,
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, data_ref,
+            expires_at, delete_token, integrity_hash, cluster_id, parent_key, uploaded_at,
             compressed, allow_annotations, allow_download, require_account)
-          VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, ?)`,
     args: [
       newShortId,
       await encryptStr(name, encKey, env, newShortId),
       await encryptStr(mime, encKey, env, newShortId),
       file.size_bytes,
-      file.data_short_id || file.short_id,
+      branch.data_ref,
       file.expires_at,
       newDeleteToken,
-      file.integrity_hash || '',
-      file.cluster_id || file.short_id,
-      params.shortId,
+      newShortId,          // its own group: nothing in the row points back at the original
+      branch.parent_key,
       new Date().toISOString(),
       file.allow_annotations ?? 1,
       file.allow_download ?? 0,
