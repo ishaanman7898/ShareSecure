@@ -482,3 +482,5 @@ h2 .section-num {
 .legal .summary ul { gap: 4px; }
 .legal .muted { color: var(--text-muted); font-size: 0.92rem; }
 .legal .footer { margin-top: 72px; padding: 40px 0; }
+
+.footer-version { margin-top: 12px; font-size: 0.8rem; color: var(--text-muted); }

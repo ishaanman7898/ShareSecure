@@ -61,7 +61,7 @@
           <h3>Changes</h3>
           <ul class="change-list">
             <li><strong>Receiving page removed</strong> — The desktop app’s Receiving files page, where people typed your username to send you a file, is gone. People send to your username instead. Requests already waiting can still be accepted or declined.</li>
-            <li><strong>No footer</strong> — Privacy and Terms are in the account menu, and in the desktop app’s tray menu.</li>
+            <li><strong>No footer in the desktop app</strong> — Privacy and Terms are in the account menu and the tray menu. The website keeps its footer, which now shows the version.</li>
           </ul>
         </div>
 
@@ -427,9 +427,11 @@
       <p class="footer-copyright">
         &copy; 2026 <strong>ShareSecure</strong>. Privacy by Design. MIT Licensed.
       </p>
+      <p class="footer-version"><span data-version="ShareSecure " hidden></span></p>
     </footer>
 
   </main>
+  <script src="/footer.js" defer></script>
 </body>
 
 </html>

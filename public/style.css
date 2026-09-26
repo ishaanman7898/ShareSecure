@@ -1308,3 +1308,28 @@ a.menu-item { text-decoration: none; }
 .is-desktop .web-only { display: none !important; }
 .desktop-only { display: none !important; }
 .is-desktop .landing-legal.desktop-only { display: flex !important; }
+
+/* ── footer (the website only: self-hosted installs and the desktop app drop it) ── */
+.app-footer {
+  width: 100%;
+  padding: 16px max(24px, calc((100% - 1072px) / 2)) 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  border-top: 1px solid var(--line);
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.footer-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.footer-links a { color: var(--ink-2); text-decoration: none; }
+.footer-links a:hover { color: var(--ink); text-decoration: underline; }
+
+
+.sh-version { margin-top: 10px; font-size: 0.85rem; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .app-footer { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); flex-direction: column; align-items: flex-start; gap: 6px; }
+}
