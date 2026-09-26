@@ -8,7 +8,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 - Files, their names and notes are encrypted with AES-256-GCM. Each file has its own key, derived from a server master key.
 - Links expire after 1 hour to 10 days. Expired files are erased.
-- Uploads from the browser an account was created in use a proof instead of the session token, and the stored file row has no account link. The server still learns which account is uploading while it checks the proof (the challenge is issued to an account, and the proof carries that account's commitment). See [Known limitations](#known-limitations) and [ZK-INTEGRATION.md](ZK-INTEGRATION.md).
+- Every upload uses a signed session and is tagged to the account with an HMAC of its id. The experimental zero-knowledge uploads are turned off; see [Known limitations](#known-limitations).
 - The self-hosted server checks file types by their contents, not their names, and strips author and editing metadata from PDF and DOCX files.
 - Pages send `noindex`, `no-store` and a Content-Security-Policy that only runs the site's own scripts, plus pdf.js and mammoth from jsDelivr for the viewer. There are no analytics.
 - On the hosted site, session tokens are signed and expire after 30 days. Access codes are stored as salted PBKDF2-SHA256 hashes, and repeated failed sign-ins are slowed down.
@@ -16,12 +16,12 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 ## Known limitations
 
 - **Encryption happens on the server, not end-to-end.** Files are encrypted inside the hosted server after they arrive. The hosting provider (Cloudflare), and anyone who holds `ENCRYPTION_KEY` or the other server secrets, can read files, their names and notes while they exist. They can also see who sends a file to whom: sending to a username goes through the server signed in, and the server links the sender's link to the recipient. Self-host for sensitive files.
-- **The Unigroth proofs are experimental and currently don't hide who uploads.** They aren't sound or unlinkable today:
+- **The Unigroth proofs are turned off.** Uploads use a signed session, and the proof endpoints answer 410. They were experimental and neither sound nor unlinkable:
   - The verifier only re-checks 32 consecutive constraints out of about 549, and trusts an `aggregatedCheck` value the prover supplies. A proof-of-concept forged 10 out of 10 proofs this way, without the secret.
   - Each challenge is issued to a signed-in account and stored with it, and the proof carries that account's commitment, so the server knows which account is uploading.
   - The commitment hash can be worked backwards to a small set of candidate secrets.
 
-  In practice a forged proof gains nothing, because a challenge can only be used by the account it was issued to. But the feature does not currently provide anonymity, and it shouldn't be relied on for that.
+  `tests/unigroth-risk.test.cjs` reproduces the forgery and checks that production refuses the proof path. Don't turn it back on without an independently reviewed replacement.
 - The viewer loads pdf.js and mammoth from jsDelivr. mammoth is pinned with an integrity hash; pdf.js is loaded as a module and isn't yet.
 - Anyone with a link can open the file until it expires.
 - The hosting provider and your network can see your IP address. Use Tor or a VPN if that matters.

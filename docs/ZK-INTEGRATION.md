@@ -1,5 +1,12 @@
 # UniGroth ZK Integration
 
+> **Status: turned off.** The verifier described below accepts forged proofs
+> (it spot-checks a slice of the constraints and trusts a value the prover
+> supplies), and the server can still tell which account is uploading. Uploads
+> now use a signed session, and `/api/auth/zk-challenge` and
+> `/api/auth/zk-enroll` answer 410. `tests/unigroth-risk.test.cjs` reproduces
+> the forgery. This page is kept as a record of how it worked.
+
 ShareSecure uses [UniGroth](https://github.com/MeridianAlgo/UniGroth) for
 anonymous-but-authenticated uploads. **Real cryptographic verification is
 active** — no placeholders. The full UniGroth library is vendored as ESM

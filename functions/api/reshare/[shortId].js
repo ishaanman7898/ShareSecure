@@ -34,6 +34,9 @@ export async function onRequestPost(context) {
   }
   const denied = await signInRequired(file, request, env);
   if (denied) return denied;
+  if (file.recipient_user_tag) {
+    return Response.json({ error: 'This file was sent privately. Ask the sender for a shareable link.', code: 'recipient_only' }, { status: 403 });
+  }
 
   const newShortId = generateId(8);
   const newDeleteToken = generateId(24);

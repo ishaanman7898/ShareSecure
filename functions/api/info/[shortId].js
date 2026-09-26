@@ -8,7 +8,7 @@ export async function onRequestGet(context) {
   context.waitUntil(globalPurgeExpired(env, context));
 
   const res = await client.execute({
-    sql: 'SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, integrity_hash, parent_short_id, cluster_id, allow_annotations, allow_download, require_account FROM files WHERE short_id = ? AND is_active = 1',
+    sql: 'SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, integrity_hash, parent_short_id, cluster_id, allow_annotations, allow_download, require_account, recipient_user_tag FROM files WHERE short_id = ? AND is_active = 1',
     args: [params.shortId]
   });
 
@@ -35,6 +35,7 @@ export async function onRequestGet(context) {
     // the original upload: deleting it removes every link to the file
     isRoot: !file.parent_short_id && (!file.cluster_id || file.cluster_id === file.short_id),
     requireAccount: Boolean(file.require_account),
+    recipientOnly: Boolean(file.recipient_user_tag),
     allowAnnotations: file.allow_annotations ?? 1,
     allowDownload: file.allow_download ?? 0
   });

@@ -1,8 +1,6 @@
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
 
-// the zero-knowledge code is only needed to create an account, so it loads then
-const loadZK = () => import('/zk-client.js');
 
 const $ = id => document.getElementById(id);
 const form = $('auth-form');
@@ -132,16 +130,8 @@ form.addEventListener('submit', async e => {
 
   try {
     if (creating) {
-      // Browser version: enroll ZK credentials in this browser; only the commitment is sent.
-      let zk_commitment = null;
-      if (!selfHost) {
-        try { zk_commitment = (await (await loadZK()).generateCredentials()).commitment; } catch {}
-      }
-      const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass, zk_commitment });
-      if (!ok) {
-        if (!selfHost) { try { localStorage.removeItem('zk_secret'); localStorage.removeItem('zk_commitment'); } catch {} }
-        throw new Error(data.error || 'Couldn’t create the account. Try again.');
-      }
+      const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass });
+      if (!ok) throw new Error(data.error || 'Couldn’t create the account. Try again.');
     }
     await signIn(user, pass);
   } catch (err) {

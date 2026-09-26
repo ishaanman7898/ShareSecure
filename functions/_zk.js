@@ -68,54 +68,10 @@ async function getCommitmentByUserId(userId, env) {
 //   2. proof verifies against that user's commitment
 //   3. nullifier has not been used before
 // Returns {valid: true, userId} on success, {valid: false, error} on failure.
-export async function verifyProof({ proof, nullifier, nonce }, env) {
-  await ensureSchema(env);
-
-  if (!proof || !nullifier || !nonce) {
-    return { valid: false, error: 'Missing proof, nullifier, or nonce' };
-  }
-
-  const client = getAuthClient(env);
-
-  // 1. Resolve the challenge → user_id
-  const chal = await client.execute({
-    sql: 'SELECT user_id, expires_at FROM zk_challenges WHERE nonce = ?',
-    args: [nonce]
-  });
-  if (chal.rows.length === 0) return { valid: false, error: 'Unknown nonce' };
-  const { user_id, expires_at } = chal.rows[0];
-  if (new Date(expires_at) < new Date()) {
-    return { valid: false, error: 'Challenge expired' };
-  }
-
-  // 2. Look up the user's commitment
-  const commitment = await getCommitmentByUserId(user_id, env);
-  if (!commitment) {
-    return { valid: false, error: 'User has not enrolled ZK credentials' };
-  }
-
-  // 3. Run UniGroth verify
-  const ok = await zkVerify({ proof, nullifier, commitment, nonce });
-  if (!ok) return { valid: false, error: 'Proof verification failed' };
-
-  // 4. Nullifier replay check
-  const nul = await client.execute({
-    sql: 'SELECT 1 FROM zk_nullifiers WHERE nullifier = ?',
-    args: [nullifier]
-  });
-  if (nul.rows.length > 0) return { valid: false, error: 'Nullifier already used' };
-
-  // 5. Consume challenge + record nullifier (single transaction-ish — best-effort)
-  await client.execute({
-    sql: 'INSERT INTO zk_nullifiers (nullifier, used_at) VALUES (?, ?)',
-    args: [nullifier, new Date().toISOString()]
-  });
-  await client.execute({
-    sql: 'DELETE FROM zk_challenges WHERE nonce = ?',
-    args: [nonce]
-  });
-
-  return { valid: true, userId: user_id };
+export async function verifyProof() {
+  // The experimental spot-check verifier accepts false statements. Do not
+  // re-enable authentication with it without an independently reviewed replacement.
+  return { valid: false, error: 'Experimental ZK uploads are disabled. Use a signed session.' };
 }
 
 // Store the commitment a client computed at registration time.

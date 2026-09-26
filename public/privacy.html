@@ -54,13 +54,13 @@
     <section id="collect">
       <h2>1. What we store</h2>
       <h3>Your account</h3>
-      <p>Your username, a hash of your password (never the password itself), when you signed up, and a public code used to check the private upload proof described below. If you connect an AI assistant, we also keep a hash of its token.</p>
+      <p>Your username, a hash of your password (never the password itself), and when you signed up. If you connect an AI assistant, we also keep a hash of its token.</p>
       <h3>Files you share</h3>
       <p>The file, its name and its type, all encrypted with AES-256-GCM. Alongside them we keep the file's size, when it was uploaded, when it expires, and how many times it's been opened. Notes and drawings people add to a file are encrypted too. Links reshared from yours point at the same encrypted file rather than making another copy.</p>
       <h3>Who uploaded what</h3>
-      <p>In the browser where you created your account, uploads use a private proof instead of your sign-in. The server can tell which account is uploading while it checks the proof, but it stores the file with no link to your account. From any other browser, the file is tagged with a code derived from your account using a secret key. It isn't your username or account number. Files an AI assistant shares for you are tagged the same way. The one-time upload link an assistant gets is erased once it's used, or after 10 minutes.</p>
+      <p>Each file you upload is tagged with a code derived from your account using a secret key. It isn't your username or account number. Files an AI assistant shares for you are tagged the same way. The one-time upload link an assistant gets is erased once it's used, or after 30 minutes.</p>
       <h3>Your daily upload count</h3>
-      <p>To enforce 5 uploads a day, we record when each private upload proof is issued to your account. These records are erased after 24 hours.</p>
+      <p>To enforce 5 uploads a day, we count the files tagged to your account in the last 24 hours. There's no separate record.</p>
       <h3>Files sent to you</h3>
       <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. To enforce the sending limits, we also keep a code derived from the sender's account using a secret key (not their username or account number): on the copy until you accept it, and in a log of sends that's erased after 24 hours. Until then, the server can link a copy to the account that sent it.</p>
     </section>
@@ -92,7 +92,7 @@
 
     <section id="browser">
       <h2>5. What's stored in your browser</h2>
-      <p>Your sign-in lasts until you close the browser. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days. It also keeps the secret behind your private upload proof, and remembers that you accepted the terms and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
+      <p>Your sign-in lasts until you close the browser. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days. It also remembers that you accepted the terms and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
     </section>
 
     <section id="security">

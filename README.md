@@ -33,7 +33,6 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Files sent to you arrive as requests you accept or decline, and they don't show who sent them. In the desktop app's “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**); sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 - **Text files too.** PDF, DOCX, PNG, JPG, TXT, Markdown and CSV, up to 10 MB.
-- **Unlinked uploads.** In the browser you signed up in, uploads use a zero-knowledge proof instead of your sign-in, and the stored file has no link to your account. The server can still tell which account is uploading while it checks the proof ([how it works](docs/ZK-INTEGRATION.md)).
 - **AI assistants.** Claude Code, Codex and other MCP clients can share files for you. [See below.](#ai-assistants-mcp)
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
 - **No tracking.** No analytics, ads or cookies.
@@ -147,7 +146,7 @@ public/       website and app UI (served by both backends)
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
 desktop/      Electron app, icons and the first-run welcome screen
-docs/         security, zero-knowledge uploads, signing
+docs/         security, signing, and the retired zero-knowledge uploads
 ```
 
 ## License

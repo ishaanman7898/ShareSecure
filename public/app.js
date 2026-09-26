@@ -1,13 +1,8 @@
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
 
-// The zero-knowledge prover and the QR code library are only needed when you
-// upload, so they load on first use instead of slowing down every page.
-let zkModule = null;
-const loadZK = () => (zkModule ??= import('/zk-client.js'));
-const hasZKCredentials = () => {
-  try { return Boolean(localStorage.getItem('zk_secret') && localStorage.getItem('zk_commitment')); } catch { return false; }
-};
+// The QR code library is only needed after an upload, so it loads on first use
+// instead of slowing down every page.
 
 let qrScript = null;
 function loadQRCode() {
@@ -413,7 +408,6 @@ function setFile(file) {
   selectedFile = file;
   // fetch what "Create link" needs while the person fills in the form
   loadQRCode().catch(() => {});
-  if (userToken && hasZKCredentials()) loadZK().catch(() => {});
   fileName.textContent = file.name;
   fileSize.textContent = formatSize(file.size);
   document.getElementById('file-icon').innerHTML = getFileIcon(file.type);
@@ -1025,7 +1019,6 @@ function initAuth() {
     document.getElementById('require-account-wrap')?.classList.remove('hidden');
     updateDashboard();
     startInboxPolling();
-    repairZkEnrollment();
   } else {
     if (userToken) logout();
     document.body.classList.remove('is-logged-in');
@@ -1037,17 +1030,6 @@ function initAuth() {
     drawRosette();
     document.getElementById('app-grid')?.classList.add('hidden');
   }
-}
-
-// Accounts created before the sign-up fix never had their private-upload
-// commitment saved. Save this browser's now; the server ignores it if one exists.
-function repairZkEnrollment() {
-  if (!hasZKCredentials()) return;
-  fetch('/api/auth/zk-enroll', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({ commitment: localStorage.getItem('zk_commitment') }),
-  }).catch(() => {});
 }
 
 // ── self-hosted: the owner signs in; nobody else can upload ──────────────────
