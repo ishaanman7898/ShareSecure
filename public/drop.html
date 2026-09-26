@@ -31,8 +31,8 @@
         <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose a file to share">
           <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
           <p class="drop-label" id="drop-label">Choose a file</p>
-          <p class="drop-limit">PDF, DOCX, PNG or JPG, up to 10 MB</p>
-          <input type="file" id="drop-input" accept=".pdf,.docx,.png,.jpg,.jpeg" hidden />
+          <p class="drop-limit">PDF, DOCX, PNG, JPG or text (.txt, .md, .csv), up to 10 MB</p>
+          <input type="file" id="drop-input" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv" hidden />
         </div>
         <p class="auth-error" id="drop-error" role="alert"></p>
         <button type="submit" class="btn btn-primary btn-full btn-lg" id="drop-submit" disabled>Share it</button>
@@ -45,7 +45,7 @@
           <button class="btn btn-primary" id="drop-copy">Copy link</button>
           <a class="btn btn-ghost" id="drop-open" href="#" target="_blank" rel="noopener noreferrer">Open</a>
         </div>
-        <p class="auth-note" id="drop-note">Your assistant can get this link too: ask it to list your shares.</p>
+        <p class="auth-note" id="drop-note">Your assistant gets this link too, so you don’t need to copy it back.</p>
       </div>
     </section>
   </main>

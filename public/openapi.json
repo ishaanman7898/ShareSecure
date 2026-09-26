@@ -2,16 +2,16 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ShareSecure",
-    "description": "Share files attached in the conversation through private ShareSecure links that expire.",
-    "version": "1.0.0"
+    "description": "Share files and text from the conversation through private ShareSecure links that expire, and send them straight to ShareSecure usernames. Do it yourself: never ask the user to download, save or re-attach anything.",
+    "version": "1.1.0"
   },
   "servers": [{ "url": "https://sharesecure-du8.pages.dev" }],
   "paths": {
     "/api/gpt/share": {
       "post": {
         "operationId": "shareFiles",
-        "summary": "Share files the user attached in this conversation",
-        "description": "Uploads the attached files to ShareSecure and returns a private link for each. Supports PDF, DOCX, PNG and JPG up to 10 MB. The account can share 5 files a day.",
+        "summary": "Share files from this conversation, attached or generated",
+        "description": "Shares files from this conversation, attached or generated (Code Interpreter output, charts, images), via private expiring links. Pass them all in openaiFileIdRefs; never ask the user to re-attach. PDF, DOCX, PNG, JPG, .txt/.md/.csv up to 10 MB; 5 a day. For text you wrote, use shareText.",
         "requestBody": {
           "required": true,
           "content": {
@@ -23,7 +23,7 @@
                   "openaiFileIdRefs": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "The files the user attached that should be shared."
+                    "description": "The files to share: ones the user attached and ones you generated in this conversation."
                   },
                   "expires_hours": { "type": "number", "description": "Hours until the link stops working, 1 to 240. Default 24." },
                   "allow_download": { "type": "boolean", "description": "Let people who open the link download the file. Default false (view only)." },
@@ -32,8 +32,9 @@
                   "send_to": {
                     "type": "array",
                     "items": { "type": "string" },
-                    "description": "ShareSecure usernames to send the file to. Each gets their own copy to accept or decline."
-                  }
+                    "description": "ShareSecure usernames to send the file to. Each gets their own copy to accept or decline. Use this whenever the user says who it's for."
+                  },
+                  "note": { "type": "string", "maxLength": 140, "description": "Short note shown to the people it's sent to." }
                 }
               }
             }
@@ -49,16 +50,7 @@
                   "properties": {
                     "shares": {
                       "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "url": { "type": "string" },
-                          "name": { "type": "string" },
-                          "expires_at": { "type": "string" },
-                          "id": { "type": "string" },
-                          "sent_to": { "type": "array", "items": { "type": "string" } }
-                        }
-                      }
+                      "items": { "$ref": "#/components/schemas/Share" }
                     },
                     "errors": {
                       "type": "array",
@@ -68,6 +60,73 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/gpt/share-text": {
+      "post": {
+        "operationId": "shareText",
+        "summary": "Share text you wrote as a document",
+        "description": "Shares text you wrote or have in the conversation (a report, notes, a summary, an email draft, code, a CSV table) as a private ShareSecure document with an expiring link. Do it yourself; never ask the user to copy, save or upload it. Shown exactly as written. Counts toward the 5 a day.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text", "title"],
+                "properties": {
+                  "text": { "type": "string", "maxLength": 200000, "description": "The full content to share. Up to 200,000 characters." },
+                  "title": { "type": "string", "description": "Title, used as the file name, e.g. \"Q3 summary\"." },
+                  "format": { "type": "string", "enum": ["markdown", "plain", "csv"], "description": "markdown (.md, the default), plain (.txt) or csv (.csv)." },
+                  "expires_hours": { "type": "number", "description": "Hours until the link stops working, 1 to 240. Default 24." },
+                  "allow_download": { "type": "boolean", "description": "Let people who open the link download it. Default false (view only)." },
+                  "require_account": { "type": "boolean", "description": "Only people signed in to ShareSecure can open the link. Default false." },
+                  "send_to": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "ShareSecure usernames to send it to. Each gets their own copy to accept or decline."
+                  },
+                  "note": { "type": "string", "maxLength": 140, "description": "Short note shown to the people it's sent to." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link that was created.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Share" } } }
+          }
+        }
+      }
+    },
+    "/api/gpt/send": {
+      "post": {
+        "operationId": "sendShare",
+        "summary": "Send an existing share to people",
+        "description": "Sends one of the account's live shares (id from listShares, shareFiles or shareText) to ShareSecure usernames. Each gets their own copy in their inbox to accept or decline.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id", "send_to"],
+                "properties": {
+                  "id": { "type": "string", "description": "The share id." },
+                  "send_to": { "type": "array", "items": { "type": "string" }, "description": "ShareSecure usernames, up to 20." },
+                  "note": { "type": "string", "maxLength": 140, "description": "Short note shown to the people it's sent to." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Who it was sent to, and who it couldn't reach.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Share" } } }
           }
         }
       }
@@ -115,7 +174,7 @@
               "schema": {
                 "type": "object",
                 "required": ["id"],
-                "properties": { "id": { "type": "string", "description": "The share id from listShares or shareFiles." } }
+                "properties": { "id": { "type": "string", "description": "The share id from listShares, shareFiles or shareText." } }
               }
             }
           }
@@ -130,7 +189,23 @@
     }
   },
   "components": {
-    "schemas": {},
+    "schemas": {
+      "Share": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "url": { "type": "string" },
+          "name": { "type": "string" },
+          "expires_at": { "type": "string" },
+          "sent_to": { "type": "array", "items": { "type": "string" } },
+          "not_sent": {
+            "type": "array",
+            "items": { "type": "object", "properties": { "username": { "type": "string" }, "reason": { "type": "string" } } }
+          },
+          "error": { "type": "string" }
+        }
+      }
+    },
     "securitySchemes": {
       "ShareSecureToken": { "type": "http", "scheme": "bearer" }
     }

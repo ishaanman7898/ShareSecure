@@ -90,6 +90,8 @@ async function startServer() {
   process.env.DATA_DIR = DATA_DIR;
   process.env.ENV_FILE = path.join(DATA_DIR, '.env');
   process.env.SHARESECURE_DESKTOP = '1';
+  // where sending to a username goes, once you link your ShareSecure account
+  process.env.SHARESECURE_CLOUD = CLOUD;
   require('../server/index.js');
   origin = `http://localhost:${port}`;
   await waitForServer(origin);
@@ -229,6 +231,10 @@ function buildTrayMenu() {
     { label: 'Open ShareSecure', click: showMain },
     ...(mode === 'local' ? [{ label: 'Open data folder', click: () => shell.openPath(DATA_DIR) }] : []),
     { label: 'Switch between account and this computer…', click: changeMode, enabled: Boolean(mode) },
+    { type: 'separator' },
+    // reachable from the welcome screen too, before anything is set up
+    { label: 'Privacy policy', click: () => openWindow(`${origin || CLOUD}/privacy`, { width: 900, height: 820 }) },
+    { label: 'Terms', click: () => openWindow(`${origin || CLOUD}/terms`, { width: 900, height: 820 }) },
     { type: 'separator' },
     { label: 'Quit ShareSecure', click: () => { quitting = true; app.quit(); } },
   ]));

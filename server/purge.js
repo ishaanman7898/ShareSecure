@@ -94,8 +94,25 @@ function purgeBranch(shortId) {
 // Deleting the original upload removes every link to the file; deleting any
 // other link removes just its branch, leaving the original and other branches.
 function purgeLink(file) {
-  if (file.cluster_id && file.short_id === file.cluster_id) return purgeCluster(file.cluster_id);
-  return purgeBranch(file.short_id);
+  const whole = file.cluster_id && file.short_id === file.cluster_id;
+  const ids = whole
+    ? db.prepare('SELECT short_id FROM files WHERE cluster_id = ?').all(file.cluster_id)
+    : db.prepare(`WITH RECURSIVE branch(id) AS (
+        SELECT ?
+        UNION
+        SELECT f.short_id FROM files f JOIN branch b ON f.parent_short_id = b.id
+      ) SELECT id AS short_id FROM branch`).all(file.short_id);
+  const n = whole ? purgeCluster(file.cluster_id) : purgeBranch(file.short_id);
+  forgetCloudCopies(ids.map(r => r.short_id));
+  return n;
+}
+
+// Copies sent to ShareSecure usernames go too, so the people who got them lose
+// them as well. Best effort and in the background; they expire with the share anyway.
+function forgetCloudCopies(shortIds) {
+  let forget;
+  try { ({ forgetCloudCopy: forget } = require('./routes/cloud')); } catch { return; }
+  for (const id of shortIds) forget(id).catch(() => {});
 }
 
 // Everything, for when the owner deletes their account.

@@ -64,8 +64,34 @@ function isValidDocxZip(buf) {
   return false;
 }
 
-function detectFileType(buf) {
-  if (!buf || buf.length < 4) return null;
+// ── text files ────────────────────────────────────────────────────────────────
+// Text has no magic bytes, so it's allowed by its name (or the type the
+// uploader gave) and then checked: valid UTF-8 with no control characters
+// except tab, newlines and form feed. It's only ever served as plain text.
+const TEXT_TYPES = { '.txt': 'text/plain', '.md': 'text/markdown', '.markdown': 'text/markdown', '.csv': 'text/csv' };
+const TEXT_EXT = { 'text/plain': '.txt', 'text/markdown': '.md', 'text/csv': '.csv' };
+const isTextMime = mime => Object.prototype.hasOwnProperty.call(TEXT_EXT, String(mime || '').split(';')[0].trim().toLowerCase());
+
+function isCleanText(buf) {
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return false; }
+  return !/[\x00-\x08\x0B\x0E-\x1F\x7F]/.test(text);
+}
+
+function textTypeFor(name, claimedType) {
+  const ext = (String(name || '').toLowerCase().match(/\.[a-z0-9]+$/) || [''])[0];
+  if (TEXT_TYPES[ext]) return TEXT_TYPES[ext];
+  const claimed = String(claimedType || '').split(';')[0].trim().toLowerCase();
+  return isTextMime(claimed) ? claimed : null;
+}
+
+// name and claimedType only matter for text; everything else goes by its bytes
+function detectFileType(buf, name = '', claimedType = '') {
+  if (!buf || !buf.length) return null;
+  if (buf.length < 4) {
+    const mime = textTypeFor(name, claimedType);
+    return mime && isCleanText(buf) ? { type: 'text', mime } : null;
+  }
   // PDF: %PDF = 0x25 0x50 0x44 0x46
   if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
     return { type: 'pdf', mime: 'application/pdf' };
@@ -83,6 +109,8 @@ function detectFileType(buf) {
   if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
     return { type: 'image', mime: 'image/jpeg' };
   }
+  const mime = textTypeFor(name, claimedType);
+  if (mime && isCleanText(buf)) return { type: 'text', mime };
   return null;
 }
 
@@ -92,13 +120,16 @@ const upload = multer({
   limits: { fileSize: MAX_BYTES },
 });
 
-const UNSUPPORTED_TYPE = 'Only PDF (.pdf), Word (.docx), PNG (.png), and JPEG (.jpg/.jpeg) files are accepted. File type is determined by content, not filename.';
+const UNSUPPORTED_TYPE = 'Only PDF (.pdf), Word (.docx), PNG (.png), JPEG (.jpg/.jpeg) and text (.txt, .md, .csv) files are accepted. Files are checked by their content, not just their name.';
 
 // The shown name always ends in the extension of the file's real type, so a PDF
 // can't arrive looking like "invoice.exe".
 function cleanDisplayName(requested, detected, originalName) {
   let name = (requested || '').toString().trim() || String(originalName || 'file');
-  const ext = detected.type === 'pdf' ? '.pdf' : detected.type === 'docx' ? '.docx' : detected.mime === 'image/png' ? '.png' : '.jpg';
+  const ext = detected.type === 'pdf' ? '.pdf'
+    : detected.type === 'docx' ? '.docx'
+    : detected.type === 'text' ? TEXT_EXT[detected.mime]
+    : detected.mime === 'image/png' ? '.png' : '.jpg';
   // Strip any extension the user typed so we always enforce the correct one
   name = name.replace(/\.[^.]+$/, '') + ext;
   // Remove filesystem-unsafe characters
@@ -111,7 +142,7 @@ function cleanDisplayName(requested, detected, originalName) {
 // Used for the owner's uploads and for files people send to the owner
 // (`incoming`), which are stored inactive until the owner accepts them.
 function storeFile(file, body, { incoming = false, note = null } = {}) {
-  const detected = detectFileType(file.buffer);
+  const detected = detectFileType(file.buffer, file.originalname, file.mimetype);
   if (!detected) return { error: UNSUPPORTED_TYPE, status: 415 };
 
   const rawHours = parseFloat(body.expires_hours) || 1;
@@ -127,6 +158,7 @@ function storeFile(file, body, { incoming = false, note = null } = {}) {
   const mimeType    = detected.mime; // content-derived MIME, never the client's claim
 
   // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
+  // (text has none to strip)
   let rawBuffer = file.buffer;
   if (detected.type === 'docx') rawBuffer = stripDocxMetadata(rawBuffer);
   if (detected.type === 'pdf')  rawBuffer = stripPdfMetadata(rawBuffer);
@@ -170,7 +202,7 @@ function storeFile(file, body, { incoming = false, note = null } = {}) {
     note ? encryptString(note, encKey) : null
   );
 
-  return { shortId, deleteToken, expires_at, paddedSize };
+  return { shortId, deleteToken, expires_at, paddedSize, displayName };
 }
 
 // ── POST /api/upload ──────────────────────────────────────────────────────────
@@ -247,17 +279,22 @@ function pipeFile(res, file, disposition) {
   db.prepare('UPDATE files SET download_count = download_count + 1 WHERE short_id = ?')
     .run(file.short_id);
 
+  const mimeType = decryptString(file.mime_type, encKey);
+  const isText = isTextMime(mimeType);
   if (disposition === 'attachment') {
-    // download: reveal original mime + filename (owner-only action)
+    // download: reveal original mime + filename (owner-only action).
+    // Only the types we accept are named; anything else goes out as plain bytes.
     const filename = decryptString(file.original_filename, encKey);
-    const mimeType = decryptString(file.mime_type, encKey);
-    res.setHeader('Content-Type', mimeType);
+    const known = isText || ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(mimeType);
+    res.setHeader('Content-Type', isText ? `${mimeType}; charset=utf-8` : known ? mimeType : 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
   } else {
-    // inline (raw viewer): strip mime type and filename from headers — privacy
-    res.setHeader('Content-Type', 'application/octet-stream');
+    // inline (raw viewer): strip mime type and filename from headers — privacy.
+    // Text is always plain text, so a browser never runs it as a page.
+    res.setHeader('Content-Type', isText ? 'text/plain; charset=utf-8' : 'application/octet-stream');
     res.setHeader('Content-Disposition', 'inline');
   }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
   res.setHeader('Content-Length', data.length);
   res.setHeader('Cache-Control', 'no-store');
@@ -349,13 +386,60 @@ router.post('/reshare/:shortId', (req, res) => {
   });
 });
 
+// ── annotations ──────────────────────────────────────────────────────────────
+// Annotations are the private notes of whoever owns a link: every other viewer
+// gets a fresh link of their own before annotations load. Reading and saving
+// both need the link's delete token in the X-Delete-Token header.
+const annCrypto = require('crypto');
+
+const ANN_MAX_BYTES   = 1024 * 1024;
+const ANN_MAX_STROKES = 5000;
+const ANN_MAX_POINTS  = 20000;
+const ANN_COLOR = /^(#[0-9a-f]{6}|rgba\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*(0|1|0?\.\d+)\s*\))$/i;
+
+// hashing both sides first keeps the compare fixed-length and constant-time
+function annTokenMatches(given, stored) {
+  if (!given || !stored || typeof given !== 'string') return false;
+  const a = annCrypto.createHash('sha256').update(given).digest();
+  const b = annCrypto.createHash('sha256').update(String(stored)).digest();
+  return annCrypto.timingSafeEqual(a, b);
+}
+
+const annIsNum = n => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) < 1e6;
+
+// Keep only well-formed strokes, rebuilt with known fields, or null if any is bad.
+function cleanStrokes(list) {
+  if (!Array.isArray(list) || list.length > ANN_MAX_STROKES) return null;
+  const out = [];
+  for (const s of list) {
+    if (typeof s !== 'object' || s === null) return null;
+    if (!Number.isInteger(s.page) || s.page < 1 || s.page > 10000) return null;
+    if (typeof s.color !== 'string' || !ANN_COLOR.test(s.color)) return null;
+    if (!annIsNum(s.width) || s.width <= 0 || s.width > 64) return null;
+    if (!Array.isArray(s.points) || s.points.length > ANN_MAX_POINTS) return null;
+    if (!s.points.every(p => typeof p === 'object' && p !== null && annIsNum(p.x) && annIsNum(p.y))) return null;
+    out.push({
+      page: s.page,
+      color: s.color,
+      width: s.width,
+      eraser: s.eraser === true,
+      highlight: s.highlight === true,
+      points: s.points.map(p => ({ x: p.x, y: p.y })),
+    });
+  }
+  return out;
+}
+
 // ── GET /api/annotations/:shortId ────────────────────────────────────────────
 router.get('/annotations/:shortId', (req, res) => {
   const file = db.prepare(
-    'SELECT annotations, expires_at, allow_annotations FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT annotations, expires_at, allow_annotations, delete_token FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
   if (goneIfExpired(file, res)) return;
+  if (!annTokenMatches(req.get('X-Delete-Token'), file.delete_token)) {
+    return res.status(403).json({ error: 'Only the owner of this link can use its annotations' });
+  }
   if (!file.allow_annotations) return res.json({ annotations: [] });
 
   const encKey = getEncKey();
@@ -371,18 +455,21 @@ router.get('/annotations/:shortId', (req, res) => {
 
 // ── POST /api/annotations/:shortId ───────────────────────────────────────────
 router.post('/annotations/:shortId', (req, res) => {
-  const { annotations } = req.body || {};
-  if (!Array.isArray(annotations)) return res.status(400).json({ error: 'Annotations must be an array' });
-
-  const annotStr = JSON.stringify(annotations);
-  if (annotStr.length > 1024 * 1024) return res.status(413).json({ error: 'Annotations too large (max 1 MB)' });
-
   const file = db.prepare(
-    'SELECT short_id, expires_at, allow_annotations FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT short_id, expires_at, allow_annotations, delete_token FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
   if (goneIfExpired(file, res)) return;
+  if (!annTokenMatches(req.get('X-Delete-Token'), file.delete_token)) {
+    return res.status(403).json({ error: 'Only the owner of this link can use its annotations' });
+  }
   if (!file.allow_annotations) return res.status(403).json({ error: 'Annotations are turned off for this file' });
+
+  const annotations = cleanStrokes((req.body || {}).annotations);
+  if (!annotations) return res.status(400).json({ error: 'Invalid annotations' });
+
+  const annotStr = JSON.stringify(annotations);
+  if (annotStr.length > ANN_MAX_BYTES) return res.status(413).json({ error: 'Annotations too large (max 1 MB)' });
 
   const encKey    = getEncKey();
   const encAnnot  = encryptString(annotStr, encKey);

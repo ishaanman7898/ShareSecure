@@ -13,7 +13,7 @@
   function pick(f) {
     error.textContent = '';
     if (!f) return;
-    if (!/\.(pdf|docx|png|jpe?g)$/i.test(f.name)) { error.textContent = 'Choose a PDF, DOCX, PNG or JPG file.'; return; }
+    if (!/\.(pdf|docx|png|jpe?g|txt|md|markdown|csv)$/i.test(f.name)) { error.textContent = 'Choose a PDF, DOCX, PNG, JPG or text (.txt, .md, .csv) file.'; return; }
     if (f.size > 10 * 1024 * 1024) { error.textContent = 'That file is over 10 MB.'; return; }
     file = f;
     $('drop-label').textContent = f.name;
@@ -44,7 +44,7 @@
       $('drop-link').textContent = data.url;
       $('drop-link').href = data.url;
       $('drop-open').href = data.url;
-      if (data.sent_to?.length) $('drop-note').textContent = `Sent to ${data.sent_to.join(', ')}. Your assistant can get the link too: ask it to list your shares.`;
+      if (data.sent_to?.length) $('drop-note').textContent = `Sent to ${data.sent_to.join(', ')}. Your assistant gets the link too.`;
       $('drop-done').classList.remove('hidden');
     } catch (err) {
       error.textContent = err.message;

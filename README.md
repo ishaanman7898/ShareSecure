@@ -13,7 +13,7 @@
 
 ---
 
-Upload a PDF, Word document or image, choose how long the link lasts (1 hour to 10 days), and send it. Files are encrypted at rest, pages are never indexed, and when the link expires the file is erased.
+Upload a PDF, Word document, image or text file, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, pages are never indexed, and when the link expires the file is erased.
 
 ## Ways to use it
 
@@ -31,7 +31,8 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **View-only by default.** Choose per file whether people can download it or draw on it, and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
-- **Send to a username.** Files sent to you arrive as requests you accept or decline, and the sender isn't recorded.
+- **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Files sent to you arrive as requests you accept or decline, and they don't show who sent them. In the desktop app's “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**); sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
+- **Text files too.** PDF, DOCX, PNG, JPG, TXT, Markdown and CSV, up to 10 MB.
 - **Unlinked uploads.** In the browser you signed up in, uploads use a zero-knowledge proof instead of your sign-in, and the stored file has no link to your account. The server can still tell which account is uploading while it checks the proof ([how it works](docs/ZK-INTEGRATION.md)).
 - **AI assistants.** Claude Code, Codex and other MCP clients can share files for you. [See below.](#ai-assistants-mcp)
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
@@ -61,19 +62,23 @@ bearer_token_env_var = "SHARESECURE_TOKEN"
 
 **Claude app** (web and desktop): open **Settings → Connectors → Add custom connector**, name it ShareSecure, and paste your connector URL, `https://sharesecure-du8.pages.dev/connect/<your token>`. The token is part of the URL because the connector form has no other place for it, so keep the URL private.
 
-**ChatGPT**: make a custom GPT that shares files you attach in the chat. In **GPTs → Create → Configure**, add an action by importing `https://sharesecure-du8.pages.dev/openapi.json`, set authentication to API key (Bearer) with your token, and use `https://sharesecure-du8.pages.dev/privacy` as the privacy policy. The dialog has instructions to paste in. If your plan supports connectors in developer mode, you can add the connector URL there instead.
+**ChatGPT**: make a custom GPT that shares and sends files and text from the chat, including files ChatGPT made itself. In **GPTs → Create → Configure**, add an action by importing `https://sharesecure-du8.pages.dev/openapi.json`, set authentication to API key (Bearer) with your token, and use `https://sharesecure-du8.pages.dev/privacy` as the privacy policy. The dialog has instructions to paste in. If your plan supports connectors in developer mode, you can add the connector URL there instead.
 
-Assistants that can't run commands (the Claude and ChatGPT apps) get a one-time upload page from `share_file`: you open it, pick the file, and the link appears there.
+Assistants share text they wrote with `share_text`, and pass files in the call (`content_base64`) or as a link (`source_url`), so the Claude and ChatGPT apps can finish the job themselves. Only when an assistant can't get at the file does `share_file` give you a one-time upload page to pick it.
 
 In the desktop app's “this computer” mode and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one). The Claude app connector works there too through the public link.
 
 | Tool | What it does |
 |---|---|
-| `share_file` | Shares a file by its path. It takes `path`, plus optional `expires_hours` (1–240, default 24), `allow_download`, `name` and `send_to` (a list of usernames, website only). On the website it returns a one-time `curl` upload command that the assistant runs, and the output contains the link. Locally it reads the file directly. |
+| `share_file` | Shares a file. Give it `path` (the assistant runs on the same computer), `content_base64` with `filename` (a small file the assistant has), or `source_url` (a public https link). Optional: `expires_hours` (1–240, default 24), `allow_download`, `require_account` (website only), `name`, `send_to` (usernames to deliver it to) and `note` (shown to them). On the website, `ask_user` is a last resort that gives you an upload page. |
+| `share_text` | Shares text the assistant wrote as a document, with the same options. |
+| `begin_upload`, `upload_chunk`, `finish_upload` | Upload a bigger file (up to 10 MB) in pieces, for assistants that can base64 it in code. |
+| `upload_status` | Website only: checks an `ask_user` upload page and returns the link once you've picked the file. |
+| `send_share` | Sends an existing share to usernames, with an optional `note`. |
 | `list_shares` | Lists live shares with their links and time left. |
 | `delete_share` | Deletes a share so its link stops working. |
 
-Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*.
+Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*. In “this computer” mode, `send_to` and `send_share` need a linked ShareSecure account.
 
 ## How files are protected
 

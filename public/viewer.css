@@ -181,6 +181,18 @@ body.viewer {
 .docx-content img { max-width: 100%; height: auto; }
 .docx-content ul, .docx-content ol { padding-left: 1.5em; margin-bottom: 0.8em; }
 
+/* plain text, Markdown and CSV: shown as written, on a page that follows the theme */
+.docx-content.is-text { background: var(--surface); color: var(--ink); padding: 40px 48px; }
+.text-doc {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
 .unsupported { margin: auto; text-align: center; }
 .unsupported-title { font-weight: 600; }
 .unsupported-sub { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }
@@ -363,7 +375,7 @@ body.viewer {
   .v-doc { padding-left: 10px; }
   .v-bar-left { gap: 10px; }
   .viewer-shell { padding: 16px 8px 88px; }
-  .docx-content { padding: 32px 20px; }
+  .docx-content, .docx-content.is-text { padding: 32px 20px; }
   .ann-toolbar .v-group { padding: 0 8px; }
 }
 

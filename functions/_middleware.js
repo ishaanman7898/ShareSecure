@@ -1,3 +1,21 @@
+// only the exact versions the viewer loads, not everything jsDelivr serves
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/';
+const MAMMOTH = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/';
+const PAGE_CSP = [
+  "default-src 'self'",
+  `script-src 'self' ${PDFJS} ${MAMMOTH} 'wasm-unsafe-eval'`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  `connect-src 'self' ${PDFJS}`,
+  `worker-src 'self' blob: ${PDFJS}`,
+  "frame-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 export async function onRequest(context) {
   const response = await context.next();
   const h = new Headers(response.headers);
@@ -25,7 +43,14 @@ export async function onRequest(context) {
 
   // block framing so files can't be embedded/traced via iframes
   h.set('X-Frame-Options', 'DENY');
-  h.set('Content-Security-Policy', "frame-ancestors 'none'");
+  // Pages only run the site's own scripts, plus pdf.js and mammoth from
+  // jsDelivr for the viewer. pdf.js starts its worker from a blob: URL that
+  // imports the real one, and decodes some images with WebAssembly, hence
+  // blob: and 'wasm-unsafe-eval' (which allows WebAssembly, not JS eval).
+  // Everything that isn't a page keeps just the framing rule, so a PDF opened
+  // straight from the API still shows in the browser's own viewer.
+  const isPage = (response.headers.get('Content-Type') || '').includes('text/html');
+  h.set('Content-Security-Policy', isPage ? PAGE_CSP : "frame-ancestors 'none'");
 
   // strip server identity — remove all fingerprinting headers
   h.delete('Server');

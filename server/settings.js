@@ -1,7 +1,7 @@
 'use strict';
 // Small JSON settings file that lives next to the database (never in the install
-// folder, so updates can't overwrite it). Holds the session-signing secret and
-// the auto-update preference.
+// folder, so updates can't overwrite it). Holds the session-signing secret, the
+// auto-update preference and the linked ShareSecure account.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -23,8 +23,14 @@ function load() {
     save();
   }
   if (typeof cache.autoUpdate !== 'boolean') cache.autoUpdate = false;
-  // people can send the owner files only after the owner turns this on
-  if (typeof cache.acceptIncoming !== 'boolean') cache.acceptIncoming = false;
+  // a linked ShareSecure account, for sending to usernames (the token is encrypted)
+  if (cache.cloudToken === undefined) cache.cloudToken = null;
+  if (cache.cloudUsername === undefined) cache.cloudUsername = null;
+  // the old "let people send me files" page is gone
+  if ('acceptIncoming' in cache) {
+    delete cache.acceptIncoming;
+    save();
+  }
   return cache;
 }
 

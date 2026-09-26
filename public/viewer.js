@@ -475,7 +475,8 @@ async function loadPDF(url) {
       fitMode = 'width';
     }
 
-    pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(await fetchFileBytes(url)) }).promise;
+    // the page's security policy doesn't allow eval, so pdf.js shouldn't try it
+    pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(await fetchFileBytes(url)), isEvalSupported: false }).promise;
     $('page-count').textContent = pdfDoc.numPages;
     if ($('m-total-pages')) $('m-total-pages').textContent = pdfDoc.numPages;
     show('page-nav');
@@ -678,18 +679,92 @@ async function loadImage(url) {
 }
 
 // ── docx ──────────────────────────────────────────────────────────────────────
+// Whoever shared the file wrote this HTML, so it's rebuilt from an allowlist
+// before it goes on the page: known tags only, no attributes except safe link
+// targets, embedded images and table spans. Anything else is dropped, keeping
+// its text.
+const DOC_TAGS = new Set([
+  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'b', 'em', 'i', 'u', 's',
+  'sub', 'sup', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  'br', 'a', 'img', 'span', 'blockquote', 'pre', 'code',
+]);
+const DOC_DROP = new Set(['script', 'style', 'template', 'iframe', 'object', 'embed', 'svg', 'math', 'noscript']);
+
+function copyDocNodes(from, to) {
+  for (const node of from.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) { to.appendChild(document.createTextNode(node.nodeValue)); continue; }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = node.tagName.toLowerCase();
+    if (DOC_DROP.has(tag)) continue;
+    if (!DOC_TAGS.has(tag)) { copyDocNodes(node, to); continue; }
+
+    const el = document.createElement(tag);
+    if (tag === 'a') {
+      const href = (node.getAttribute('href') || '').trim();
+      if (/^(https?:|mailto:)/i.test(href)) {
+        try {
+          el.href = new URL(href).href;
+          el.target = '_blank';
+          el.rel = 'noopener noreferrer';
+        } catch {}
+      }
+    } else if (tag === 'img') {
+      const src = node.getAttribute('src') || '';
+      if (!/^data:image\//i.test(src)) continue;
+      el.src = src;
+      el.alt = node.getAttribute('alt') || '';
+    } else if (tag === 'td' || tag === 'th') {
+      for (const name of ['colspan', 'rowspan']) {
+        const v = node.getAttribute(name);
+        if (v && /^\d{1,3}$/.test(v)) el.setAttribute(name, v);
+      }
+    }
+    copyDocNodes(node, el);
+    to.appendChild(el);
+  }
+}
+
+function sanitizeDocHtml(html) {
+  // a parsed document has no window, so nothing in it runs or loads
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const out = document.createDocumentFragment();
+  copyDocNodes(parsed.body, out);
+  return out;
+}
+
 async function loadDocx(url) {
   try {
     const arrayBuffer = await fetchFileBytes(url);
     if (!window.mammoth) throw new Error('mammoth.js not loaded');
     const result = await window.mammoth.convertToHtml({ arrayBuffer });
-    const docContent = $('docx-content');
-    docContent.innerHTML = result.value;
+    $('docx-content').replaceChildren(sanitizeDocHtml(result.value));
     hide('loader');
     show('docx-container');
     hide('zoom-group');
   } catch (err) {
     console.error('DOCX Load Error:', err);
+    showUnsupported();
+  }
+}
+
+// ── text ──────────────────────────────────────────────────────────────────────
+// Plain text, Markdown and CSV are shown exactly as written, never as HTML.
+const TEXT_TYPES = ['text/plain', 'text/markdown', 'text/csv'];
+
+async function loadText(url) {
+  try {
+    const bytes = await fetchFileBytes(url);
+    const pre = document.createElement('pre');
+    pre.className = 'text-doc';
+    pre.textContent = new TextDecoder('utf-8').decode(bytes);
+    const content = $('docx-content');
+    content.classList.add('is-text');
+    content.replaceChildren(pre);
+    hide('loader');
+    show('docx-container');
+    hide('zoom-group');
+  } catch (err) {
+    console.error('Text Load Error:', err);
     showUnsupported();
   }
 }
@@ -746,14 +821,25 @@ function showSendDialog() {
       const res = await apiFetch(`/api/send/${myShortId}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ targetUsername: username, note: backdrop.querySelector('#send-note-input').value.trim() })
+        // the link's delete key proves to the server that it's yours to send
+        body: JSON.stringify({
+          targetUsername: username,
+          note: backdrop.querySelector('#send-note-input').value.trim(),
+          deleteToken: myDeleteToken,
+        })
       });
       const data = await res.json();
       if (data.sent) {
         close();
         showKbToast('Sent. Waiting for them to accept.');
       } else {
-        sub.textContent = data.error || 'Couldn’t send. Check the username and try again.';
+        // on this computer, sending goes through a linked ShareSecure account
+        const errors = {
+          'link_account': 'Link your ShareSecure account first: account menu → ShareSecure account.',
+          'link_expired': 'Sign in to your ShareSecure account again: account menu → ShareSecure account.',
+          'User not found': 'There’s no user with that name.',
+        };
+        sub.textContent = errors[data.error] || data.error || 'Couldn’t send. Check the username and try again.';
         sub.style.color = 'var(--danger)';
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Send';
@@ -848,9 +934,15 @@ let annSaveTimer = null;
 
 function isMobile() { return window.innerWidth <= 800; }
 
+// Annotations belong to this link's owner, who proves it with the delete token.
+function annHeaders(extra = {}) {
+  return myDeleteToken ? { ...extra, 'X-Delete-Token': myDeleteToken } : extra;
+}
+
 async function fetchAnnotations() {
   try {
-    const res = await apiFetch(`/api/annotations/${myShortId}`);
+    const res = await apiFetch(`/api/annotations/${myShortId}`, { headers: annHeaders() });
+    if (!res.ok) return [];
     const data = await res.json();
     return data.annotations || [];
   } catch { return []; }
@@ -875,11 +967,12 @@ async function saveAnnotations() {
   });
   try {
     setAnnStatus('Saving…');
-    await apiFetch(`/api/annotations/${myShortId}`, {
+    const res = await apiFetch(`/api/annotations/${myShortId}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: annHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ annotations: flat }),
     });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setAnnStatus('Saved');
     setTimeout(() => setAnnStatus(''), 2000);
   } catch {
@@ -1065,12 +1158,17 @@ function showAnnToolbar(allowAnnotations) {
   if (!fileInfo) return;
 
   const { filename, size, mimeType, expiresAt, allowDownload, allowAnnotations } = fileInfo;
+  if (fileInfo.recipientOnly) hide('share-btn');
   document.title = filename + ' — ShareSecure';
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
 
-  showAnnToolbar(allowAnnotations);
-  if (allowAnnotations) {
+  // Pen and highlighter draw over PDF pages and images only, and only the
+  // link's owner (who holds its delete token) can keep notes on it.
+  const baseMime = (mimeType || '').split(';')[0].trim().toLowerCase();
+  const drawable = baseMime === 'application/pdf' || baseMime.startsWith('image/');
+  showAnnToolbar(allowAnnotations && drawable && !!myDeleteToken);
+  if (annEnabled) {
     const saved = await fetchAnnotations();
     annStrokes = {};
     saved.forEach(a => {
@@ -1082,10 +1180,9 @@ function showAnnToolbar(allowAnnotations) {
   $('doc-meta').textContent = formatSize(size);
   startCountdown(expiresAt);
 
-  // sending to another user needs an account on the hosted version; self-hosted has one owner only
-  if (sessionStorage.getItem('user_token')) {
-    fetch('/api/mode').then(r => r.json()).then(m => { if (!m.selfHostMode) show('send-to-user-btn'); }).catch(() => {});
-  }
+  // Only the person who shared the link can send it on, signed in. On this
+  // computer it goes through the linked ShareSecure account.
+  if (isOwner && sessionStorage.getItem('user_token')) show('send-to-user-btn');
   $('send-to-user-btn').addEventListener('click', showSendDialog);
   $('share-btn').addEventListener('click', openSharePanel);
   $('share-close').addEventListener('click', closeSharePanel);
@@ -1142,9 +1239,10 @@ function showAnnToolbar(allowAnnotations) {
 
   const rawUrl = `/api/raw/${myShortId}`;
 
-  if (mimeType === 'application/pdf') {
+  if (baseMime === 'application/pdf') {
     await loadPDF(rawUrl);
-  } else if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
-  else if (mimeType.startsWith('image/')) { await loadImage(rawUrl); }
+  } else if (baseMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
+  else if (TEXT_TYPES.includes(baseMime)) { await loadText(rawUrl); }
+  else if (baseMime.startsWith('image/')) { await loadImage(rawUrl); }
   else { showUnsupported(); }
 })();

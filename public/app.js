@@ -219,6 +219,11 @@ const customExpiryInput = document.getElementById('custom-expiry-input');
 const customExpiryErr = document.getElementById('custom-expiry-err');
 const qrCanvasEl = document.getElementById('qr-canvas');
 const saveQrBtn = document.getElementById('save-qr-btn');
+const sendToInput = document.getElementById('send-to-input');
+const resultTitle = document.getElementById('result-title');
+const resultSent = document.getElementById('result-sent');
+const resultSendForm = document.getElementById('result-send-form');
+const resultSendInput = document.getElementById('result-send-input');
 
 // --- auth & dashboard elements ---
 const dashboardCard = document.getElementById('dashboard-card');
@@ -384,12 +389,15 @@ function getFileIcon(mime) {
   return `<svg ${iconProps}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 }
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.txt', '.md', '.markdown', '.csv'];
 const ALLOWED_MIMES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/png',
   'image/jpeg',
+  'text/plain',
+  'text/markdown',
+  'text/csv',
 ];
 
 function setFile(file) {
@@ -399,7 +407,7 @@ function setFile(file) {
   }
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
   if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_MIMES.includes(file.type)) {
-    showToast('Only PDF, DOCX, PNG, and JPG files are accepted.', 'error');
+    showToast('Only PDF, DOCX, PNG, JPG, TXT, MD and CSV files are accepted.', 'error');
     return;
   }
   selectedFile = file;
@@ -434,7 +442,14 @@ function clearSelection() {
   const nameInput = document.getElementById('display-name-input');
   if (nameWrap) nameWrap.classList.add('hidden');
   if (nameInput) nameInput.value = '';
+  updateUploadLabel();
 }
+
+// The button says what will happen: "Send" once there are names to send to.
+function updateUploadLabel() {
+  uploadBtn.textContent = sendToInput.value.trim() ? 'Send' : 'Create link';
+}
+sendToInput.addEventListener('input', updateUploadLabel);
 
 
 // drag & drop
@@ -521,49 +536,31 @@ uploadBtn.addEventListener('click', async () => {
     }
   }
 
+  // on this computer, sending to usernames needs a linked ShareSecure account
+  const sendTo = sendToInput.value.trim();
+  if (sendTo && selfHostMode && !cloudState.linked) {
+    showToast('Link your ShareSecure account to send to usernames.', 'info', 5000);
+    openCloudModal();
+    return;
+  }
+
   uploadBtn.disabled = true;
   progressWrap.classList.remove('hidden');
   progressBar.style.width = '0%';
 
-  // Prepare ZK auth fields if the user has enrolled credentials.
-  // When using ZK, we OMIT the Authorization header so the server (and any
-  // logging in the request chain) cannot link the upload to a specific user_id.
-  // The proof is multi-KB so it goes in the form data, not headers.
-  let zkFields = null;
-  if (userToken && hasZKCredentials()) {
-    try {
-      zkFields = await (await loadZK()).prepareUploadFields(userToken);
-    } catch {
-      // ZK prep failed (challenge limit, network, etc.) — fall back to Bearer
-      zkFields = null;
-    }
-  }
-
-  const form = buildUploadForm();
-  if (zkFields) {
-    form.append('zk_proof',     zkFields.zk_proof);
-    form.append('zk_nullifier', zkFields.zk_nullifier);
-    form.append('zk_nonce',     zkFields.zk_nonce);
-  }
-  let result = await sendUpload(form, !zkFields);
-
-  // The server refused the private proof (older servers answered 401). The
-  // session is still fine, so upload the normal way instead of signing out.
-  if (zkFields && (result.status === 403 || result.status === 401)) {
-    progressBar.style.width = '0%';
-    result = await sendUpload(buildUploadForm(), true);
-  }
+  // Use the signed session. The experimental proof protocol is not a secure
+  // authentication or anonymity boundary and has been disabled on the server.
+  const result = await sendUpload(buildUploadForm(), true);
 
   if (result.status === 200) {
     const data = result.body;
-    const sendTo = selfHostMode ? '' : (document.getElementById('send-to-input')?.value.trim() || '');
-    showResult(data, selectedFile);
-    if (sendTo) {
-      sendToUsers(data.shortId, sendTo);
-      document.getElementById('send-to-input').value = '';
-    }
-    showToast('Link created.', 'success');
+    if (sendTo) uploadBtn.textContent = 'Sending…';
+    const delivery = sendTo ? await sendToUsers(data.shortId, sendTo, data.deleteToken) : null;
+    showResult(data, selectedFile, delivery);
+    if (!delivery) showToast('Link created.', 'success');
+    else if (delivery.sent.length) showToast('Sent.', 'success');
     // ready for the next file
+    sendToInput.value = '';
     clearSelection();
     progressWrap.classList.add('hidden');
     if (userToken) updateDashboard();
@@ -583,25 +580,12 @@ uploadBtn.addEventListener('click', async () => {
   }
 });
 
-function showResult(data, file) {
-  currentShortId = data.shortId;
-  currentDeleteToken = data.deleteToken || null;
-
+function showResult(data, file, delivery) {
   // Determine the display name (custom name takes precedence over original filename)
   const displayNameInput = document.getElementById('display-name-input');
   const usedName = (displayNameInput && displayNameInput.value.trim())
     ? displayNameInput.value.trim()
     : file.name;
-
-  // show the owner's direct url — same link they'll view the file at
-  const ownerUrl = data.shortUrl;
-  shortLink.textContent = ownerUrl;
-  shortLink.href = ownerUrl;
-  document.getElementById('open-link-btn').href = ownerUrl;
-  document.getElementById('localhost-warn').classList.toggle('hidden', !/\/\/(localhost|127\.0\.0\.1)[:/]/.test(ownerUrl));
-
-  // auto-open the file in a new tab
-  window.open(ownerUrl, '_blank', 'noopener,noreferrer');
 
   // store delete token so the viewer tab recognizes this browser as the owner
   if (data.deleteToken) {
@@ -609,8 +593,9 @@ function showResult(data, file) {
   }
 
   // Save full record to client-side dashboard history (no server-side user→file link)
-  currentHistoryRecord = {
+  const record = {
     short_id:          data.shortId,
+    short_url:         data.shortUrl,
     original_filename: usedName,
     mime_type:         file.type || 'application/octet-stream',
     size_bytes:        file.size,
@@ -618,20 +603,56 @@ function showResult(data, file) {
     uploaded_at:       new Date().toISOString(),
     delete_token:      data.deleteToken || null,
   };
-  saveUploadToHistory(currentHistoryRecord);
+  saveUploadToHistory(record);
 
-  resultFilename.textContent = usedName;
-  resultSize.textContent = formatSize(file.size);
+  // a new link opens in a new tab; one sent to people doesn't need to
+  if (!delivery) window.open(data.shortUrl, '_blank', 'noopener,noreferrer');
+
+  openResult(record, { delivery });
+}
+
+// The link for a share. On this computer, always the current public address
+// (the tunnel's can change, and this page itself is on localhost); otherwise
+// the one the server gave, or this site's own.
+let publicBase = null;
+function shareUrl(record) {
+  const path = `/r/${encodeURIComponent(record.short_id)}`;
+  if (selfHostMode && publicBase) return publicBase + path;
+  return record.short_url || location.origin + path;
+}
+
+// A share's dialog: send it to people, copy the link, or show its QR code. It
+// opens after an upload and from "Send" in Your shares.
+let resultSentTo = [];
+let resultDefaultTitle = 'Link created';
+let resultSendSeq = 0;   // which opening of the dialog a send belongs to
+
+function openResult(record, { delivery = null, title = 'Link created' } = {}) {
+  currentShortId = record.short_id;
+  currentHistoryRecord = record;
+  currentDeleteToken = record.delete_token || null;
+  if (!currentDeleteToken) {
+    try { currentDeleteToken = localStorage.getItem('owner_' + record.short_id); } catch {}
+  }
+
+  const url = shareUrl(record);
+  shortLink.textContent = url;
+  shortLink.href = url;
+  document.getElementById('open-link-btn').href = url;
+  document.getElementById('localhost-warn').classList.toggle('hidden', !/\/\/(localhost|127\.0\.0\.1)[:/]/.test(url));
+
+  resultFilename.textContent = record.original_filename || 'Untitled';
+  resultSize.textContent = formatSize(record.size_bytes || 0);
 
   // live countdown
   if (countdownInterval) clearInterval(countdownInterval);
-  startResultCountdown(data.expiresAt);
+  startResultCountdown(record.expires_at);
 
   // generate qr entirely client-side — no third party ever sees the url
   qrCanvasEl.innerHTML = '';
   loadQRCode().then(() => {
     qrInstance = new QRCode(qrCanvasEl, {
-      text: data.shortUrl, width: 200, height: 200,
+      text: url, width: 200, height: 200,
       colorDark: '#000000', colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M
     });
@@ -644,8 +665,90 @@ function showResult(data, file) {
     a.href = url; a.download = 'sharesecure-qr.png'; a.click();
   };
 
+  resultSentTo = [];
+  resultDefaultTitle = title;
+  resultSent.innerHTML = '';
+  resultSent.classList.add('hidden');
+  resultSendInput.value = '';
+  // a send still running for the share shown before doesn't belong to this one
+  resultSendSeq++;
+  const sendBtn = document.getElementById('result-send-btn');
+  sendBtn.disabled = false;
+  sendBtn.textContent = 'Send';
+  if (delivery) showDelivery(delivery);
+  updateResultTitle();
+
   resultCard.classList.remove('hidden');
 }
+
+function closeResult() {
+  if (countdownInterval) clearInterval(countdownInterval);
+  resultCard.classList.add('hidden');
+}
+
+// "@alice, @bob", or "@alice, @bob and 3 more"
+function namesText(names) {
+  const at = names.map(n => '@' + n);
+  return at.length <= 3 ? at.join(', ') : `${at.slice(0, 2).join(', ')} and ${at.length - 2} more`;
+}
+
+function updateResultTitle() {
+  resultTitle.textContent = resultSentTo.length ? `Sent to ${namesText(resultSentTo)}` : resultDefaultTitle;
+}
+
+// Adds who got it, and who didn't, to the dialog.
+function showDelivery(d) {
+  const lines = [];
+  if (d.sent.length) lines.push(['is-ok', `Sent to ${namesText(d.sent)}. They’ll accept or decline it.`]);
+  if (d.missing.length) lines.push(['is-bad', `There’s no user called ${namesText(d.missing)}.`]);
+  for (const f of d.failed) lines.push(['is-bad', `Couldn’t send it to @${f.username}. ${f.reason}`]);
+  for (const [cls, text] of lines) {
+    const li = document.createElement('li');
+    li.className = cls;
+    li.textContent = text;
+    resultSent.appendChild(li);
+  }
+  if (d.notLinked.length) {
+    const li = document.createElement('li');
+    li.className = 'is-bad';
+    li.textContent = `Not sent to ${namesText(d.notLinked)}. Link your ShareSecure account to send to usernames. `;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'link-btn';
+    btn.textContent = 'Link account';
+    btn.addEventListener('click', () => openCloudModal({ resume: d.notLinked.map(n => '@' + n).join(', ') }));
+    li.appendChild(btn);
+    resultSent.appendChild(li);
+  }
+  resultSent.classList.toggle('hidden', !resultSent.childElementCount);
+  resultSentTo.push(...d.sent.filter(n => !resultSentTo.includes(n)));
+  updateResultTitle();
+  // keep the names that didn't go through, so they can be fixed and sent again
+  resultSendInput.value = [...d.missing, ...d.failed.map(f => f.username), ...d.notLinked].map(n => '@' + n).join(', ');
+}
+
+resultSendForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = resultSendInput.value.trim();
+  if (!input || !currentShortId) return;
+  if (selfHostMode && !cloudState.linked) { openCloudModal({ resume: input }); return; }
+  const btn = document.getElementById('result-send-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  const seq = resultSendSeq;
+  const d = await sendToUsers(currentShortId, input, currentDeleteToken);
+  // the dialog was closed, or now shows another share: just say how it went
+  if (seq !== resultSendSeq || resultCard.classList.contains('hidden')) {
+    if (seq === resultSendSeq) { btn.disabled = false; btn.textContent = 'Send'; }
+    const missed = [...d.missing, ...d.failed.map(f => f.username), ...d.notLinked];
+    if (d.sent.length) showToast(`Sent to ${namesText(d.sent)}.`, 'success');
+    if (missed.length) showToast(`Not sent to ${namesText(missed)}. Open the share and send again.`, 'warn', 6000);
+    return;
+  }
+  showDelivery(d);
+  btn.disabled = false;
+  btn.textContent = 'Send';
+});
 
 // copy
 copyBtn.addEventListener('click', () => {
@@ -663,15 +766,8 @@ copyBtn.addEventListener('click', () => {
 });
 
 
-document.getElementById('result-close-btn')?.addEventListener('click', () => {
-  if (countdownInterval) clearInterval(countdownInterval);
-  resultCard.classList.add('hidden');
-});
-
-document.getElementById('result-modal-backdrop')?.addEventListener('click', () => {
-  if (countdownInterval) clearInterval(countdownInterval);
-  resultCard.classList.add('hidden');
-});
+document.getElementById('result-close-btn')?.addEventListener('click', closeResult);
+document.getElementById('result-modal-backdrop')?.addEventListener('click', closeResult);
 
 // --- auth & dashboard logic ---
 
@@ -743,6 +839,8 @@ document.getElementById('menu-inbox').addEventListener('click', () => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', logout);
+// Privacy and Terms open in a new window, so close the menu behind them
+profileMenu.querySelectorAll('a.menu-item').forEach(a => a.addEventListener('click', () => closeMenu(false)));
 
 // ── account dialogs ───────────────────────────────────────────────────────────
 let modalReturnFocus = null;
@@ -758,6 +856,8 @@ function closeModal(modal) {
   if (modal.classList.contains('hidden')) return;
   modal.classList.add('hidden');
   modalReturnFocus?.focus();
+  // linked or not, go back to the share the link dialog was opened from
+  if (modal === cloudModal) resumeResult();
 }
 
 for (const modal of document.querySelectorAll('[data-dialog]')) {
@@ -780,7 +880,7 @@ document.addEventListener('click', e => {
 
 // ── connect an AI assistant (MCP) ─────────────────────────────────────────────
 // desktop / self-hosted settings that live in the account menu
-document.getElementById('menu-receive').addEventListener('click', () => openModal(document.getElementById('receive-modal')));
+document.getElementById('menu-cloud').addEventListener('click', () => openCloudModal());
 document.getElementById('menu-updates').addEventListener('click', () => openModal(document.getElementById('updates-modal')));
 
 const mcpModal = document.getElementById('mcp-modal');
@@ -805,6 +905,7 @@ function renderMcp(state, token) {
   connector.textContent = state.publicUrl ? `${state.publicUrl}/connect/${token}` : '';
   connector.closest('.code-box').classList.toggle('hidden', !state.publicUrl);
   document.querySelector('.mcp-no-public').classList.toggle('hidden', Boolean(state.publicUrl));
+  document.querySelector('.mcp-tunnel-warn').classList.toggle('hidden', !/\.loca\.lt$/i.test(state.publicUrl ? new URL(state.publicUrl).hostname : ''));
   document.querySelector('.mcp-gpt').classList.toggle('hidden', !state.gptActions);
   if (state.gptActions) {
     document.getElementById('mcp-openapi').textContent = `${state.publicUrl}/openapi.json`;
@@ -920,7 +1021,6 @@ function initAuth() {
   const username = userToken && tokenUsername();
   if (username) {
     showSignedIn(username);
-    document.getElementById('send-to-wrap')?.classList.remove('hidden');
     // a self-hosted install has one account, so this only makes sense on the website
     document.getElementById('require-account-wrap')?.classList.remove('hidden');
     updateDashboard();
@@ -959,7 +1059,7 @@ function initSelfHost() {
   showSignedIn(username);
   updateDashboard();
   startInboxPolling();
-  initReceive();
+  initCloudLink();
   initUpdates();
 }
 
@@ -977,6 +1077,7 @@ async function updateDashboard() {
     if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
     const data = await res.json();
+    if (selfHostMode && 'publicUrl' in data) publicBase = data.publicUrl || null;
     if (mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
   } catch { /* network error — keep showing cached list */ }
 }
@@ -994,6 +1095,7 @@ function mergeServerShares(files) {
   const known = new Set(history.map(f => f.short_id));
   const fresh = files.filter(f => f.short_id && !known.has(f.short_id)).map(f => ({
     short_id: f.short_id,
+    short_url: f.short_url || null,
     original_filename: f.original_filename || 'Untitled',
     mime_type: f.mime_type || 'application/octet-stream',
     size_bytes: f.size_bytes || 0,
@@ -1168,7 +1270,7 @@ function renderInbox(files) {
   const list = document.getElementById('inbox-list');
   if (!list) return;
   if (!files.length) {
-    list.innerHTML = pendingCount ? '' : EMPTY_INBOX;
+    list.innerHTML = pendingCount ? '' : emptyInbox();
     return;
   }
   list.innerHTML = files.map(f => `
@@ -1184,82 +1286,183 @@ function renderInbox(files) {
     </div>`).join('');
 }
 
-// ── web version: send a new upload straight to people ────────────────────────
-// "alice, bob" or "@alice bob"; each person gets their own copy to accept.
-async function sendToUsers(shortId, input) {
+// ── send a share to people (both editions) ───────────────────────────────────
+// "alice, bob" or "@alice bob"; each person gets their own copy to accept. On
+// this computer the local server passes it on through the linked account.
+// The delete key proves to the website that the share is yours.
+async function sendToUsers(shortId, input, deleteToken) {
   const names = [...new Set(input.split(/[\s,;]+/).map(u => u.replace(/^@/, '')).filter(Boolean))].slice(0, 20);
-  const sent = [], missing = [], failed = [];
-  for (const username of names) {
+  let key = deleteToken || null;
+  if (!key) {
+    try { key = localStorage.getItem('owner_' + shortId) || loadUploadHistory().find(f => f.short_id === shortId)?.delete_token || null; } catch {}
+  }
+  const result = { sent: [], missing: [], failed: [], notLinked: [] };
+  for (let i = 0; i < names.length; i++) {
+    const username = names[i];
     try {
       const res = await fetch(`/api/send/${encodeURIComponent(shortId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ targetUsername: username }),
+        body: JSON.stringify({ targetUsername: username, deleteToken: key }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.sent) sent.push(username);
-      else if (data.error === 'User not found') missing.push(username);
-      else failed.push(username);
+      if (data.sent) result.sent.push(username);
+      else if (data.error === 'User not found') result.missing.push(username);
+      else if (data.error === 'link_account' || data.error === 'link_expired') {
+        // on this computer, with no linked account (or its sign-in ran out)
+        result.notLinked.push(...names.slice(i));
+        if (cloudState.linked) { cloudState.linked = false; renderCloud(); }
+        break;
+      } else result.failed.push({ username, reason: data.error || 'Try again.' });
     } catch {
-      failed.push(username);
+      result.failed.push({ username, reason: 'Couldn’t reach the server.' });
     }
   }
-  if (sent.length) showToast(`Sent to ${sent.join(', ')}. They’ll accept or decline it.`, 'success', 5000);
-  if (missing.length) showToast(`There’s no user called ${missing.join(', ')}.`, 'error', 6000);
-  if (failed.length) showToast(`Couldn’t send it to ${failed.join(', ')}. Try again.`, 'error', 6000);
+  return result;
 }
 
-// ── desktop version: let people send the owner files ─────────────────────────
-const receiveMenu = document.getElementById('menu-receive');
-const receiveToggle = document.getElementById('receive-toggle');
+// ── desktop version: link a ShareSecure account to send to usernames ─────────
+// Usernames live on the ShareSecure website, so sending from this computer goes
+// through your account there.
+const cloudModal = document.getElementById('cloud-modal');
+const cloudForm = document.getElementById('cloud-form');
+const cloudError = document.getElementById('cloud-error');
+let cloudState = { linked: false, username: null, cloudUrl: null };
 
-function renderReceive(s) {
-  receiveToggle.checked = !!s.enabled;
-  document.getElementById('receive-info').classList.toggle('hidden', !s.enabled);
-  document.getElementById('receive-username').textContent = s.username || '';
-  document.getElementById('receive-url').textContent = s.sendUrl || `${location.origin}/send`;
+function renderSendHint() {
+  if (!selfHostMode) return;
+  const hint = document.getElementById('send-to-hint');
+  if (cloudState.linked) {
+    hint.textContent = `Sent through your ShareSecure account, @${cloudState.username}. They get an encrypted copy that works even while this computer is off.`;
+    return;
+  }
+  hint.textContent = 'Sending to usernames needs your ShareSecure account. Leave it empty to just get a link. ';
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'link-btn';
+  btn.textContent = 'Link account';
+  btn.addEventListener('click', openCloudModal);
+  hint.appendChild(btn);
 }
 
-async function initReceive() {
-  if (!receiveMenu) return;
+function renderCloud() {
+  const { linked, username } = cloudState;
+  document.getElementById('cloud-status').textContent = linked
+    ? `Linked to @${username}. Files you send to usernames go through this account.`
+    : username ? `Sign in again to keep sending as @${username}.` : 'No account linked yet.';
+  cloudForm.classList.toggle('hidden', linked);
+  document.getElementById('cloud-linked').classList.toggle('hidden', !linked);
+  if (cloudState.cloudUrl) document.getElementById('cloud-signup').href = `${cloudState.cloudUrl}/signin?new=1`;
+  renderSendHint();
+}
+
+async function initCloudLink() {
+  renderSendHint();
   try {
-    const res = await fetch('/api/settings/incoming', { headers: authHeaders() });
+    const res = await fetch('/api/cloud', { headers: authHeaders() });
     if (!res.ok) return;
-    receiveMenu.classList.remove('hidden');
-    renderReceive(await res.json());
+    cloudState = await res.json();
+    document.getElementById('menu-cloud').classList.remove('hidden');
+    renderCloud();
   } catch {}
 }
 
-receiveToggle?.addEventListener('change', async () => {
+// resume: names to send to once the account is linked. The share's dialog then
+// opens again with them filled in, so nothing has to be typed twice. It also
+// opens again when this dialog is closed without linking.
+let cloudResume = null;
+
+function resumeResult() {
+  if (!cloudResume) return;
+  const { record, title, names } = cloudResume;
+  cloudResume = null;
+  openResult(record, { title });
+  resultSendInput.value = names;
+  resultSendInput.focus();
+}
+
+function openCloudModal({ resume = null } = {}) {
+  const fromResult = !resultCard.classList.contains('hidden') && currentHistoryRecord;
+  cloudResume = resume && fromResult ? { record: currentHistoryRecord, title: resultDefaultTitle, names: resume } : null;
+  closeResult();
+  cloudForm.reset();
+  cloudError.textContent = '';
+  renderCloud();
+  openModal(cloudModal);
+  // after a sign-in runs out, only the password is needed
+  if (!cloudState.linked && cloudState.username) {
+    document.getElementById('cloud-username').value = cloudState.username;
+    document.getElementById('cloud-password').focus();
+  } else if (cloudState.linked) {
+    document.getElementById('cloud-unlink').focus();
+  }
+}
+
+cloudForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const username = document.getElementById('cloud-username').value.trim();
+  const password = document.getElementById('cloud-password').value;
+  if (!username || !password) { cloudError.textContent = 'Enter your username and password.'; return; }
+  const btn = document.getElementById('cloud-link-btn');
+  btn.disabled = true;
+  btn.textContent = 'Linking…';
+  cloudError.textContent = '';
   try {
-    const res = await fetch('/api/settings/incoming', {
+    const res = await fetch('/api/cloud/link', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ enabled: receiveToggle.checked }),
+      body: JSON.stringify({ username, access_code: password }),
     });
-    if (!res.ok) throw new Error();
-    renderReceive(await res.json());
-    showToast(receiveToggle.checked ? 'People can now send you files for approval.' : 'Nobody can send you files now.', 'success', 3000);
-  } catch {
-    receiveToggle.checked = !receiveToggle.checked;
-    showToast('Couldn’t change the setting. Try again.', 'error');
+    if (res.status === 401) { logout(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.linked) throw new Error(data.error || 'Couldn’t link the account. Try again.');
+    cloudState = data;
+    renderCloud();
+    showToast(`Linked to @${data.username}. You can send to usernames now.`, 'success', 4000);
+    closeModal(cloudModal);   // reopens the share it was opened from, if any
+  } catch (err) {
+    cloudError.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Link account';
   }
 });
 
-document.getElementById('receive-copy')?.addEventListener('click', () => {
-  navigator.clipboard.writeText(document.getElementById('receive-url').textContent)
-    .then(() => showToast('Link copied.', 'success', 2500))
-    .catch(() => showToast('Couldn’t copy. Select the link and copy it manually.', 'warn'));
+document.getElementById('cloud-unlink').addEventListener('click', async () => {
+  if (!confirm('Unlink this account? Files you sent to usernames from here will be taken back from the people who got them.')) return;
+  try {
+    const res = await fetch('/api/cloud', { method: 'DELETE', headers: authHeaders() });
+    if (!res.ok) throw new Error();
+    cloudState = await res.json();
+    renderCloud();
+    document.getElementById('cloud-username').focus();
+    showToast('Account unlinked. Anything you sent to usernames from here was taken back.', 'success', 4000);
+  } catch {
+    showToast('Couldn’t unlink the account. Try again.', 'error');
+  }
 });
 
 const EMPTY_LIST = `<div class="empty-msg">
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
   <p>Nothing shared yet.</p><span>Your links show up here until they expire.</span>
 </div>`;
+const INBOX_ICON = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`;
 const EMPTY_INBOX = `<div class="empty-msg">
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+  ${INBOX_ICON}
   <p>No files received.</p><span>Files people send you wait here for you to accept.</span>
 </div>`;
+
+// On this computer nothing new arrives here: files sent to your username wait
+// in your inbox on the ShareSecure website.
+function emptyInbox() {
+  if (!selfHostMode) return EMPTY_INBOX;
+  const site = escapeHtml(cloudState.cloudUrl || 'https://sharesecure-du8.pages.dev');
+  return `<div class="empty-msg">
+  ${INBOX_ICON}
+  <p>No files received here.</p><span>Files sent to your username arrive in your inbox on <a href="${site}/" target="_blank" rel="noopener noreferrer">the ShareSecure website</a>.</span>
+</div>`;
+}
+const SEND_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 const TRASH_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 let listTimer = null;
 
@@ -1290,10 +1493,21 @@ function renderFileList(files) {
         <a href="/r/${encodeURIComponent(f.short_id)}" target="_blank" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </a>
+        <button class="btn-icon send-file-btn" data-id="${escapeHtml(f.short_id)}" title="Send, copy the link or show the QR code" aria-label="Send ${escapeHtml(f.original_filename)}">${SEND_ICON}</button>
         <button class="btn-icon delete-file-btn" data-id="${escapeHtml(f.short_id)}" title="Delete" aria-label="Delete ${escapeHtml(f.original_filename)}">${TRASH_ICON}</button>
       </div>
     </div>
   `).join('');
+
+  // opens the share's dialog, ready to send it to someone
+  fileList.querySelectorAll('.send-file-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const record = files.find(f => f.short_id === btn.dataset.id);
+      if (!record) return;
+      openResult(record, { title: 'Send or share' });
+      resultSendInput.focus();
+    });
+  });
 
   fileList.querySelectorAll('.delete-file-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1482,10 +1696,7 @@ document.addEventListener('keydown', (e) => {
   if (!profileMenu.classList.contains('hidden')) { closeMenu(true); return; }
   const openDialog = document.querySelector('[data-dialog]:not(.hidden)');
   if (openDialog) { closeModal(openDialog); return; }
-  if (!resultCard.classList.contains('hidden')) {
-    if (countdownInterval) clearInterval(countdownInterval);
-    resultCard.classList.add('hidden');
-  }
+  if (!resultCard.classList.contains('hidden')) closeResult();
 });
 
 // ── mode detection + app initialisation ──────────────────────────────────────
@@ -1497,6 +1708,7 @@ async function detectSelfHostMode() {
     const res = await fetch('/api/mode', { signal: AbortSignal.timeout(2000) });
     if (res.ok) {
       const data = await res.json();
+      publicBase = data.publicUrl || null;
       return data.selfHostMode === true;
     }
   } catch {}

@@ -5,7 +5,7 @@
 // account link by design, so the browser deletes those itself with the delete
 // keys it holds before calling this.
 
-import { verifyToken, getAuthClient, getFilesClient, getUserTag, sha256 } from '../../_turso.js';
+import { verifyToken, getAuthClient, getFilesClient, getUserTag, checkAccessCode } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -22,7 +22,7 @@ export async function onRequestPost(context) {
   const authDb = getAuthClient(env);
   const user = (await authDb.execute({ sql: 'SELECT id, access_code FROM users WHERE id = ?', args: [auth.userId] })).rows[0];
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!password || (await sha256(String(password))) !== user.access_code) {
+  if (!password || !(await checkAccessCode(String(password), user.access_code, env)).ok) {
     return Response.json({ error: 'Wrong password' }, { status: 403 });
   }
 

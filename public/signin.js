@@ -68,6 +68,8 @@ function render() {
   $('password-hint').textContent = creating ? `at least ${minLength} characters` : '';
   password.autocomplete = creating ? 'new-password' : 'current-password';
   $('auth-back').classList.toggle('hidden', selfHost);
+  // the website's terms don't cover a ShareSecure you run yourself
+  $('auth-legal').classList.toggle('hidden', selfHost);
   errorEl.textContent = '';
 }
 

@@ -35,7 +35,7 @@
     <header>
       <h1 class="page-title">Privacy policy</h1>
       <div class="page-meta">
-        <span>Last updated September 23, 2026</span>
+        <span>Last updated September 24, 2026</span>
       </div>
     </header>
 
@@ -62,7 +62,7 @@
       <h3>Your daily upload count</h3>
       <p>To enforce 5 uploads a day, we record when each private upload proof is issued to your account. These records are erased after 24 hours.</p>
       <h3>Files sent to you</h3>
-      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. We don't store who sent it.</p>
+      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. To enforce the sending limits, we also keep a code derived from the sender's account using a secret key (not their username or account number): on the copy until you accept it, and in a log of sends that's erased after 24 hours. Until then, the server can link a copy to the account that sent it.</p>
     </section>
 
     <section id="not-collected">
@@ -103,8 +103,9 @@
 
     <section id="self-hosted">
       <h2>7. The desktop app and self-hosted copies</h2>
-      <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer, and we never receive any of it. A few things still reach the internet:</p>
+      <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer, and we never receive any of it unless you link a ShareSecure account (see below). A few things still reach the internet:</p>
       <ul>
+        <li>If you link a ShareSecure account to send files to usernames, the app signs in to that account with your username and password (the password isn't kept, only the sign-in token). Each file you send to a username is uploaded as an encrypted copy to ShareSecure's servers under that account. It expires when your share does, is deleted when you delete the share or unlink the account, and is covered by the rest of this policy.</li>
         <li>To make share links work for other devices, the app uses a public relay (localtunnel at loca.lt). The relay can see traffic that passes through it. If you have your own domain, you can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting.</li>
         <li>The app checks GitHub for updates.</li>
       </ul>

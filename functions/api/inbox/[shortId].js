@@ -28,10 +28,19 @@ export async function onRequestPost(context) {
   if (!res.rows[0]) return Response.json({ error: 'Request not found' }, { status: 404 });
 
   if (action === 'accept') {
-    await client.execute({
-      sql: "UPDATE files SET is_active = 1, inbox_status = 'accepted' WHERE short_id = ?",
-      args: [params.shortId]
-    });
+    // the sender tag only limits waiting requests, so it goes once one is accepted
+    try {
+      await client.execute({
+        sql: "UPDATE files SET is_active = 1, inbox_status = 'accepted', sender_tag = NULL WHERE short_id = ?",
+        args: [params.shortId]
+      });
+    } catch {
+      // requests sent before sender tags existed
+      await client.execute({
+        sql: "UPDATE files SET is_active = 1, inbox_status = 'accepted' WHERE short_id = ?",
+        args: [params.shortId]
+      });
+    }
     return Response.json({ accepted: true });
   }
 

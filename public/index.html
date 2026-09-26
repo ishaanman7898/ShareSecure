@@ -23,7 +23,6 @@
         <img src="/app-icon.png" alt="" width="48" height="48" />
       </div>
       <span class="page-loader-name">ShareSecure</span>
-      <span class="page-loader-caption">Getting things ready<span class="page-loader-dots">...</span></span>
     </div>
   </div>
   <script src="/page-loading.js"></script>
@@ -73,15 +72,24 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
             <span>Connect an AI assistant</span>
           </button>
-          <button class="menu-item hidden" role="menuitem" id="menu-receive">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <span>Receiving files</span>
+          <button class="menu-item hidden" role="menuitem" id="menu-cloud">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            <span>ShareSecure account</span>
           </button>
           <button class="menu-item hidden" role="menuitem" id="menu-updates">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>Updates</span>
             <span class="menu-count hidden" id="menu-update-badge">New</span>
           </button>
+          <div class="menu-sep" role="separator"></div>
+          <a class="menu-item" role="menuitem" href="/privacy" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span>Privacy</span>
+          </a>
+          <a class="menu-item" role="menuitem" href="/terms" target="_blank">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span>Terms</span>
+          </a>
           <div class="menu-sep" role="separator"></div>
           <button class="menu-item" role="menuitem" id="logout-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -106,6 +114,7 @@
           <a class="btn btn-primary btn-lg" href="/signin?new=1">Create an account</a>
           <a href="/self-host" class="btn btn-ghost btn-lg web-only">Get the desktop app</a>
         </div>
+        <p class="landing-legal desktop-only"><a href="/privacy" target="_blank">Privacy</a><a href="/terms" target="_blank">Terms</a></p>
       </div>
       <div class="landing-art" aria-hidden="true">
         <div id="rosette" class="rosette"></div>
@@ -121,8 +130,8 @@
           <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
           <p class="drop-label drop-label-fine">Drop a file here, or <span class="drop-browse">browse</span></p>
           <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose a file</span></p>
-          <p class="drop-limit">PDF, DOCX, PNG or JPG, up to 10 MB</p>
-          <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg" hidden />
+          <p class="drop-limit">PDF, DOCX, PNG, JPG or text (.txt, .md, .csv), up to 10 MB</p>
+          <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,text/plain,text/markdown,text/csv" hidden />
         </div>
 
         <div class="file-preview hidden" id="file-preview">
@@ -142,10 +151,10 @@
             <input type="text" id="display-name-input" class="text-input" placeholder="Shown to people who open the link" maxlength="200" />
           </div>
 
-          <div id="send-to-wrap" class="field hidden">
-            <label for="send-to-input">Send to people <span class="label-optional">optional</span></label>
-            <input type="text" id="send-to-input" class="text-input" placeholder="Usernames, separated by commas" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="400" />
-            <span class="field-hint">They get a request and choose whether to accept it. They won’t see who sent it.</span>
+          <div id="send-to-wrap" class="field">
+            <label for="send-to-input">Send to <span class="label-optional">optional</span></label>
+            <input type="text" id="send-to-input" class="text-input" placeholder="@username, @username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="400" />
+            <span class="field-hint" id="send-to-hint">It lands in their inbox and they choose whether to accept it. They won’t see who sent it. Leave it empty to just get a link.</span>
           </div>
 
           <div class="field">
@@ -253,17 +262,18 @@
           </div>
 
           <div class="mcp-panel hidden" data-panel="claude-app" role="tabpanel">
-            <p class="field-hint" id="mcp-app-steps">In Claude on the web or the desktop app, open <strong>Settings → Connectors → Add custom connector</strong>. Name it <strong>ShareSecure</strong> and paste this as the MCP server URL. When you ask Claude to share something, it gives you a page to pick the file.</p>
+            <p class="field-hint" id="mcp-app-steps">In Claude on the web or the desktop app, open <strong>Settings → Connectors → Add custom connector</strong>. Name it <strong>ShareSecure</strong> and paste this as the MCP server URL. Then ask Claude to share or send something, and it does it for you.</p>
             <div class="code-box"><code id="mcp-connector"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-connector">Copy</button></div>
+            <p class="field-hint mcp-tunnel-warn hidden">This URL has your token in it, and it goes through the free public tunnel (loca.lt), so the tunnel can see it. Anyone with it can share and send files as you. Keep it private, and use <strong>Replace token</strong> if it gets out.</p>
             <p class="field-hint mcp-no-public hidden">Apps like Claude need a public https address. Turn on the public link (<code>USE_LOCAL_TUNNEL</code>) or set <code>BASE_URL</code> to your domain, then create the token again.</p>
           </div>
 
           <div class="mcp-panel hidden" data-panel="chatgpt" role="tabpanel">
             <div class="mcp-gpt">
-              <p class="field-hint"><strong>Make a ShareSecure GPT</strong> that shares files you attach in the chat. In ChatGPT, open <strong>GPTs → Create → Configure</strong>, then:</p>
+              <p class="field-hint"><strong>Make a ShareSecure GPT</strong> that shares and sends files and text from the chat. In ChatGPT, open <strong>GPTs → Create → Configure</strong>, then:</p>
               <ol class="mcp-steps">
                 <li>Paste these as the GPT’s <strong>Instructions</strong>:
-                  <div class="code-box"><code id="mcp-gpt-instructions">You share files through ShareSecure. When the user asks to share a file, make sure it is attached to the conversation, then call shareFiles with it. If they don’t say how long the link should last, use 24 hours. Give them the link from the response, and mention when it expires. Use listShares to show their links and deleteShare to remove one.</code><button class="btn btn-ghost btn-copy" data-copy="mcp-gpt-instructions">Copy</button></div>
+                  <div class="code-box"><code id="mcp-gpt-instructions">You share files and text through ShareSecure, and you do it yourself. For text you wrote (a summary, notes, a table), call shareText with the full text. For files in the conversation, ones the user attached or ones you made, call shareFiles with them. When the user names who it’s for, pass their ShareSecure usernames in send_to; to send a link you already made, use sendShare. Never ask the user to download, save or attach anything. If they don’t say how long the link should last, use 24 hours. Give them the link from the response, say who it was sent to, and mention when it expires. Use listShares to show their links and deleteShare to remove one.</code><button class="btn btn-ghost btn-copy" data-copy="mcp-gpt-instructions">Copy</button></div>
                 </li>
                 <li>Under <strong>Actions</strong>, choose <strong>Create new action → Import from URL</strong> and enter:
                   <div class="code-box"><code id="mcp-openapi"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-openapi">Copy</button></div>
@@ -307,29 +317,34 @@
     </div>
   </div>
 
-  <!-- receiving files (desktop / self-hosted) -->
-  <div class="modal hidden" id="receive-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="receive-title">
+  <!-- linked ShareSecure account (desktop / self-hosted), for sending to usernames -->
+  <div class="modal hidden" id="cloud-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="cloud-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="receive-title">Receiving files</h2>
+        <h2 id="cloud-title">ShareSecure account</h2>
         <button class="btn-icon" data-close aria-label="Close">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <p class="modal-text">Let people send you files through your own /send page. Each one waits until you accept it.</p>
-      <div class="modal-block receive-section">
-        <label class="switch">
-          <input type="checkbox" id="receive-toggle" />
-          <span class="switch-track" aria-hidden="true"></span>
-          <span class="switch-text">Let people send me files</span>
-        </label>
-        <div class="receive-info hidden" id="receive-info">
-          <p>Share this page. People enter your username, <strong id="receive-username"></strong>, and you accept or decline each file.</p>
-          <div class="link-box receive-link">
-            <span id="receive-url"></span>
-            <button class="btn btn-ghost btn-copy" id="receive-copy">Copy</button>
-          </div>
+      <p class="modal-text">Link your ShareSecure account to send files to ShareSecure usernames. Sending to a username uploads an encrypted copy to ShareSecure’s servers so they can receive it when this computer is off. Links you share yourself stay on this computer.</p>
+      <p class="modal-text cloud-status" id="cloud-status" aria-live="polite"></p>
+      <form id="cloud-form" class="modal-block" novalidate>
+        <div class="form-group">
+          <label for="cloud-username">ShareSecure username</label>
+          <input type="text" id="cloud-username" autocomplete="off" autocapitalize="none" spellcheck="false" required />
         </div>
+        <div class="form-group">
+          <label for="cloud-password">Password</label>
+          <input type="password" id="cloud-password" autocomplete="off" required />
+        </div>
+        <p class="auth-error" id="cloud-error" role="alert"></p>
+        <p class="field-hint">Your password isn’t kept here. No account? <a id="cloud-signup" href="https://sharesecure-du8.pages.dev/signin?new=1" target="_blank" rel="noopener noreferrer">Create one</a>.</p>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" id="cloud-link-btn">Link account</button>
+        </div>
+      </form>
+      <div class="modal-actions hidden" id="cloud-linked">
+        <button class="btn btn-ghost btn-danger-ghost" id="cloud-unlink">Unlink</button>
       </div>
     </div>
   </div>
@@ -369,6 +384,7 @@
 
       <h2 class="result-title" id="result-title">Link created</h2>
       <p class="result-sub"><span id="result-filename"></span><span id="result-size"></span></p>
+      <ul class="result-sent hidden" id="result-sent" aria-live="polite"></ul>
 
       <a class="result-url" id="short-link" href="#" target="_blank" rel="noopener noreferrer"></a>
       <p class="result-warn hidden" id="localhost-warn">This link points to this computer, so other devices can’t open it. Use your network address (e.g. 192.168.x.x) or turn on the public link to share it.</p>
@@ -377,6 +393,14 @@
         <a class="btn btn-ghost" id="open-link-btn" href="#" target="_blank" rel="noopener noreferrer">Open</a>
       </div>
       <p class="result-expires" id="result-expires"></p>
+
+      <form class="result-send" id="result-send-form" novalidate>
+        <label for="result-send-input">Send to someone else</label>
+        <div class="result-send-row">
+          <input type="text" id="result-send-input" class="text-input" placeholder="@username, @username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="400" />
+          <button type="submit" class="btn btn-ghost" id="result-send-btn">Send</button>
+        </div>
+      </form>
 
       <div class="qr-section">
         <div class="qr-wrap">
@@ -390,16 +414,6 @@
     </div>
   </div>
 
-  <footer class="app-footer">
-    <nav class="footer-links" aria-label="Site">
-      <a href="/terms" target="_blank">Terms</a>
-      <a href="/privacy" target="_blank">Privacy</a>
-      <a href="/security" target="_blank">Security</a>
-      <a href="/changelog" target="_blank">Changelog</a>
-      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
-    </nav>
-    <p class="footer-note">Your IP address is visible to the server. Use Tor or a VPN if you need anonymity.</p>
-  </footer>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

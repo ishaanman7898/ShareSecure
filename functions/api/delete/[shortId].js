@@ -1,4 +1,4 @@
-import { getFilesClient, verifyToken, getUserTag, deleteBranch } from '../../_turso.js';
+import { getFilesClient, verifyToken, getUserTag, deleteBranch, tokensMatch } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
@@ -26,7 +26,7 @@ export async function onRequestPost(context) {
   if (!isOwner) {
     let body = {};
     try { body = await request.json(); } catch {}
-    if (body.deleteToken && file.delete_token === body.deleteToken) authorizedViaToken = true;
+    if (await tokensMatch(body?.deleteToken, file.delete_token)) authorizedViaToken = true;
   }
 
   if (!isOwner && !authorizedViaToken) {

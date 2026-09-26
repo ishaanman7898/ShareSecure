@@ -82,6 +82,8 @@ router.post('/delete-account', session.requireOwner, (req, res) => {
     return res.status(403).json({ error: 'Wrong password' });
   }
 
+  // take back what was sent to usernames first, while the copies are still known
+  require('./cloud').forgetAllCloudCopies().catch(() => {});
   purgeAll();
   db.transaction(() => {
     db.prepare('DELETE FROM users').run();
@@ -89,7 +91,9 @@ router.post('/delete-account', session.requireOwner, (req, res) => {
   })();
   // a new signing secret ends every existing session and assistant token
   settings.set('sessionSecret', crypto.randomBytes(32).toString('hex'));
-  settings.set('acceptIncoming', false);
+  // unlink the ShareSecure account too; the next owner can link their own
+  settings.set('cloudToken', null);
+  settings.set('cloudUsername', null);
   settings.set('mcpTokenHash', null);
   res.json({ deleted: true });
 });
@@ -126,8 +130,14 @@ router.get('/user/files', session.requireOwner, (_req, res) => {
     ORDER BY uploaded_at DESC LIMIT 50
   `).all(new Date().toISOString());
   const plain = v => { try { return decryptString(v, key); } catch { return v; } };
-  const files = rows.map(r => ({ ...r, original_filename: plain(r.original_filename), mime_type: plain(r.mime_type) }));
-  res.json({ files, dailyUploadCount: 0, unlimited: true });
+  const base = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+  const files = rows.map(r => ({
+    ...r,
+    original_filename: plain(r.original_filename),
+    mime_type: plain(r.mime_type),
+    short_url: `${base}/r/${r.short_id}`,
+  }));
+  res.json({ files, dailyUploadCount: 0, unlimited: true, publicUrl: reach().publicUrl });
 });
 
 module.exports = router;

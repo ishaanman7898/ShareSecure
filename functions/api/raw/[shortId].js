@@ -1,4 +1,4 @@
-// GET /api/raw/:shortId — the file's bytes for the viewer (PDF.js, images, DOCX).
+// GET /api/raw/:shortId — the file's bytes for the viewer (PDF.js, images, DOCX, text).
 import { serveFile } from '../../_serve.js';
 
 export async function onRequestGet(context) {

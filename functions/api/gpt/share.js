@@ -1,25 +1,13 @@
-// POST /api/gpt/share — share files attached in a ChatGPT conversation.
+// POST /api/gpt/share — share files from a ChatGPT conversation: ones the user
+// attached and ones ChatGPT made itself (Code Interpreter output, images).
 // ChatGPT fills openaiFileIdRefs with {name, id, mime_type, download_link} for
-// each attached file; the links are short-lived and hosted by OpenAI.
-import { upload, toRecipients } from '../../_mcp.js';
+// each file; the links are short-lived and hosted by OpenAI.
+import { upload, shareOptions, fetchFile, fileFor } from '../../_mcp.js';
 import { gptUser, unauthorized } from './_auth.js';
 
-const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED = /\.(pdf|docx|png|jpe?g)$/i;
-// only fetch from OpenAI's file hosts, so this can't be pointed at anything else
+// only fetch from OpenAI's file hosts, so this can't be pointed at anything
+// else, and every redirect has to stay on them too
 const OPENAI_HOST = /(^|\.)(oaiusercontent\.com|openai\.com)$/i;
-
-async function fetchAttachment(ref) {
-  let url;
-  try { url = new URL(ref.download_link); } catch { throw new Error('bad download link'); }
-  if (url.protocol !== 'https:' || !OPENAI_HOST.test(url.hostname)) throw new Error('download link isn’t from ChatGPT');
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`couldn’t download it (${res.status})`);
-  if (Number(res.headers.get('content-length')) > MAX_BYTES) throw new Error('it’s over 10 MB');
-  const buf = await res.arrayBuffer();
-  if (buf.byteLength > MAX_BYTES) throw new Error('it’s over 10 MB');
-  return buf;
-}
 
 export async function onRequestPost(context) {
   const user = await gptUser(context);
@@ -27,28 +15,25 @@ export async function onRequestPost(context) {
 
   let body;
   try { body = await context.request.json(); } catch { return Response.json({ error: 'Send JSON.' }, { status: 400 }); }
-  const refs = (Array.isArray(body.openaiFileIdRefs) ? body.openaiFileIdRefs : []).slice(0, 5);
-  if (!refs.length) return Response.json({ error: 'Attach a file to the conversation first, then ask me to share it.' }, { status: 400 });
+  const refs = (Array.isArray(body?.openaiFileIdRefs) ? body.openaiFileIdRefs : []).slice(0, 5);
+  if (!refs.length) {
+    return Response.json({ error: 'No file was provided; include the file (attached or generated) in openaiFileIdRefs.' }, { status: 400 });
+  }
 
-  const opts = {
-    expires_hours: Math.min(Math.max(Number(body.expires_hours) || 24, 1), 240),
-    allow_download: Boolean(body.allow_download),
-    require_account: Boolean(body.require_account),
-    send_to: toRecipients(body.send_to),
-  };
-
+  const opts = shareOptions({ ...body, name: null });
   const shares = [], errors = [];
   for (const ref of refs) {
     const name = String(ref?.name || 'file');
-    if (!ALLOWED.test(name)) { errors.push({ file: name, error: 'Only PDF, DOCX, PNG and JPG files can be shared.' }); continue; }
     try {
-      const bytes = await fetchAttachment(ref);
-      const result = await upload(user, new File([bytes], name, { type: ref.mime_type || 'application/octet-stream' }),
+      const got = await fetchFile(ref?.download_link, context, { hostOk: host => OPENAI_HOST.test(host) });
+      if (got.error) { errors.push({ file: name, error: got.error }); continue; }
+      const result = await upload(user, fileFor(got.bytes, name),
         { ...opts, name: refs.length === 1 && body.name ? String(body.name).slice(0, 200) : null }, context);
       if (result.error) errors.push({ file: name, error: result.error });
       else shares.push(result);
     } catch (err) {
-      errors.push({ file: name, error: `Couldn’t share it: ${err.message}` });
+      console.error('gpt share failed', err);
+      errors.push({ file: name, error: 'Something went wrong. Try again.' });
     }
   }
   return Response.json({ shares, errors }, { status: shares.length ? 200 : 400 });

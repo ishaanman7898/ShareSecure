@@ -1,4 +1,4 @@
-import { getAuthClient, sha256 } from '../../_turso.js';
+import { getAuthClient, hashAccessCode } from '../../_turso.js';
 import { storeCommitment } from '../../_zk.js';
 
 export async function onRequestPost(context) {
@@ -11,16 +11,26 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { username, access_code, zk_commitment } = body;
-  if (!username || !access_code) {
+  const { access_code, zk_commitment } = body;
+  if (!body.username || !access_code) {
     return Response.json({ error: 'Username and access code required' }, { status: 400 });
   }
-  if (access_code.length < 6) {
+  if (String(access_code).length < 6) {
     return Response.json({ error: 'Access code must be at least 6 characters' }, { status: 400 });
   }
 
+  // New names are kept to a small set of characters, so look-alikes such as
+  // "alice" in Cyrillic can't pass for someone else. Existing accounts keep
+  // whatever name they have.
+  const username = String(body.username).trim().normalize('NFKC');
+  if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
+    return Response.json({
+      error: 'Usernames are 3 to 32 characters: letters, numbers, dots, dashes and underscores.'
+    }, { status: 400 });
+  }
+
   try {
-    const hashed = await sha256(access_code);
+    const hashed = await hashAccessCode(access_code, env);
     const db = getAuthClient(env);
     await db.execute({
       sql: `CREATE TABLE IF NOT EXISTS users (
@@ -31,6 +41,14 @@ export async function onRequestPost(context) {
       )`,
       args: []
     });
+    // "Alice" and "alice" are the same person
+    const taken = await db.execute({
+      sql: 'SELECT id FROM users WHERE lower(username) = lower(?) LIMIT 1',
+      args: [username]
+    });
+    if (taken.rows.length) {
+      return Response.json({ error: 'Username already exists' }, { status: 400 });
+    }
     await db.execute({
       sql: 'INSERT INTO users (username, access_code) VALUES (?, ?)',
       args: [username, hashed]

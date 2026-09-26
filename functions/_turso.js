@@ -184,83 +184,110 @@ async function hmacB64url(secret, msg) {
 }
 
 // ── Signed auth tokens ───────────────────────────────────────────────────────
-// New format: <b64url(payload_json)>.<b64url(hmac_sig)>
-// Legacy: <base64(username:userId)>  — accepted only if TOKEN_SECRET unset or for migration
+// Format: <b64url(payload_json)>.<b64url(hmac_sig)>. There is no unsigned
+// fallback: without TOKEN_SECRET nobody can sign in, rather than anyone being
+// able to make up a token. Tokens last 30 days.
+const TOKEN_TTL_S = 30 * 24 * 60 * 60;
+
 export async function signToken(payload, env) {
   const secret = env.TOKEN_SECRET || '';
-  if (!secret) {
-    // fall back to legacy unsigned format if no secret configured
-    return btoa(`${payload.username}:${payload.userId}`);
-  }
-  const body = b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  if (!secret) throw new Error('TOKEN_SECRET is not set');
+  const iat = typeof payload.iat === 'number' ? payload.iat : Math.floor(Date.now() / 1000);
+  const full = { ...payload, iat, exp: typeof payload.exp === 'number' ? payload.exp : iat + TOKEN_TTL_S };
+  const body = b64urlEncode(new TextEncoder().encode(JSON.stringify(full)));
   const sig = await hmacB64url(secret, body);
   return `${body}.${sig}`;
 }
 
 export async function verifyToken(authHeader, env) {
   if (!authHeader) return null;
-  const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
   const secret = env.TOKEN_SECRET || '';
+  if (!secret) return null;
+  const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+  const [body, sig] = tokenPart.split('.', 2);
+  if (!body || !sig) return null;
 
-  // signed token: payload.signature
-  if (tokenPart.includes('.')) {
-    const [body, sig] = tokenPart.split('.', 2);
-    if (!secret) return null;
-    const expected = await hmacB64url(secret, body);
-    if (!timingSafeEqual(sig, expected)) return null;
-    try {
-      const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(body)));
-      if (typeof payload.userId !== 'number' && typeof payload.userId !== 'string') return null;
-      return { username: payload.username, userId: parseInt(payload.userId, 10) };
-    } catch {
+  const expected = await hmacB64url(secret, body);
+  if (!timingSafeEqual(sig, expected)) return null;
+  try {
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(body)));
+    if (typeof payload.userId !== 'number' && typeof payload.userId !== 'string') return null;
+    // older tokens have no exp, so they run out 30 days after they were issued
+    const now = Math.floor(Date.now() / 1000);
+    if (typeof payload.exp === 'number') {
+      if (payload.exp < now) return null;
+    } else if (typeof payload.iat !== 'number' || payload.iat + TOKEN_TTL_S < now) {
       return null;
     }
-  }
-
-  // legacy token (accept only if TOKEN_SECRET not set — clean migration period)
-  if (!secret) {
-    try {
-      const decoded = atob(tokenPart);
-      const parts = decoded.split(':');
-      if (parts.length < 2) return null;
-      const userId = parseInt(parts[parts.length - 1], 10);
-      if (isNaN(userId)) return null;
-      return { username: parts.slice(0, -1).join(':'), userId };
-    } catch { return null; }
-  }
-  return null;
-}
-
-// Legacy synchronous decoder (still used by paths that haven't migrated yet).
-// Prefer verifyToken for new code.
-export function decodeToken(authHeader) {
-  if (!authHeader) return null;
-  try {
-    const tokenPart = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
-    if (tokenPart.includes('.')) {
-      // signed token — decode payload without verification (caller must verify separately)
-      const body = tokenPart.split('.', 1)[0];
-      const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(body)));
-      const userId = parseInt(payload.userId, 10);
-      if (isNaN(userId)) return null;
-      return { username: payload.username, userId };
-    }
-    const decoded = atob(tokenPart);
-    const parts = decoded.split(':');
-    if (parts.length < 2) return null;
-    const userId = parseInt(parts[parts.length - 1], 10);
-    if (isNaN(userId)) return null;
-    const username = parts.slice(0, -1).join(':');
-    return { username, userId };
+    const userId = parseInt(payload.userId, 10);
+    if (!Number.isSafeInteger(userId) || userId < 1) return null;
+    const user = (await getAuthClient(env).execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] })).rows[0];
+    if (!user) return null;
+    return { username: user.username, userId };
   } catch {
     return null;
   }
+}
+
+// ── Secrets compared without leaking timing ──────────────────────────────────
+// Hashing both sides first means the compare always runs over 64 characters,
+// whatever was sent, so it gives away neither the length nor a matching prefix.
+export async function tokensMatch(given, stored) {
+  if (!given || !stored || typeof given !== 'string' || typeof stored !== 'string') return false;
+  return timingSafeEqual(await sha256(given), await sha256(stored));
+}
+
+// ── Access codes ─────────────────────────────────────────────────────────────
+// Stored as pbkdf2$<iterations>$<salt b64>$<hash b64>, with a random salt per
+// account. Cloudflare Workers refuse PBKDF2 above 100,000 iterations, and the
+// free plan gives a request about 10 ms of CPU, so the default is 10,000; set
+// PBKDF2_ITER higher on a paid plan (each hash records its own count). Accounts
+// made before this have a plain SHA-256 hex digest; login upgrades them.
+const PBKDF2_MAX_ITER = 100000;
+const PBKDF2_DEFAULT_ITER = 10000;
+
+function pbkdf2Iterations(env) {
+  const n = parseInt(env?.PBKDF2_ITER, 10);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, PBKDF2_MAX_ITER) : PBKDF2_DEFAULT_ITER;
+}
+
+async function pbkdf2(code, salt, iterations) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, key, 256);
+  return new Uint8Array(bits);
+}
+
+export async function hashAccessCode(code, env) {
+  const iterations = pbkdf2Iterations(env);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await pbkdf2(String(code), salt, iterations);
+  return `pbkdf2$${iterations}$${bufToB64(salt)}$${bufToB64(hash)}`;
+}
+
+// { ok, upgrade }: upgrade is true when the stored hash is the old unsalted kind.
+export async function checkAccessCode(code, stored, env) {
+  if (!code || !stored) return { ok: false, upgrade: false };
+  if (stored.startsWith('pbkdf2$')) {
+    const [, iter, saltB64, hashB64] = stored.split('$');
+    const iterations = parseInt(iter, 10);
+    if (!iterations || !saltB64 || !hashB64) return { ok: false, upgrade: false };
+    const hash = await pbkdf2(String(code), b64ToBytes(saltB64), iterations);
+    return { ok: timingSafeEqual(bufToB64(hash), hashB64), upgrade: false };
+  }
+  if (/^[0-9a-f]{64}$/i.test(stored)) {
+    const ok = timingSafeEqual(await sha256(String(code)), stored.toLowerCase());
+    return { ok, upgrade: ok };
+  }
+  return { ok: false, upgrade: false };
 }
 
 // ── User pseudonym (HMAC tag) ────────────────────────────────────────────────
 // Stored in files.user_tag instead of raw user_id. Without TAG_SECRET, the row
 // reveals nothing about which account uploaded it. Server reverses by computing
 // the tag from the authenticated user's id at query time.
+// Falling back to TOKEN_SECRET is on purpose: deployments that never set
+// TAG_SECRET already have rows tagged with it, and changing the key would cut
+// those accounts off from their own files and inbox.
 export async function getUserTag(userId, env) {
   const secret = env.TAG_SECRET || env.TOKEN_SECRET || '';
   if (!secret) return null;
@@ -305,7 +332,7 @@ function bufToB64(buffer) {
   return btoa(str);
 }
 
-function b64ToBytes(b64) {
+export function b64ToBytes(b64) {
   if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
@@ -439,8 +466,12 @@ export async function loadFileBytes(client, file, env) {
 // Links can be limited to people signed in to ShareSecure. Returns the response
 // to send when the viewer isn't signed in, or null when they may continue.
 export async function signInRequired(file, request, env) {
-  if (!file?.require_account) return null;
-  if (await verifyToken(request.headers.get('Authorization'), env)) return null;
+  if (!file?.require_account && !file?.recipient_user_tag) return null;
+  const auth = await verifyToken(request.headers.get('Authorization'), env);
+  if (auth) {
+    if (!file.recipient_user_tag || file.recipient_user_tag === await getUserTag(auth.userId, env)) return null;
+    return Response.json({ error: 'This file was sent to another account.', code: 'recipient_required' }, { status: 403 });
+  }
   return Response.json(
     { error: 'Sign in to ShareSecure to open this file.', code: 'sign_in_required' },
     { status: 401 }

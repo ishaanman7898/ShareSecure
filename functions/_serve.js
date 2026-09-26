@@ -15,6 +15,21 @@ function contentDisposition(type, filename) {
   return `${type}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
+// Only the types uploads accept are sent as themselves. Text is always plain
+// UTF-8 text in the viewer (never HTML), and anything unexpected is just bytes.
+const SERVED_TYPES = new Set([
+  'application/pdf', 'image/png', 'image/jpeg', 'image/jpg',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+const TEXT_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv']);
+
+function contentType(mimeType, disposition) {
+  if (TEXT_TYPES.has(mimeType)) {
+    return `${disposition === 'inline' ? 'text/plain' : mimeType}; charset=utf-8`;
+  }
+  return SERVED_TYPES.has(mimeType) ? mimeType : 'application/octet-stream';
+}
+
 export async function serveFile(context, { disposition }) {
   const { params, env, request } = context;
   const client = getFilesClient(env);
@@ -63,7 +78,8 @@ export async function serveFile(context, { disposition }) {
 
   return new Response(loaded.buffer, {
     headers: {
-      'Content-Type': mimeType,
+      'Content-Type': contentType(mimeType, disposition),
+      'X-Content-Type-Options': 'nosniff',
       'Content-Disposition': contentDisposition(disposition, filename),
       'Content-Length': String(loaded.buffer.byteLength),
       'Cache-Control': 'no-store',
