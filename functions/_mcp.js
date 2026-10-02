@@ -1,30 +1,32 @@
-// MCP (Model Context Protocol) server for the hosted site, so assistants and
-// agents (Claude, ChatGPT, Claude Code, Codex, any MCP client) can share files
-// for the signed-in user and send them to people, all by themselves.
+// The MCP server for the website: lets assistants (Claude, ChatGPT, Claude
+// Code, Codex, any MCP client) share files for a user and send them to people
+// by themselves. The ChatGPT actions in api/gpt/ reuse the same functions.
 //
-// Auth is a personal token the user creates in the account menu; only its
-// SHA-256 is stored. The assistant hands over the content itself, whichever
-// way it can:
-//   share_text        text it wrote or has in the conversation (.md/.txt/.csv)
-//   share_file        content_base64 (small files it can read, e.g. in a code
-//                     sandbox) or source_url (the server downloads it)
-//   begin_upload…     chunks, for bigger files from clients that base64 in code
-//   share_file path   a one-time curl command, for assistants with a shell
-// Only when none of those can work does it hand the user an upload page
-// (/drop/<ticket>); upload_status then gives the assistant the link.
-// Everything goes through the normal upload endpoint, so the type check, the
-// 5-a-day limit and encryption all apply.
+// Sign-in is a personal token the user makes in the account menu; only its
+// SHA-256 is stored. The assistant hands over the file whichever way it can:
+//   share_text         text it wrote (.md / .txt / .csv)
+//   share_file         content_base64 (small files), source_url (we download
+//                      it), or path (a one-time curl command for a shell)
+//   begin_upload …     bigger files in chunks
+//   ask_user           last resort: an upload page for the person
+//
+// Shares are end-to-end encrypted by default. The server encrypts the file
+// with a fresh key, puts the key in the link after "#", seals it to the owner
+// and to anyone it's sent to, and then forgets it. So the stored file can't be
+// read by ShareSecure later, even though the server saw it while sharing it.
 
 import {
-  getAuthClient, getFilesClient, getUserTag, signToken, sha256, getEncKey,
-  encryptStr, decryptStr, encryptField, decryptField, migrateOnce, deleteBranch
+  getDb, getUserTag, signToken, sha256, encryptStr, decryptStr, encryptField, decryptField,
+  migrateOnce, deleteBranch, randomId, ensureFileColumns, findUser, ensureUserColumns
 } from './_turso.js';
 import { onRequestPost as uploadHandler } from './api/upload.js';
 import { onRequestPost as sendHandler } from './api/send/[shortId].js';
+import { newFileKey, lockFile, lockMeta, unlockMeta, lockText, sealKey, linkWithKey, keyFromLink } from '../public/sealed.js';
+import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../public/filetypes.js';
+import pkg from '../package.json';
 
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
-// long enough for a person to open the upload page, pick a file and send it
-const TICKET_TTL_MS = 30 * 60 * 1000;
+const TICKET_TTL_MS = 30 * 60 * 1000;    // long enough to open the upload page and pick a file
 const UPLOAD_TTL_MS = 30 * 60 * 1000;
 const MAX_BYTES = 10 * 1024 * 1024;      // same as the upload endpoint
 const INLINE_MAX = 2 * 1024 * 1024;      // content_base64, decoded
@@ -33,32 +35,24 @@ const TEXT_MAX = 200000;                 // share_text, characters
 const MAX_OPEN_TICKETS = 10;
 const MAX_OPEN_UPLOADS = 3;
 const MAX_BATCH = 10;
-// the path a shell command uploads has to be one of these
-const SHAREABLE = /\.(pdf|docx|png|jpe?g|txt|md|markdown|csv)$/i;
-const TYPES_ERROR = 'Only PDF, DOCX, PNG, JPG and text (.txt, .md, .csv) files can be shared.';
-
-function randomToken(bytes = 30) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), b => chars[b % chars.length]).join('');
-}
+const SHAREABLE = /\.(pdf|docx|png|jpe?g|txt|md|markdown|csv)$/i;   // what a shell command may upload
 
 const nowIso = () => new Date().toISOString();
 
 async function ensureTables(env) {
-  await migrateOnce('mcp2', getAuthClient(env), [
+  await migrateOnce('mcp2', getDb(env), [
     `CREATE TABLE IF NOT EXISTS api_tokens (
        user_id    INTEGER PRIMARY KEY,
        token_hash TEXT UNIQUE NOT NULL,
        created_at TEXT NOT NULL
      )`,
+    // one-time upload commands and pages; options and result are encrypted
     `CREATE TABLE IF NOT EXISTS mcp_tickets (
        ticket_hash TEXT PRIMARY KEY,
        user_id     INTEGER NOT NULL,
        options     TEXT NOT NULL,
        expires_at  TEXT NOT NULL
      )`,
-    // a public id the assistant checks with upload_status, and what happened
-    // once the ticket was used (the result is encrypted)
     'ALTER TABLE mcp_tickets ADD COLUMN ticket_id TEXT',
     'ALTER TABLE mcp_tickets ADD COLUMN status TEXT',
     'ALTER TABLE mcp_tickets ADD COLUMN result TEXT',
@@ -83,12 +77,12 @@ async function ensureTables(env) {
   ]);
 }
 
-// Old tickets and unfinished uploads are removed now and then, in the background.
+// Old tickets and unfinished uploads are cleared now and then, in the background.
 let lastCleanUp = 0;
 function cleanUp(context) {
   if (Date.now() - lastCleanUp < 60 * 1000) return;
   lastCleanUp = Date.now();
-  const db = getAuthClient(context.env);
+  const db = getDb(context.env);
   const now = nowIso();
   context.waitUntil((async () => {
     await db.execute({ sql: 'DELETE FROM mcp_tickets WHERE expires_at < ?', args: [now] });
@@ -98,27 +92,27 @@ function cleanUp(context) {
 }
 
 // ── personal tokens ──────────────────────────────────────────────────────────
+
 export async function tokenStatus(userId, env) {
   await ensureTables(env);
-  const row = (await getAuthClient(env).execute({ sql: 'SELECT created_at FROM api_tokens WHERE user_id = ?', args: [userId] })).rows[0];
+  const row = (await getDb(env).execute({ sql: 'SELECT created_at FROM api_tokens WHERE user_id = ?', args: [userId] })).rows[0];
   return { hasToken: Boolean(row), createdAt: row?.created_at || null };
 }
 
-// Creating a token replaces the old one, so a leaked token can be cut off.
+// A new token replaces the old one, so a leaked token can be cut off.
 export async function createToken(userId, env) {
-  await ensureTables(env);
   await revokeToken(userId, env);
-  const token = 'ss_' + randomToken(36);
-  await getAuthClient(env).execute({
+  const token = 'ss_' + randomId(36);
+  await getDb(env).execute({
     sql: 'INSERT OR REPLACE INTO api_tokens (user_id, token_hash, created_at) VALUES (?, ?, ?)',
-    args: [userId, await sha256(token), new Date().toISOString()]
+    args: [userId, await sha256(token), nowIso()]
   });
   return token;
 }
 
 export async function revokeToken(userId, env) {
   await ensureTables(env);
-  const db = getAuthClient(env);
+  const db = getDb(env);
   await db.execute({ sql: 'DELETE FROM api_tokens WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM mcp_tickets WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM mcp_upload_chunks WHERE upload_hash IN (SELECT upload_hash FROM mcp_uploads WHERE user_id = ?)', args: [userId] });
@@ -130,20 +124,29 @@ export async function userForToken(header, env) {
   const token = (header || '').replace(/^Bearer\s+/i, '');
   if (!token.startsWith('ss_')) return null;
   await ensureTables(env);
-  const db = getAuthClient(env);
+  const db = getDb(env);
   const row = (await db.execute({ sql: 'SELECT user_id FROM api_tokens WHERE token_hash = ?', args: [await sha256(token)] })).rows[0];
   if (!row) return null;
   const user = (await db.execute({ sql: 'SELECT id, username FROM users WHERE id = ?', args: [row.user_id] })).rows[0];
   return user ? { userId: Number(user.id), username: user.username } : null;
 }
 
-// A normal session token for the user, so MCP calls reuse the regular endpoints.
+// A normal session for the user, so MCP calls go through the regular endpoints.
 async function sessionHeader(user, env) {
-  const token = await signToken({ username: user.username, userId: user.userId, iat: Math.floor(Date.now() / 1000) }, env);
-  return `Bearer ${token}`;
+  return `Bearer ${await signToken({ username: user.username, userId: user.userId }, env)}`;
+}
+
+// An account's public key for end-to-end encryption, or null if it has none yet.
+async function publicKeyOf(db, where) {
+  await ensureUserColumns(db);
+  const row = where.userId
+    ? (await db.execute({ sql: 'SELECT public_key FROM users WHERE id = ?', args: [where.userId] })).rows[0]
+    : await findUser(db, where.username, 'public_key');
+  return row === undefined || row === null ? undefined : row.public_key || null;
 }
 
 // ── options every share tool takes ───────────────────────────────────────────
+
 export function shareOptions(args = {}) {
   return {
     expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
@@ -152,6 +155,8 @@ export function shareOptions(args = {}) {
     name: args.name ? String(args.name).slice(0, 200) : null,
     send_to: toRecipients(args.send_to),
     note: args.note ? String(args.note).trim().slice(0, 140) : '',
+    // end-to-end encrypted unless the assistant asks otherwise
+    private: args.private !== false && args.private !== 'false',
   };
 }
 
@@ -161,53 +166,90 @@ export function toRecipients(value) {
   return [...new Set(list.map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
 }
 
-// ── uploads ──────────────────────────────────────────────────────────────────
-// Hand a regular endpoint a new request; waitUntil must stay bound to the real context.
+// ── sharing ──────────────────────────────────────────────────────────────────
+
+// A request for one of the regular endpoints; waitUntil stays tied to the real one.
 function withRequest(context, request, params = {}) {
   return { request, env: context.env, params, waitUntil: p => context.waitUntil(p) };
 }
 
+// Shares a File for the user, then sends it to anyone in opts.send_to.
+// → { url, name, expires_at, id, private, sent_to, not_sent } or { error }
 export async function upload(user, file, opts, context) {
   if (file?.error) return { error: file.error };
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('expires_hours', String(opts.expires_hours));
-  fd.append('allow_download', opts.allow_download ? '1' : '0');
-  fd.append('allow_annotations', '0');
-  fd.append('require_account', opts.require_account ? '1' : '0');
-  if (opts.name) fd.append('display_name', opts.name);
+  const { env } = context;
+  const form = new FormData();
+  let key = null, name = null;
+
+  if (opts.private) {
+    // check the type here, while the file can still be read, then seal it
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.length > MAX_BYTES) return { error: 'File too large. Max 10MB.' };
+    const type = detectType(bytes, file.name, file.type);
+    if (!type || type === NOT_UTF8) return { error: type ? ENCODING_ERROR : TYPES_ERROR };
+    key = newFileKey();
+    name = nameFor(opts.name, file.name, type);
+    form.append('file', new File([await lockFile(key, bytes)], 'sealed.bin'));
+    form.append('e2e', '1');
+    form.append('meta', await lockMeta(key, { name, type }));
+    // sealed to the owner too, so the link shows up whole in their Your shares
+    const ownKey = await publicKeyOf(getDb(env), { userId: user.userId });
+    if (ownKey) form.append('owner_key', await sealKey(ownKey, key));
+  } else {
+    form.append('file', file);
+    if (opts.name) form.append('display_name', opts.name);
+  }
+  form.append('expires_hours', String(opts.expires_hours));
+  form.append('allow_download', opts.allow_download ? '1' : '0');
+  form.append('allow_annotations', '0');
+  form.append('require_account', opts.require_account ? '1' : '0');
+
   const request = new Request(new URL('/api/upload', context.request.url), {
-    method: 'POST',
-    headers: { Authorization: await sessionHeader(user, context.env) },
-    body: fd,
+    method: 'POST', headers: { Authorization: await sessionHeader(user, env) }, body: form,
   });
   const res = await uploadHandler(withRequest(context, request));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { error: data.error || `Upload failed (${res.status})` };
 
-  const result = { url: data.shortUrl, name: data.displayName || opts.name || data.filename, expires_at: data.expiresAt, id: data.shortId };
-  return { ...result, ...await sendToUsers(user, data.shortId, opts.send_to, opts.note, data.deleteToken, context) };
+  const result = {
+    url: key ? linkWithKey(data.shortUrl, key) : data.shortUrl,
+    name: name || data.displayName || data.filename,
+    expires_at: data.expiresAt,
+    id: data.shortId,
+    private: Boolean(key),
+  };
+  return { ...result, ...await sendToUsers(user, data.shortId, opts.send_to, opts.note, data.deleteToken, context, key) };
 }
 
-// Each recipient gets their own copy as a request they accept or decline. The
-// delete token proves the account owns the share it's sending.
-export async function sendToUsers(user, shortId, list, note, deleteToken, context) {
+// Gives each username their own copy, as a request they accept or decline.
+// For an end-to-end encrypted share, `key` is sealed to each person's public key.
+export async function sendToUsers(user, shortId, list, note, deleteToken, context, key = null) {
   const sent_to = [], not_sent = [];
   const recipients = toRecipients(list);
   if (!recipients.length) return { sent_to, not_sent };
+  const db = getDb(context.env);
   const auth = await sessionHeader(user, context.env);
+
   for (const username of recipients) {
-    const body = { targetUsername: username };
-    if (note) body.note = note;
-    if (deleteToken) body.deleteToken = deleteToken;
-    const sendReq = new Request(new URL(`/api/send/${shortId}`, context.request.url), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: auth },
-      body: JSON.stringify(body),
-    });
+    const body = { targetUsername: username, deleteToken };
+    if (key) {
+      const theirKey = await publicKeyOf(db, { username });
+      if (theirKey === undefined) { not_sent.push({ username, reason: 'No user with that name' }); continue; }
+      if (!theirKey) {
+        not_sent.push({ username, reason: 'They haven’t signed in since end-to-end encryption was added, so there’s no key to seal it to yet. Ask them to sign in once, or share it again with private: false.' });
+        continue;
+      }
+      body.sealed_key = await sealKey(theirKey, key);
+      if (note) body.note = await lockText(key, note, 'note');
+    } else if (note) {
+      body.note = note;
+    }
     let sent = {};
     try {
-      sent = await (await sendHandler(withRequest(context, sendReq, { shortId }))).json().catch(() => ({}));
+      const req = new Request(new URL(`/api/send/${shortId}`, context.request.url), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: auth }, body: JSON.stringify(body),
+      });
+      sent = await (await sendHandler(withRequest(context, req, { shortId }))).json().catch(() => ({}));
     } catch (err) {
       console.error('mcp send failed', err);
     }
@@ -230,15 +272,14 @@ function cleanName(name) {
   return String(name || '').split(/[\\/]/).pop().replace(/[\x00-\x1F\x7F<>:"|?*]/g, '').trim().slice(0, 150);
 }
 
-// names that promise a file which is never text, so text under them is a mistake
-// (usually a web page or error page downloaded instead of the real file)
+// names that promise a file that's never text (usually a web page or error
+// page was downloaded instead of the real file)
 const BINARY_EXT = /\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|heic|zip)$/i;
 const looksLikeHtml = bytes => /^\s*<(!doctype html|html|head|body)\b/i.test(new TextDecoder().decode(bytes.subarray(0, 512)));
 
-// A file named to match what its bytes are ("chart" + PNG bytes → "chart.png").
-// Anything that isn't PDF, PNG, JPG or DOCX is offered as text; the upload
-// endpoint checks it really is. Returns { error } when the name says PDF (or
-// another non-text type) but the bytes aren't one.
+// A File named to match its bytes ("chart" + PNG bytes → "chart.png").
+// Anything that isn't PDF, PNG, JPG or DOCX is offered as text, and the upload
+// checks it really is. → File, or { error } when the name and bytes disagree.
 export function fileFor(bytes, filename, fallback = 'file') {
   let name = cleanName(filename) || fallback;
   const sig = SIGNATURES.find(s => s.bytes.every((b, i) => bytes[i] === b));
@@ -260,12 +301,12 @@ export function fileFor(bytes, filename, fallback = 'file') {
   return new File([bytes], name, { type: 'text/plain' });
 }
 
-// Base64 from a tool call → bytes. The size and characters are checked before
-// decoding; a data: prefix, whitespace and url-safe base64 are all fine.
+// Base64 from a tool call → bytes. Size and characters are checked first; a
+// data: prefix, whitespace and url-safe base64 are all fine.
 function decodeBase64(input, maxBytes) {
   const raw = String(input || '');
   const maxChars = Math.ceil(maxBytes / 3) * 4;
-  const tooBig = { error: `That’s over ${maxBytes / 1024 >= 1024 ? `${maxBytes / 1024 / 1024} MB` : `${maxBytes / 1024} KB`} once decoded.` };
+  const tooBig = { error: `That’s over ${maxBytes >= 1024 * 1024 ? `${maxBytes / 1024 / 1024} MB` : `${maxBytes / 1024} KB`} once decoded.` };
   if (raw.length > maxChars * 2 + 256) return tooBig;
   const s = raw.replace(/^data:[^,]{0,200},/, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
   if (!s) return { error: 'The base64 is empty.' };
@@ -277,8 +318,7 @@ function decodeBase64(input, maxBytes) {
   return { bytes };
 }
 
-// the runtime's own decoder when it has one, otherwise atob a piece at a time
-// (a per-byte callback over the whole string is too slow for Workers)
+// the runtime's own decoder when there is one, else atob a piece at a time
 function base64ToBytes(b64) {
   if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(b64);
   const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
@@ -292,13 +332,12 @@ function base64ToBytes(b64) {
 }
 
 async function hexDigest(bytes) {
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // ── downloading a file from a link ───────────────────────────────────────────
-// Only public https addresses: no IPs, no local or internal names, and never
-// this site itself. Every redirect is checked again.
+// Only public https addresses: no IPs, no local names, never this site itself.
+// Every redirect is checked again.
 const PRIVATE_NAMES = /(^|\.)(localhost|local|internal|lan|intranet|home\.arpa)$/i;
 
 function badUrl(url, context, hostOk) {
@@ -348,8 +387,7 @@ function nameFromResponse(res, url) {
   try { return decodeURIComponent(last); } catch { return last; }
 }
 
-// → { bytes, filename } or { error }. Workers' fetch never sends the user's
-// cookies or sign-in, so the link is fetched as a stranger would see it.
+// → { bytes, filename } or { error }. Fetched as a stranger: no cookies, no sign-in.
 export async function fetchFile(rawUrl, context, { hostOk } = {}) {
   let url;
   try { url = new URL(String(rawUrl || '').trim()); } catch { return { error: 'That isn’t a valid link.' }; }
@@ -388,13 +426,18 @@ export async function fetchFile(rawUrl, context, { hostOk } = {}) {
 
 // ── one-time upload commands and pages ───────────────────────────────────────
 // POST /api/mcp/upload/:ticket (multipart, field "file"): the curl command and
-// the /drop page both use it. The ticket works once; afterwards it keeps the
-// result for a while so the assistant can read it with upload_status.
+// the /drop page both use it. A ticket works once. Afterwards its result is
+// kept for a while for upload_status, minus the link's key: the full link was
+// already printed by the command or shown on the page.
+
+// the result as it's kept on the server: never the key
+const withoutKey = r => ({ ...r, url: r.url ? r.url.split('#')[0] : r.url });
+
 export async function redeemTicket(ticket, context) {
   const { env, request } = context;
   await ensureTables(env);
   cleanUp(context);
-  const db = getAuthClient(env);
+  const db = getDb(env);
   const hash = await sha256(String(ticket || ''));
   const gone = () => Response.json({ error: 'This upload command has expired or was already used. Ask for a new one.' }, { status: 410 });
 
@@ -404,7 +447,7 @@ export async function redeemTicket(ticket, context) {
     args: [hash, nowIso()]
   });
   if (!claim.rowsAffected) return gone();
-  // if this upload doesn't work, the page can be used again
+  // if this upload doesn't work, the ticket can be used again
   const release = () => db.execute({ sql: 'UPDATE mcp_tickets SET status = NULL WHERE ticket_hash = ?', args: [hash] }).catch(() => {});
 
   const row = (await db.execute({ sql: 'SELECT user_id, options FROM mcp_tickets WHERE ticket_hash = ?', args: [hash] })).rows[0];
@@ -428,8 +471,8 @@ export async function redeemTicket(ticket, context) {
 
   let result;
   try {
-    const opts = JSON.parse(await decryptStr(row.options, await getEncKey(env), env, 'mcpticket:' + hash));
-    result = await upload({ userId: Number(user.id), username: user.username }, file, { note: '', ...opts }, context);
+    const opts = JSON.parse(await decryptStr(row.options, null, env, 'mcpticket:' + hash));
+    result = await upload({ userId: Number(user.id), username: user.username }, file, { note: '', private: true, ...opts }, context);
   } catch (err) {
     console.error('ticket upload failed', err);
     await release();
@@ -441,13 +484,13 @@ export async function redeemTicket(ticket, context) {
   }
   await db.execute({
     sql: "UPDATE mcp_tickets SET status = 'done', options = '{}', result = ?, expires_at = ? WHERE ticket_hash = ?",
-    args: [await encryptStr(JSON.stringify(result), await getEncKey(env), env, 'mcpticket:' + hash), new Date(Date.now() + TICKET_TTL_MS).toISOString(), hash]
+    args: [await encryptStr(JSON.stringify(withoutKey(result)), null, env, 'mcpticket:' + hash), new Date(Date.now() + TICKET_TTL_MS).toISOString(), hash]
   }).catch(err => console.error('ticket result not saved', err));
   return Response.json(result);
 }
 
 async function newTicket(user, opts, context) {
-  const db = getAuthClient(context.env);
+  const db = getDb(context.env);
   const open = (await db.execute({
     sql: "SELECT COUNT(*) AS n FROM mcp_tickets WHERE user_id = ? AND expires_at > ? AND (status IS NULL OR status = 'uploading')",
     args: [user.userId, nowIso()]
@@ -455,14 +498,14 @@ async function newTicket(user, opts, context) {
   if (Number(open?.n) >= MAX_OPEN_TICKETS) {
     return { error: `There are already ${MAX_OPEN_TICKETS} unused upload pages or commands. Use one of them, or wait up to 30 minutes for them to expire.` };
   }
-  const ticket = randomToken(32);
-  const ticketId = randomToken(12);
+  const ticket = randomId(32);
+  const ticketId = randomId(12);
   const hash = await sha256(ticket);
-  // the options hold the note and who it's sent to, so they're encrypted like the result
-  const options = await encryptStr(JSON.stringify(opts), await getEncKey(context.env), context.env, 'mcpticket:' + hash);
+  // the options hold the note and who it's for, so they're encrypted
   await db.execute({
     sql: 'INSERT INTO mcp_tickets (ticket_hash, user_id, options, expires_at, ticket_id) VALUES (?, ?, ?, ?, ?)',
-    args: [hash, user.userId, options, new Date(Date.now() + TICKET_TTL_MS).toISOString(), ticketId]
+    args: [hash, user.userId, await encryptStr(JSON.stringify(opts), null, context.env, 'mcpticket:' + hash),
+      new Date(Date.now() + TICKET_TTL_MS).toISOString(), ticketId]
   });
   const origin = new URL(context.request.url).origin;
   return { ticketId, uploadUrl: `${origin}/api/mcp/upload/${ticket}`, pageUrl: `${origin}/drop/${ticket}` };
@@ -470,7 +513,7 @@ async function newTicket(user, opts, context) {
 
 async function uploadStatus(user, ticketId, context) {
   const { env } = context;
-  const row = ticketId && (await getAuthClient(env).execute({
+  const row = ticketId && (await getDb(env).execute({
     sql: 'SELECT ticket_hash, status, result, expires_at FROM mcp_tickets WHERE ticket_id = ? AND user_id = ?',
     args: [ticketId, user.userId]
   })).rows[0];
@@ -478,20 +521,22 @@ async function uploadStatus(user, ticketId, context) {
     return { error: 'No upload page with that ticket_id. It may have expired (they last 30 minutes); make a new one with share_file.' };
   }
   if (row.status === 'done') {
-    const result = JSON.parse(await decryptStr(row.result, await getEncKey(env), env, 'mcpticket:' + row.ticket_hash));
-    return { text: `Upload complete.\n${resultText(result)}` };
+    const result = JSON.parse(await decryptStr(row.result, null, env, 'mcpticket:' + row.ticket_hash));
+    const keyNote = result.private
+      ? '\nThis link has no key on the end: the full link was printed by the upload command, or shown to the user on the upload page, and it’s in their Your shares. Use that one.'
+      : '';
+    return { text: `Upload complete.\n${resultText(result)}${keyNote}`, data: result };
   }
   if (row.status === 'uploading') return { text: 'The file is uploading right now. Check again in a few seconds.' };
-  return { text: `No file has arrived yet. Run the upload command in your code environment, then check again. It expires at ${row.expires_at}.` };
+  return { text: `No file has arrived yet. It expires at ${row.expires_at}.` };
 }
 
 // ── chunked uploads ──────────────────────────────────────────────────────────
 async function openUpload(user, uploadId, env) {
   if (!uploadId) return null;
-  const hash = await sha256(String(uploadId));
-  return (await getAuthClient(env).execute({
+  return (await getDb(env).execute({
     sql: 'SELECT upload_hash, meta, size, received, next_index FROM mcp_uploads WHERE upload_hash = ? AND user_id = ? AND expires_at > ?',
-    args: [hash, user.userId, nowIso()]
+    args: [await sha256(String(uploadId)), user.userId, nowIso()]
   })).rows[0] || null;
 }
 
@@ -508,18 +553,17 @@ async function beginUpload(user, args, context) {
   const sha = args.sha256 ? String(args.sha256).trim().toLowerCase() : '';
   if (sha && !/^[0-9a-f]{64}$/.test(sha)) return { error: 'sha256 must be 64 hex characters.' };
 
-  const db = getAuthClient(env);
+  const db = getDb(env);
   const open = (await db.execute({
-    sql: 'SELECT COUNT(*) AS n FROM mcp_uploads WHERE user_id = ? AND expires_at > ?',
-    args: [user.userId, nowIso()]
+    sql: 'SELECT COUNT(*) AS n FROM mcp_uploads WHERE user_id = ? AND expires_at > ?', args: [user.userId, nowIso()]
   })).rows[0];
   if (Number(open?.n) >= MAX_OPEN_UPLOADS) {
     return { error: `There are already ${MAX_OPEN_UPLOADS} unfinished uploads. Finish one, or wait up to 30 minutes for them to expire.` };
   }
 
-  const uploadId = 'up_' + randomToken(24);
+  const uploadId = 'up_' + randomId(24);
   const hash = await sha256(uploadId);
-  const meta = await encryptStr(JSON.stringify({ filename, sha256: sha, opts: shareOptions(args) }), await getEncKey(env), env, 'mcpup:' + hash);
+  const meta = await encryptStr(JSON.stringify({ filename, sha256: sha, opts: shareOptions(args) }), null, env, 'mcpup:' + hash);
   await db.execute({
     sql: 'INSERT INTO mcp_uploads (upload_hash, user_id, meta, size, expires_at) VALUES (?, ?, ?, ?, ?)',
     args: [hash, user.userId, meta, size, new Date(Date.now() + UPLOAD_TTL_MS).toISOString()]
@@ -531,7 +575,8 @@ async function beginUpload(user, args, context) {
       `chunk_size: ${CHUNK_SIZE} bytes`,
       `chunks: ${chunks} (index 0${chunks > 1 ? ` to ${chunks - 1}` : ''})`,
       'Send each chunk with upload_chunk, in order, then call finish_upload. The upload expires in 30 minutes.',
-    ].join('\n')
+    ].join('\n'),
+    data: { upload_id: uploadId, chunk_size: CHUNK_SIZE, chunks },
   };
 }
 
@@ -540,7 +585,7 @@ async function uploadChunk(user, args, context) {
   const up = await openUpload(user, args.upload_id, env);
   if (!up) return NO_UPLOAD;
   const index = Number(args.index);
-  const retry = up.next_index > 0 && index === up.next_index - 1;
+  const retry = up.next_index > 0 && index === up.next_index - 1;   // resending the last one is fine
   if (!Number.isInteger(index) || index < 0 || (index !== up.next_index && !retry)) {
     return { error: `Send chunk ${up.next_index} next${up.next_index ? ` (or ${up.next_index - 1} again)` : ''}.` };
   }
@@ -551,7 +596,7 @@ async function uploadChunk(user, args, context) {
     return { error: `Chunk ${index} doesn’t match its sha256. Encode it again and resend it.` };
   }
 
-  const db = getAuthClient(env);
+  const db = getDb(env);
   let received = up.received + bytes.length;
   if (retry) {
     const old = (await db.execute({ sql: 'SELECT len FROM mcp_upload_chunks WHERE upload_hash = ? AND idx = ?', args: [up.upload_hash, index] })).rows[0];
@@ -559,10 +604,9 @@ async function uploadChunk(user, args, context) {
   }
   if (received > up.size) return { error: `That’s more than the ${up.size} bytes begin_upload was told the file is.` };
 
-  const data = await encryptField(bytes, await getEncKey(env), env, `mcpup:${up.upload_hash}:${index}`);
   await db.execute({
     sql: 'INSERT OR REPLACE INTO mcp_upload_chunks (upload_hash, idx, len, data) VALUES (?, ?, ?, ?)',
-    args: [up.upload_hash, index, bytes.length, data]
+    args: [up.upload_hash, index, bytes.length, await encryptField(bytes, null, env, `mcpup:${up.upload_hash}:${index}`)]
   });
   const moved = await db.execute({
     sql: 'UPDATE mcp_uploads SET next_index = ?, received = ? WHERE upload_hash = ? AND next_index = ?',
@@ -583,8 +627,7 @@ async function finishUpload(user, args, context) {
     return { error: `Only ${up.received} of ${up.size} bytes have arrived. Send chunk ${up.next_index} next.` };
   }
 
-  const db = getAuthClient(env);
-  const key = await getEncKey(env);
+  const db = getDb(env);
   const drop = () => Promise.all([
     db.execute({ sql: 'DELETE FROM mcp_upload_chunks WHERE upload_hash = ?', args: [up.upload_hash] }),
     db.execute({ sql: 'DELETE FROM mcp_uploads WHERE upload_hash = ?', args: [up.upload_hash] }),
@@ -599,7 +642,7 @@ async function finishUpload(user, args, context) {
       args: [up.upload_hash, from, from + 5]
     })).rows;
     for (const r of rows) {
-      const piece = new Uint8Array(await decryptField(r.data, key, env, `mcpup:${up.upload_hash}:${r.idx}`));
+      const piece = new Uint8Array(await decryptField(r.data, null, env, `mcpup:${up.upload_hash}:${r.idx}`));
       if (o + piece.length > up.size) break;
       bytes.set(piece, o);
       o += piece.length;
@@ -610,44 +653,49 @@ async function finishUpload(user, args, context) {
     return { error: 'Some chunks went missing. Start again with begin_upload.' };
   }
 
-  const meta = JSON.parse(await decryptStr(up.meta, key, env, 'mcpup:' + up.upload_hash));
+  const meta = JSON.parse(await decryptStr(up.meta, null, env, 'mcpup:' + up.upload_hash));
   if (meta.sha256 && (await hexDigest(bytes)) !== meta.sha256) {
     await drop();
     return { error: 'The file doesn’t match the sha256 given to begin_upload. Start again with begin_upload.' };
   }
-  const result = await upload(user, fileFor(bytes, meta.filename), meta.opts, context);
+  const result = await upload(user, fileFor(bytes, meta.filename), { private: true, ...meta.opts }, context);
   if (!result.error) await drop();
-  return result.error ? result : { text: resultText(result) };
+  return shared(result);
 }
 
-// ── shares (used by the MCP tools and the ChatGPT actions) ──────────────────
-// Live links the server can tie to the account. Private uploads from the
-// browser the account was made in have no account link, so they aren't here.
+// ── the account's shares (MCP tools and ChatGPT actions) ─────────────────────
+
+// Live links tied to the account. End-to-end encrypted ones come back without
+// their key or name: the server doesn't have either.
 export async function liveShares(user, context) {
   const { env, request } = context;
-  const tag = await getUserTag(user.userId, env);
-  const rows = (await getFilesClient(env).execute({
-    sql: `SELECT short_id, original_filename, expires_at FROM files
+  const db = getDb(env);
+  await ensureFileColumns(db);
+  const rows = (await db.execute({
+    sql: `SELECT short_id, original_filename, expires_at, e2e FROM files
           WHERE is_active = 1 AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))
             AND (expires_at IS NULL OR expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
           ORDER BY uploaded_at DESC LIMIT 50`,
-    args: [tag, user.userId]
+    args: [await getUserTag(user.userId, env), user.userId]
   })).rows;
-  const key = await getEncKey(env);
   const base = new URL(request.url).origin;
-  return Promise.all(rows.map(async r => {
-    let name = r.original_filename;
-    try { name = await decryptStr(r.original_filename, key, env, r.short_id); } catch {}
-    return { id: r.short_id, name, url: `${base}/r/${r.short_id}`, expires_at: r.expires_at };
-  }));
+  return Promise.all(rows.map(async r => ({
+    id: r.short_id,
+    name: r.e2e ? null : await decryptStr(r.original_filename, null, env, r.short_id).catch(() => null),
+    url: `${base}/r/${r.short_id}`,
+    expires_at: r.expires_at,
+    private: Boolean(r.e2e),
+  })));
 }
 
 // one of the account's own shares, or undefined
 async function ownShare(user, id, env) {
-  const tag = await getUserTag(user.userId, env);
-  return (await getFilesClient(env).execute({
-    sql: 'SELECT short_id, delete_token, expires_at, is_active FROM files WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))',
-    args: [id, tag, user.userId]
+  const db = getDb(env);
+  await ensureFileColumns(db);
+  return (await db.execute({
+    sql: `SELECT short_id, delete_token, expires_at, is_active, e2e, original_filename FROM files
+          WHERE short_id = ? AND (user_tag = ? OR (user_tag IS NULL AND user_id = ?))`,
+    args: [id, await getUserTag(user.userId, env), user.userId]
   })).rows[0];
 }
 
@@ -655,26 +703,38 @@ async function ownShare(user, id, env) {
 export async function deleteShare(user, id, context) {
   const file = await ownShare(user, id, context.env);
   if (!file) return false;
-  await deleteBranch(getFilesClient(context.env), file.short_id, context.env);
+  await deleteBranch(getDb(context.env), file.short_id, context.env);
   return true;
 }
 
 // Sends one of the account's live shares to usernames → result or { error }.
+// An end-to-end encrypted share needs its full link (with the key after #).
 export async function sendShare(user, args, context) {
   const { env, request } = context;
-  const id = String(args.id || '').trim();
-  if (!id) return { error: 'id is required: the share id from list_shares or a share tool.' };
+  const link = String(args.link || args.url || '');
+  const id = String(args.id || '').trim() || (/\/r\/([A-Za-z0-9]{4,32})/.exec(link) || [])[1] || '';
+  if (!id) return { error: 'Pass link (the full share link) or id (from list_shares or a share tool).' };
   const recipients = toRecipients(args.send_to);
   if (!recipients.length) return { error: 'send_to needs at least one ShareSecure username.' };
   const file = await ownShare(user, id, env);
   if (!file || !file.is_active || (file.expires_at && file.expires_at < nowIso())) {
     return { error: `No live share with id ${id} on this account.` };
   }
+
+  let key = null;
+  if (file.e2e) {
+    key = keyFromLink(link);
+    if (!key) return { error: 'That share is end-to-end encrypted, and ShareSecure doesn’t keep its key. Pass link: the full link you got when it was shared, including the part after #.' };
+    try { await unlockMeta(key, file.original_filename); } catch {
+      return { error: 'The key in that link doesn’t open this share. Check you passed the whole link.' };
+    }
+  }
+
   const note = args.note ? String(args.note).trim().slice(0, 140) : '';
-  const base = env.BASE_URL || new URL(request.url).origin;
+  const url = `${env.BASE_URL || new URL(request.url).origin}/r/${id}`;
   return {
-    id, url: `${base}/r/${id}`, expires_at: file.expires_at,
-    ...await sendToUsers(user, id, recipients, note, file.delete_token, context),
+    id, url: key ? linkWithKey(url, key) : url, expires_at: file.expires_at, private: Boolean(key),
+    ...await sendToUsers(user, id, recipients, note, file.delete_token, context, key),
   };
 }
 
@@ -691,13 +751,14 @@ export async function shareWrittenText(user, args, context) {
   return upload(user, new File([text], title + ext, { type: 'text/plain' }), shareOptions(args), context);
 }
 
-// What a share tool tells the assistant
+// What a share tool tells the assistant, in words.
 function resultText(r) {
   const lines = [];
   if (r.url) lines.push(`Link: ${r.url}`);
   if (r.name) lines.push(`Name: ${r.name}`);
   if (r.expires_at) lines.push(`Expires: ${r.expires_at}`);
   if (r.id) lines.push(`Share id: ${r.id} (for send_share or delete_share)`);
+  if (r.private) lines.push('End-to-end encrypted: the key is the part of the link after #. ShareSecure doesn’t keep it, so give the user the whole link exactly as it is.');
   const sentTo = r.sent_to || [], notSent = r.not_sent || [];
   if (!sentTo.length && !notSent.length) lines.push('Sent to: no one (just the link)');
   else {
@@ -707,6 +768,9 @@ function resultText(r) {
   return lines.join('\n');
 }
 
+// a share result → what a tool returns (words for the model, data for code)
+const shared = result => result.error ? result : { text: resultText(result), data: result };
+
 // ── tools ────────────────────────────────────────────────────────────────────
 const COMMON = {
   expires_hours: { type: 'number', description: 'Hours until the link stops working, 1 to 240. Default 24.' },
@@ -715,16 +779,31 @@ const COMMON = {
   name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
   send_to: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'ShareSecure usernames to send it to, e.g. ["alice", "bob"]. Each gets their own copy in their inbox to accept or decline. Use this whenever the user says who it’s for. Up to 20.' },
   note: { type: 'string', maxLength: 140, description: 'Short note shown to the people it’s sent to. Up to 140 characters.' },
+  private: { type: 'boolean', description: 'End-to-end encrypt it. Default true: the key goes in the link after #, and ShareSecure can’t read the stored file. Set false only if the user asks, or a recipient couldn’t be sent a private copy.' },
 };
 
 const SHARING = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
 const UPLOADING = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
+// what every share tool returns as structured data
+const SHARE_RESULT = {
+  type: 'object',
+  properties: {
+    url: { type: 'string', description: 'The share link. For a private share, the key is the part after #.' },
+    name: { type: ['string', 'null'] },
+    expires_at: { type: 'string' },
+    id: { type: 'string' },
+    private: { type: 'boolean' },
+    sent_to: { type: 'array', items: { type: 'string' } },
+    not_sent: { type: 'array', items: { type: 'object', properties: { username: { type: 'string' }, reason: { type: 'string' } } } },
+  },
+};
+
 const TOOLS = [
   {
     name: 'share_text',
     title: 'Share text as a document',
-    description: 'Share something you wrote or have in the conversation (a report, notes, a summary, an email draft, code, a table as CSV) as a private ShareSecure document with a link that expires, and optionally send it straight to ShareSecure usernames. Use this for anything you wrote or have in the conversation, and do it yourself: never ask the user to copy, save or upload it. Pass the full text; it’s shown exactly as written. Counts toward the 5 shares a day.',
+    description: 'Share something you wrote or have in the conversation (a report, notes, a summary, an email draft, code, a table as CSV) as a private ShareSecure document with a link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: never ask the user to copy, save or upload it. Pass the full text; it’s shown exactly as written. Counts toward the 5 shares a day.',
     inputSchema: {
       type: 'object',
       required: ['text', 'title'],
@@ -742,22 +821,21 @@ const TOOLS = [
     title: 'Share a file',
     description: [
       'Share a file (PDF, DOCX, PNG, JPG, or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
-      'For a document you GENERATED with code (including Claude file creation), prefer path: pass its absolute path in YOUR sandbox, then execute the returned curl command there. The server does not read that path; your code uploads the bytes. This preserves the original PDF, DOCX or image and avoids putting base64 in the conversation.',
-      '1. content_base64 + filename: fallback when your sandbox cannot make the upload request. Compute base64 with code, never invent it. Up to 2 MB; best under about 100 KB.',
-      '2. source_url: a public https link to the file; ShareSecure downloads it.',
-      '3. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',
-      '4. path: only when you can run shell commands on the computer that has the file. Returns a one-time curl command for you to run.',
-      'For text you wrote, use share_text instead. For a file the user attached in a chat app (such as claude.ai): if you can run code, it’s usually already in your sandbox (look through its files), so read it and base64 it there. Otherwise it reaches you as text or images, not the file itself, so share its content with share_text.',
-      'Use ask_user only when the USER explicitly asks to upload manually. Do not send them an upload page for a document you generated. If neither code upload nor byte transfer is possible, explain the client restriction; never claim delivery or silently replace a requested PDF/DOCX with text. Counts toward the 5 shares a day.',
+      '1. path: a file on a computer where you can run shell commands (including a document you generated in your code sandbox). Returns a one-time curl command; run it yourself. This keeps the original file exactly and keeps base64 out of the conversation.',
+      '2. content_base64 + filename: when you can read the file but can’t make the upload request. Compute the base64 with code, never by hand. Up to 2 MB; best under about 100 KB.',
+      '3. source_url: a public https link to the file; ShareSecure downloads it.',
+      '4. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',
+      'For text you wrote, use share_text instead. A file the user attached in a chat app is usually in your code sandbox if you have one; otherwise it reached you as text or images, so share its content with share_text.',
+      'Use ask_user only when the user explicitly asks to upload it themselves. Never claim something was shared until the result says so, and never quietly swap a requested PDF or DOCX for text. Counts toward the 5 shares a day.',
     ].join('\n'),
     inputSchema: {
       type: 'object',
       properties: {
+        path: { type: 'string', description: 'Path to the file, when you can run shell commands on the computer that has it.' },
         content_base64: { type: 'string', description: 'The file’s bytes as base64 (standard or url-safe; a data: prefix is fine). At most 2 MB once decoded.' },
         filename: { type: 'string', description: 'The file’s name with its extension, e.g. "chart.png". Use it with content_base64.' },
         source_url: { type: 'string', description: 'A public https link to download the file from.' },
-        path: { type: 'string', description: 'Path to the file, only when you can run shell commands on the computer that has it.' },
-        ask_user: { type: 'boolean', description: 'Only if the user explicitly requests manual upload. Never use for a document you generated.' },
+        ask_user: { type: 'boolean', description: 'Only if the user explicitly asks to upload it themselves. Gives them an upload page.' },
         ...COMMON,
       },
     },
@@ -766,14 +844,14 @@ const TOOLS = [
   {
     name: 'begin_upload',
     title: 'Start a chunked upload',
-    description: 'Start uploading a file of up to 10 MB in chunks, for clients that can compute base64 in code (for example a script in your sandbox that prints each chunk). Every chunk you pass costs output tokens (about 1 per 3 base64 characters), so don’t use this to copy out a large file by hand. Returns upload_id and chunk_size; then call upload_chunk for index 0, 1, 2… and finally finish_upload. Uploads expire after 30 minutes, and at most 3 can be open at once.',
+    description: 'Start uploading a file of up to 10 MB in chunks, for clients that can compute base64 in code. Every chunk you pass costs output tokens (about 1 per 3 base64 characters), so don’t copy a large file out by hand. Returns upload_id and chunk_size; then call upload_chunk for index 0, 1, 2… and finally finish_upload. Uploads expire after 30 minutes, and at most 3 can be open at once.',
     inputSchema: {
       type: 'object',
       required: ['filename', 'size'],
       properties: {
         filename: { type: 'string', description: 'The file’s name with its extension, e.g. "report.pdf".' },
         size: { type: 'integer', minimum: 1, maximum: MAX_BYTES, description: 'The file’s size in bytes.' },
-        sha256: { type: 'string', description: 'Optional SHA-256 of the whole file in hex, checked when it’s finished.' },
+        sha256: { type: 'string', description: 'Optional SHA-256 of the whole file in hex, checked at the end.' },
         ...COMMON,
       },
     },
@@ -782,7 +860,7 @@ const TOOLS = [
   {
     name: 'upload_chunk',
     title: 'Send one chunk',
-    description: 'Send one chunk of a chunked upload: the bytes from index × chunk_size, as base64, at most 512 KB once decoded. Send them in order starting at 0; sending the last one again is safe.',
+    description: 'Send one chunk of a chunked upload: the bytes from index × chunk_size, as base64, at most 512 KB once decoded. Send them in order from 0; resending the last one is safe.',
     inputSchema: {
       type: 'object',
       required: ['upload_id', 'index', 'data_base64'],
@@ -790,7 +868,7 @@ const TOOLS = [
         upload_id: { type: 'string', description: 'From begin_upload.' },
         index: { type: 'integer', minimum: 0, description: 'Which chunk this is, from 0.' },
         data_base64: { type: 'string', description: 'The chunk’s bytes as base64.' },
-        sha256: { type: 'string', description: 'Optional SHA-256 of this chunk’s bytes in hex, to catch copying mistakes.' },
+        sha256: { type: 'string', description: 'Optional SHA-256 of this chunk in hex, to catch copying mistakes.' },
       },
     },
     annotations: UPLOADING,
@@ -799,58 +877,61 @@ const TOOLS = [
     name: 'finish_upload',
     title: 'Finish a chunked upload',
     description: 'Finish a chunked upload once every chunk is in. Creates the link, and sends it to the send_to given to begin_upload.',
-    inputSchema: {
-      type: 'object',
-      required: ['upload_id'],
-      properties: { upload_id: { type: 'string', description: 'From begin_upload.' } },
-    },
+    inputSchema: { type: 'object', required: ['upload_id'], properties: { upload_id: { type: 'string', description: 'From begin_upload.' } } },
+    outputSchema: SHARE_RESULT,
     annotations: SHARING,
   },
   {
     name: 'send_share',
     title: 'Send a share to people',
-    description: 'Send one of this account’s existing shares (the id from list_shares or a share tool) to ShareSecure usernames. Each gets their own copy in their inbox to accept or decline.',
+    description: 'Send one of this account’s existing shares to ShareSecure usernames. Each gets their own copy in their inbox to accept or decline. For a private (end-to-end encrypted) share, pass link: the full link you got when it was shared, including the part after #; ShareSecure doesn’t keep that key.',
     inputSchema: {
       type: 'object',
-      required: ['id', 'send_to'],
-      properties: { id: { type: 'string', description: 'The share id.' }, send_to: COMMON.send_to, note: COMMON.note },
+      required: ['send_to'],
+      properties: {
+        link: { type: 'string', description: 'The full share link, including anything after #. Needed for private shares.' },
+        id: { type: 'string', description: 'The share id, if you don’t have the link (works for shares that aren’t private).' },
+        send_to: COMMON.send_to,
+        note: COMMON.note,
+      },
     },
+    outputSchema: SHARE_RESULT,
     annotations: SHARING,
   },
   {
     name: 'upload_status',
     title: 'Check an upload page',
-    description: 'Check an upload page from share_file, using its ticket_id. Once the user has picked the file, returns the link and who it was sent to.',
-    inputSchema: {
-      type: 'object',
-      required: ['ticket_id'],
-      properties: { ticket_id: { type: 'string', description: 'The ticket_id share_file gave you.' } },
-    },
+    description: 'Check an upload page or command from share_file, using its ticket_id. Once the file is in, returns the link and who it was sent to.',
+    inputSchema: { type: 'object', required: ['ticket_id'], properties: { ticket_id: { type: 'string', description: 'The ticket_id share_file gave you.' } } },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
     name: 'list_shares',
     title: 'List shares',
-    description: 'List files shared from this ShareSecure account that are still live, with their links and time left. Private uploads made in the browser the account was created in are not listed.',
+    description: 'List files shared from this ShareSecure account that are still live, with their ids and time left. Private (end-to-end encrypted) shares are listed without their name or key, because ShareSecure doesn’t have them.',
     inputSchema: { type: 'object', properties: {} },
+    outputSchema: {
+      type: 'object',
+      properties: { shares: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name: { type: ['string', 'null'] }, url: { type: 'string' }, expires_at: { type: 'string' }, private: { type: 'boolean' } } } } },
+    },
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
     name: 'delete_share',
     title: 'Delete a share',
-    description: 'Delete a shared file now, so its link stops working. Use the id from list_shares or a share tool.',
+    description: 'Delete a shared file now, so its link (and every link reshared from it) stops working. Use the id from list_shares or a share tool.',
     inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'The share id.' } }, required: ['id'] },
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   },
 ];
+// share_text and share_file return a share too (unless they hand back an upload command)
+TOOLS[0].outputSchema = SHARE_RESULT;
 
 const shellQuote = s => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
-const NO_FILE = 'No file was given, so nothing was shared. Share it yourself: pass content_base64 + filename if you can read the file (for example in your code sandbox), source_url if it’s at a public https link, or path if you can run shell commands. For text you wrote or have in the conversation, use share_text. Only if you truly can’t get the file, call share_file again with ask_user: true to get an upload page for the user.';
+const NO_FILE = 'No file was given, so nothing was shared. Share it yourself: pass path if you can run shell commands, content_base64 + filename if you can read the file, or source_url if it’s at a public https link. For text you wrote or have in the conversation, use share_text. Only if the user asks to upload it themselves, call share_file again with ask_user: true.';
 
 async function callTool(name, args, user, context) {
-  const shared = result => result.error ? result : { text: resultText(result) };
-
   if (name === 'share_text') return shared(await shareWrittenText(user, args, context));
 
   if (name === 'share_file') {
@@ -873,7 +954,7 @@ async function callTool(name, args, user, context) {
     const ticket = await newTicket(user, opts, context);
     if (ticket.error) return ticket;
     const sent = opts.send_to.length
-      ? ` "sent_to" lists who it was sent to (${opts.send_to.join(', ')}), and "not_sent" lists anyone it couldn't reach and why.`
+      ? ` "sent_to" lists who it was sent to (${opts.send_to.join(', ')}), and "not_sent" anyone it couldn't reach and why.`
       : '';
     const lines = path
       ? [
@@ -881,27 +962,26 @@ async function callTool(name, args, user, context) {
           '',
           `curl --fail-with-body --silent --show-error --max-time 120 -F ${shellQuote('file=@' + path)} ${shellQuote(ticket.uploadUrl)}`,
           '',
-          `It prints JSON: "url" is the share link and "expires_at" is when it stops working.${sent}`,
+          `It prints JSON: "url" is the share link (give the user all of it, including the part after #) and "expires_at" is when it stops working.${sent}`,
           'On Windows PowerShell, use curl.exe instead of curl.',
           'If your network blocks this address, read the file and use content_base64 (or the chunk tools) instead.',
           '',
-          'This is an upload command for YOU to execute, not a link to give the user. Do not say it was sent until the response confirms it.',
-          `If you need to check the result, call upload_status with ticket_id "${ticket.ticketId}".`,
+          'This is an upload command for YOU to run, not a link to give the user. Don’t say it was shared until the response confirms it.',
+          `If you need to check on it, call upload_status with ticket_id "${ticket.ticketId}".`,
         ]
       : [
           'Give the user this page. They pick the file there and it’s shared with the settings you chose (it works once, within 30 minutes):',
           '',
           ticket.pageUrl,
           '',
-          `When they say it’s done, call upload_status with ticket_id "${ticket.ticketId}" to get the link${opts.send_to.length ? ' and who it was sent to' : ''}.`,
+          `When they say it’s done, call upload_status with ticket_id "${ticket.ticketId}"${opts.send_to.length ? ' to see who it was sent to' : ''}.`,
         ];
-    return { text: lines.join('\n') };
+    return { text: lines.join('\n'), data: { ticket_id: ticket.ticketId, ...(path ? { upload_url: ticket.uploadUrl } : { page_url: ticket.pageUrl }) } };
   }
 
   if (name === 'begin_upload') { cleanUp(context); return beginUpload(user, args, context); }
   if (name === 'upload_chunk') return uploadChunk(user, args, context);
   if (name === 'finish_upload') return finishUpload(user, args, context);
-
   if (name === 'send_share') return shared(await sendShare(user, args, context));
 
   if (name === 'upload_status') {
@@ -911,8 +991,11 @@ async function callTool(name, args, user, context) {
 
   if (name === 'list_shares') {
     const shares = await liveShares(user, context);
-    if (!shares.length) return { text: 'No live shares.' };
-    return { text: shares.map(x => `- ${x.name} — ${x.url} (id ${x.id}, expires ${x.expires_at})`).join('\n') };
+    if (!shares.length) return { text: 'No live shares.', data: { shares } };
+    return {
+      text: shares.map(x => `- ${x.private ? '(private, name hidden)' : x.name} — id ${x.id}, expires ${x.expires_at}${x.private ? '' : `, ${x.url}`}`).join('\n'),
+      data: { shares },
+    };
   }
 
   if (name === 'delete_share') {
@@ -928,26 +1011,25 @@ async function callTool(name, args, user, context) {
 const INSTRUCTIONS = [
   'ShareSecure shares files and documents through private links that expire, and can send them straight to ShareSecure usernames. Do the whole job yourself; never tell the user to download, save or upload something you can share with these tools.',
   '- Text you wrote or have in the conversation (reports, notes, drafts, code, CSV): share_text.',
-  '- A document you generated with code: call share_file with its path in your sandbox, then execute the returned upload command yourself. If sandbox networking is unavailable, use content_base64 and filename (best under 100 KB), or the chunk tools. Preserve the requested file format.',
+  '- A file on a computer where you can run shell commands, including one you generated: share_file with path, then run the command it returns. Without a working network there, use content_base64 (best under 100 KB) or the chunk tools.',
   '- A file at a public https link: share_file with source_url.',
-  '- A file on a computer where you can run shell commands: share_file with path, then run the command it returns.',
-  '- Only if the user explicitly requests a manual upload: share_file with ask_user. Never default to this for a document you generated.',
-  'When the user says who it’s for, pass send_to (and a short note if it helps); to send something already shared, use send_share. Reply with the link, when it expires, and who received it.',
+  '- Only if the user asks to upload it themselves: share_file with ask_user.',
+  'Shares are end-to-end encrypted by default: the key is the part of the link after #. Always give the user the whole link, and pass that whole link to send_share later.',
+  'When the user says who it’s for, pass send_to (and a short note if it helps). Reply with the link, when it expires, and who received it.',
 ].join('\n');
 
 // ── JSON-RPC over Streamable HTTP ────────────────────────────────────────────
 async function handleMessage(msg, user, context) {
   const { id, method, params = {} } = msg || {};
-  if (id === undefined || id === null) return null; // notification: nothing to answer
+  if (id === undefined || id === null) return null;   // a notification: nothing to answer
   const reply = result => ({ jsonrpc: '2.0', id, result });
-  const fail = (code, message) => ({ jsonrpc: '2.0', id, error: { code, message } });
 
   switch (method) {
     case 'initialize':
       return reply({
         protocolVersion: PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'sharesecure', title: 'ShareSecure', version: '1.10.0' },
+        serverInfo: { name: 'sharesecure', title: 'ShareSecure', version: pkg.version },
         instructions: INSTRUCTIONS,
       });
     case 'ping':
@@ -958,16 +1040,15 @@ async function handleMessage(msg, user, context) {
       try {
         const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
         const out = await callTool(params.name, args, user, context);
-        return reply(out.error
-          ? { content: [{ type: 'text', text: out.error }], isError: true }
-          : { content: [{ type: 'text', text: out.text }] });
+        if (out.error) return reply({ content: [{ type: 'text', text: out.error }], isError: true });
+        return reply({ content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: out.data } : {}) });
       } catch (err) {
         console.error('mcp tool failed', params.name, err);
         return reply({ content: [{ type: 'text', text: 'Something went wrong. Try again.' }], isError: true });
       }
     }
     default:
-      return fail(-32601, `Method not found: ${method}`);
+      return { jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } };
   }
 }
 
@@ -1001,8 +1082,7 @@ export async function handleMcp(context, pathToken = null) {
     if (body.length > MAX_BATCH) {
       return Response.json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: `Too many messages in one batch (at most ${MAX_BATCH}).` } }, { status: 400 });
     }
-    // one at a time, like the desktop app, so the send and upload limits see
-    // each call's result before the next one runs
+    // one at a time, so the send and upload limits see each call's result
     const out = [];
     for (const m of body) {
       const r = await handleMessage(m, user, context);

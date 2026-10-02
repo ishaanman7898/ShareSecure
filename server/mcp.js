@@ -594,7 +594,8 @@ const NO_FILE = 'No file was given, so nothing was shared. Share it yourself: pa
 const NOT_HERE = 'This request came through the public link, not from the computer ShareSecure runs on, so path can’t be used. Share it another way: content_base64 + filename if you can read the file (for example in your code sandbox), source_url if it’s at a public https link, begin_upload for bigger files, or share_text for text you wrote or have in the conversation.';
 
 async function callTool(name, args, req) {
-  const shared = result => result.error ? result : { text: resultText(result) };
+  // words for the model, and the same result as data for code that reads it
+  const shared = result => result.error ? result : { text: resultText(result), data: result };
 
   if (name === 'share_text') return shared(await shareWrittenText(args));
 
@@ -633,14 +634,16 @@ async function callTool(name, args, req) {
       WHERE is_active = 1 AND inbox_status IS NULL AND (expires_at IS NULL OR expires_at > ?)
       ORDER BY uploaded_at DESC LIMIT 50
     `).all(new Date().toISOString());
-    if (!rows.length) return { text: 'No live shares.' };
+    if (!rows.length) return { text: 'No live shares.', data: { shares: [] } };
     const key = getEncKey();
+    const shares = rows.map(r => {
+      let name = r.original_filename;
+      try { name = decryptString(r.original_filename, key); } catch {}
+      return { id: r.short_id, name, url: `${baseUrl()}/r/${r.short_id}`, expires_at: r.expires_at };
+    });
     return {
-      text: rows.map(r => {
-        let fname = r.original_filename;
-        try { fname = decryptString(r.original_filename, key); } catch {}
-        return `- ${fname} — ${baseUrl()}/r/${r.short_id} (id ${r.short_id}, expires ${r.expires_at})`;
-      }).join('\n'),
+      text: shares.map(x => `- ${x.name} — ${x.url} (id ${x.id}, expires ${x.expires_at})`).join('\n'),
+      data: { shares },
     };
   }
 
@@ -688,7 +691,7 @@ async function handleMessage(msg, req) {
         const out = await callTool(params.name, args, req);
         return reply(out.error
           ? { content: [{ type: 'text', text: out.error }], isError: true }
-          : { content: [{ type: 'text', text: out.text }] });
+          : { content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: out.data } : {}) });
       } catch (err) {
         console.error('[mcp] tool failed:', params.name, err);
         return reply({ content: [{ type: 'text', text: 'Something went wrong. Try again.' }], isError: true });

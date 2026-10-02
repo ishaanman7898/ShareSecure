@@ -1,6 +1,10 @@
-import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+import * as pdfjsLib from '/vendor/pdf.min.mjs';
+import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey } from './sealed.js';
+import { contentMatches, isAllowedType, nameFor } from './filetypes.js';
+import { sealFor } from './keys.js';
+import { takeToken } from './tokens.js';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+  '/vendor/pdf.worker.min.mjs';
 
 // ── keyboard toast notification ───────────────────────────────────────────────
 let kbToastTimer = null;
@@ -223,6 +227,15 @@ const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
 
 let myShortId = rawShortId;
 
+// An end-to-end encrypted file's key, from the part of the link after "#".
+// Browsers never send that part to the server.
+// "#k=" is the link's own key (a passcode may be needed too); "#f=" is the
+// file's full key, which copies sent to a username use.
+const fromLink = readLink(location.hash);
+const linkKey = fromLink?.key || null;
+let fileKey = fromLink?.full ? fromLink.key : null;   // set once we know if a passcode is needed
+const sealed = () => Boolean(fileInfo?.e2e && fileKey);
+
 function checkOwnership() {
   try {
     const key = 'owner_' + myShortId;
@@ -266,7 +279,7 @@ async function fetchFileBytes(url) {
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await apiFetch(url);
-      if (res.ok) return res.arrayBuffer();
+      if (res.ok) return openBytes(await res.arrayBuffer());
       if (attempt >= 1 || res.status < 500) throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       if (attempt >= 1) throw err;
@@ -275,9 +288,22 @@ async function fetchFileBytes(url) {
   }
 }
 
+// Decrypts an end-to-end encrypted file. The server never checked what's
+// inside, so the content has to match the type its sealed name claims.
+async function openBytes(buffer) {
+  if (!sealed()) return buffer;
+  const plain = await unlockFile(fileKey, new Uint8Array(buffer));
+  if (!contentMatches(plain, fileInfo.mimeType)) throw new Error('Content doesn’t match its type');
+  // the server only knew the padded size
+  $('doc-meta').textContent = formatSize(plain.length);
+  return plain.buffer.slice(plain.byteOffset, plain.byteOffset + plain.byteLength);
+}
+
 function showSignInNeeded() {
   hide('loader');
   hide('zoom-group');
+  // the key comes back after signing in, without going through the server
+  if (linkKey) { try { sessionStorage.setItem('return_hash', location.hash); } catch {} }
   const next = encodeURIComponent(location.pathname);
   $('signin-needed-link').href = `/signin?next=${next}`;
   $('signup-needed-link').href = `/signin?new=1&next=${next}`;
@@ -393,7 +419,7 @@ async function assignFreshId() {
     const data = await res.json();
     if (data.shortId) {
       myShortId = data.shortId;
-      history.replaceState(null, '', `/r/${myShortId}`);
+      history.replaceState(null, '', `/r/${myShortId}${location.hash}`);
       if (data.deleteToken) {
         localStorage.setItem('owner_' + myShortId, data.deleteToken);
       }
@@ -826,18 +852,26 @@ function showSendDialog() {
     const token = sessionStorage.getItem('user_token');
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    let anonymous = null;
 
     try {
-      const res = await apiFetch(`/api/send/${myShortId}`, {
-        method: 'POST',
-        headers,
-        // the link's delete key proves to the server that it's yours to send
-        body: JSON.stringify({
-          targetUsername: username,
-          note: backdrop.querySelector('#send-note-input').value.trim(),
-          deleteToken: myDeleteToken,
-        })
-      });
+      // the link's delete key proves to the server that it's yours to send
+      const body = { targetUsername: username, note: backdrop.querySelector('#send-note-input').value.trim(), deleteToken: myDeleteToken };
+      // an end-to-end encrypted file's key is sealed to them, and the note locked with it
+      if (sealed()) {
+        const sealedKey = await sealFor(username, fileKey);
+        if (!sealedKey) throw new Error(sealedKey === undefined ? 'There’s no user with that name.' : 'They need to sign in to ShareSecure once before they can get end-to-end encrypted files.');
+        body.sealed_key = sealedKey;
+        if (body.note) body.note = await lockText(fileKey, body.note, 'note');
+        // the delete key proves it's yours, so an anonymous token can stand in for your sign-in
+        const user = sessionStorage.getItem('user_name');
+        anonymous = myDeleteToken && user ? takeToken(user, 'send') : null;
+      }
+      const sendWith = h => fetch(`/api/send/${myShortId}`, { method: 'POST', headers: h, body: JSON.stringify(body) });
+      let res = anonymous
+        ? await sendWith({ 'Content-Type': 'application/json', 'X-ShareSecure-Token': anonymous })
+        : await apiFetch(`/api/send/${myShortId}`, { method: 'POST', headers, body: JSON.stringify(body) });
+      if (anonymous && res.status === 401) res = await sendWith(headers);
       const data = await res.json();
       if (data.sent) {
         close();
@@ -854,8 +888,8 @@ function showSendDialog() {
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Send';
       }
-    } catch {
-      sub.textContent = 'Couldn’t reach the server. Try again.';
+    } catch (err) {
+      sub.textContent = err?.message && !/fetch/i.test(err.message) ? err.message : 'Couldn’t reach the server. Try again.';
       sub.style.color = 'var(--danger)';
       confirmBtn.disabled = false;
       confirmBtn.textContent = 'Send';
@@ -894,6 +928,8 @@ function openSharePanel() {
   apiFetch(`/api/reshare/${myShortId}`, { method: 'POST' })
     .then(r => r.json())
     .then(data => {
+      // a new link to an end-to-end encrypted file carries the same key
+      if (linkKey && data.e2e) data.shortUrl = linkWithKey(data.shortUrl, linkKey);
       const ownerUrl = data.shortUrl;
       $('share-link-text').textContent = ownerUrl;
 
@@ -954,6 +990,8 @@ async function fetchAnnotations() {
     const res = await apiFetch(`/api/annotations/${myShortId}`, { headers: annHeaders() });
     if (!res.ok) return [];
     const data = await res.json();
+    // drawings on an end-to-end encrypted file are sealed with its key
+    if (data.sealed && fileKey) return JSON.parse(await unlockText(fileKey, data.sealed, 'drawing'));
     return data.annotations || [];
   } catch { return []; }
 }
@@ -980,7 +1018,9 @@ async function saveAnnotations() {
     const res = await apiFetch(`/api/annotations/${myShortId}`, {
       method: 'POST',
       headers: annHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ annotations: flat }),
+      body: JSON.stringify(sealed()
+        ? { sealed: await lockText(fileKey, JSON.stringify(flat), 'drawing') }
+        : { annotations: flat }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     setAnnStatus('Saved');
@@ -1144,6 +1184,51 @@ function showAnnToolbar(allowAnnotations) {
   }
 }
 
+// ── passcodes ────────────────────────────────────────────────────────────────
+// Asks for the passcode until it opens the file's name, then gives back the
+// file's key. The passcode never leaves this page.
+function askPasscode(info) {
+  hide('loader');
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'delete-modal-backdrop';
+    backdrop.innerHTML = `
+      <form class="delete-modal-card" novalidate>
+        <p class="delete-modal-title">This file needs a passcode</p>
+        <p class="delete-modal-sub" id="passcode-sub">Whoever shared it should have told you the passcode separately from the link.</p>
+        <input id="passcode-field" type="password" placeholder="Passcode" autocomplete="off" aria-label="Passcode" />
+        <div class="delete-modal-actions">
+          <button class="delete-modal-confirm is-primary" type="submit">Open</button>
+        </div>
+      </form>`;
+    document.body.appendChild(backdrop);
+    const field = backdrop.querySelector('#passcode-field');
+    const sub = backdrop.querySelector('#passcode-sub');
+    const button = backdrop.querySelector('button');
+    field.addEventListener('keydown', e => e.stopPropagation());
+    field.focus();
+    backdrop.querySelector('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!field.value) return;
+      button.disabled = true;
+      button.textContent = 'Checking…';
+      const key = await passcodeKey(linkKey, field.value, info.passcodeSalt);
+      try {
+        await unlockMeta(key, info.filename);
+        backdrop.remove();
+        show('loader');
+        resolve(key);
+      } catch {
+        sub.textContent = 'That passcode isn’t right. Try again.';
+        sub.style.color = 'var(--danger)';
+        button.disabled = false;
+        button.textContent = 'Open';
+        field.select();
+      }
+    });
+  });
+}
+
 // ── main ──────────────────────────────────────────────────────────────────────
 (async () => {
   // Check terms
@@ -1170,6 +1255,27 @@ function showAnnToolbar(allowAnnotations) {
 
   fileInfo = await loadMeta();
   if (!fileInfo) return;
+
+  // An end-to-end encrypted file's name and type are sealed too; the key in
+  // the link opens them. Without the right key there's nothing to show.
+  if (fileInfo.e2e) {
+    try {
+      if (!linkKey) throw new Error('missing');
+      // a "#k=" link may also need the passcode the sender chose
+      if (!fileKey) fileKey = fileInfo.passcodeSalt ? await askPasscode(fileInfo) : linkKey;
+      const meta = await unlockMeta(fileKey, fileInfo.filename);
+      if (!isAllowedType(meta.type)) throw new Error('type');
+      fileInfo.filename = nameFor(meta.name, '', meta.type);   // the extension always matches the type
+      fileInfo.mimeType = meta.type;
+    } catch (err) {
+      fileInfo.filename = err.message === 'missing'
+        ? 'This link is missing its key (the part after #). Ask for the whole link.'
+        : 'This link’s key doesn’t open the file. Ask for the whole link again.';
+      $('doc-title').textContent = 'Can’t open this file';
+      showUnsupported();
+      return;
+    }
+  }
 
   const { filename, size, mimeType, expiresAt, allowDownload, allowAnnotations } = fileInfo;
   if (fileInfo.recipientOnly) hide('share-btn');
@@ -1211,7 +1317,10 @@ function showAnnToolbar(allowAnnotations) {
     try {
       const res = await apiFetch(`/api/download/${myShortId}`);
       if (!res.ok) throw new Error('Download failed');
-      const blob = await res.blob();
+      // an end-to-end encrypted file is decrypted here, then saved
+      const blob = sealed()
+        ? new Blob([await openBytes(await res.arrayBuffer())], { type: fileInfo.mimeType })
+        : await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

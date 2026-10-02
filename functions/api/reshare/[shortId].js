@@ -1,80 +1,44 @@
-// POST /api/reshare/:shortId — a new link to the same file, owned by whoever made it.
-// The new link points at the original upload's data instead of copying it, so it
-// costs almost nothing to make. It's a branch of the link it came from: deleting
-// that link (or the original) deletes this one too, and deleting this one takes
-// only its own branch with it. Which link it came from isn't stored in the clear
-// (see branchFrom), so the database can't be used to trace who shared with whom.
-import {
-  getFilesClient,
-  getEncKey,
-  decryptStr,
-  encryptStr,
-  ensureFileColumns,
-  signInRequired,
-  branchFrom
-} from '../../_turso.js';
-
-function generateId(length) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return Array.from(bytes).map(b => chars[b % chars.length]).join('');
-}
+// POST /api/reshare/:shortId — a new link to the same file, owned by whoever
+// made it. It points at the original's bytes instead of copying them, and it's
+// a branch of the link it came from: deleting that link deletes this one too.
+// Which link it came from isn't stored in the clear (see branchFrom).
+import { getDb, decryptStr, encryptStr, ensureFileColumns, signInRequired, branchFrom, randomId, findLiveFile } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
-  const client = getFilesClient(env);
-  await ensureFileColumns(client);
+  const db = getDb(env);
+  await ensureFileColumns(db);
 
-  const file = (await client.execute({
-    sql: 'SELECT * FROM files WHERE short_id = ? AND is_active = 1',
-    args: [params.shortId]
-  })).rows[0];
-
+  const file = await findLiveFile(db, params.shortId);
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
-  if (file.expires_at && new Date(file.expires_at) < new Date()) {
-    return Response.json({ error: 'Link expired' }, { status: 410 });
-  }
+  if (file.expired) return Response.json({ error: 'Link expired' }, { status: 410 });
   const denied = await signInRequired(file, request, env);
   if (denied) return denied;
   if (file.recipient_user_tag) {
     return Response.json({ error: 'This file was sent privately. Ask the sender for a shareable link.', code: 'recipient_only' }, { status: 403 });
   }
 
-  const newShortId = generateId(8);
-  const newDeleteToken = generateId(24);
-  const encKey = await getEncKey(env);
+  const newId = randomId(8);
+  const deleteToken = randomId(24);
+  // The name and type are re-encrypted under the new link's key. A sealed
+  // (end-to-end) name is copied as it is: the same file key opens it.
+  const copy = async col => file.e2e ? file[col] : encryptStr(await decryptStr(file[col], null, env, params.shortId), null, env, newId);
+  const branch = await branchFrom(file, newId, env);
 
-  // the name and type are tiny, so they're re-encrypted under the new link's key
-  const name = await decryptStr(file.original_filename, encKey, env, params.shortId);
-  const mime = await decryptStr(file.mime_type, encKey, env, params.shortId);
-  const branch = await branchFrom(file, newShortId, env);
-
-  await client.execute({
+  await db.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, data_ref,
             expires_at, delete_token, integrity_hash, cluster_id, parent_key, uploaded_at,
-            compressed, allow_annotations, allow_download, require_account)
-          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, ?)`,
+            compressed, allow_annotations, allow_download, require_account, e2e, passcode_salt)
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     args: [
-      newShortId,
-      await encryptStr(name, encKey, env, newShortId),
-      await encryptStr(mime, encKey, env, newShortId),
-      file.size_bytes,
-      branch.data_ref,
-      file.expires_at,
-      newDeleteToken,
-      newShortId,          // its own group: nothing in the row points back at the original
-      branch.parent_key,
-      new Date().toISOString(),
-      file.allow_annotations ?? 1,
-      file.allow_download ?? 0,
-      file.require_account ?? 0
+      newId, await copy('original_filename'), await copy('mime_type'), file.size_bytes, branch.data_ref,
+      file.expires_at, deleteToken,
+      newId,               // its own group: nothing in the row points back at the original
+      branch.parent_key, new Date().toISOString(),
+      file.allow_annotations ?? 1, file.allow_download ?? 0, file.require_account ?? 0, file.e2e ? 1 : 0, file.passcode_salt || null,
     ]
   });
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;
-  return Response.json({
-    shortId: newShortId,
-    shortUrl: `${baseUrl}/r/${newShortId}`,
-    deleteToken: newDeleteToken
-  });
+  return Response.json({ shortId: newId, shortUrl: `${baseUrl}/r/${newId}`, deleteToken, e2e: Boolean(file.e2e) });
 }

@@ -70,24 +70,21 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Same policy as the website. Pages only run the app's own scripts, plus pdf.js
-// and mammoth from jsDelivr for the viewer; pdf.js starts its worker from a
+// Same policy as the website. Pages only run the app's own scripts (pdf.js and
+// mammoth are served from /vendor); pdf.js starts its worker from a
 // blob: URL and decodes some images with WebAssembly ('wasm-unsafe-eval' allows
 // WebAssembly, not JS eval). Everything that isn't a page keeps just the
 // framing rule. The type is only known once a route has set it, so the header
 // is added just before the response goes out (not on a 304, which would
 // replace the cached page's policy).
-// only the exact versions the viewer loads, not everything jsDelivr serves
-const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/';
-const MAMMOTH = 'https://cdn.jsdelivr.net/npm/mammoth@1.8.0/';
 const PAGE_CSP = [
   "default-src 'self'",
-  `script-src 'self' ${PDFJS} ${MAMMOTH} 'wasm-unsafe-eval'`,
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob:",
-  `connect-src 'self' ${PDFJS}`,
-  `worker-src 'self' blob: ${PDFJS}`,
+  "connect-src 'self'",
+  "worker-src 'self' blob:",
   "frame-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'none'",

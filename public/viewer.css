@@ -382,3 +382,9 @@ body.viewer {
 
 /* links limited to people signed in to ShareSecure */
 .signin-needed-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+
+/* the logo turning while a file opens */
+.loader-rosette { width: 72px; height: 72px; }
+@media (prefers-reduced-motion: no-preference) {
+  .loader-rosette { animation: loader-pulse 2.4s ease-in-out infinite; }
+}

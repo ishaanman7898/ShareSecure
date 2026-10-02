@@ -3,7 +3,7 @@
 //   account  sign in to your ShareSecure account (the website, in its own window)
 //   local    run a private ShareSecure on this computer; closing the window keeps
 //            it running in the tray, because share links only work while it's up
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, net: electronNet } = require('electron');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
@@ -262,8 +262,60 @@ app.on('before-quit', () => { quitting = true; });
 // in local mode stay alive in the tray when every window is closed
 app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
 
+// ── the website's page code comes from this app ─────────────────────────────
+// With an account, the window shows the ShareSecure website. Its pages and
+// scripts (the code that encrypts your files) are served from the copy inside
+// this app, not downloaded, so a compromised server can't change that code.
+// Only the API (/api, /mcp, /connect) goes over the network.
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const TYPES = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
+  '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
+};
+const PAGE_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+  "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; " +
+  "frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
+// "/r/abc" → viewer.html, "/signin" → signin.html, … or null for anything else
+function bundledFile(pathname) {
+  if (pathname === '/') return 'index.html';
+  if (/^\/r\/[A-Za-z0-9]+$/.test(pathname)) return 'viewer.html';
+  if (/^\/drop\/[A-Za-z0-9]+$/.test(pathname)) return 'drop.html';
+  let rel;
+  try { rel = decodeURIComponent(pathname).replace(/^\/+/, ''); } catch { return null; }
+  if (!rel || rel.includes('..') || rel.includes('\\')) return null;
+  for (const name of [rel, rel + '.html']) {
+    const full = path.join(PUBLIC_DIR, name);
+    if (full.startsWith(PUBLIC_DIR + path.sep) && TYPES[path.extname(name)] && fs.existsSync(full) && fs.statSync(full).isFile()) return name;
+  }
+  return null;
+}
+
+function serveBundledSite() {
+  session.defaultSession.protocol.handle('https', async request => {
+    const url = new URL(request.url);
+    const isPage = url.origin === CLOUD && request.method === 'GET' && !/^\/(api|mcp|connect)(\/|$)/.test(url.pathname);
+    const file = isPage && bundledFile(url.pathname);
+    if (file) {
+      const type = TYPES[path.extname(file)];
+      return new Response(fs.readFileSync(path.join(PUBLIC_DIR, file)), {
+        headers: {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'no-referrer',
+          'Content-Security-Policy': type.startsWith('text/html') ? PAGE_CSP : "frame-ancestors 'none'",
+        },
+      });
+    }
+    return electronNet.fetch(request, { bypassCustomProtocolHandlers: true });
+  });
+}
+
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
+  serveBundledSite();
   // lets pages hide their "get the app" and "host it yourself" links in here
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
   const saved = readMode();

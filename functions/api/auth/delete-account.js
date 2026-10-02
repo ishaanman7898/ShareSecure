@@ -1,52 +1,49 @@
-// POST /api/auth/delete-account  { access_code }
-// Deletes the signed-in account and everything the server can tie to it: files
-// tagged to the account, files waiting in its inbox, its upload records, its
-// ZK commitment and its assistant (MCP) tokens. Private (ZK) uploads carry no
-// account link by design, so the browser deletes those itself with the delete
-// keys it holds before calling this.
-
-import { verifyToken, getAuthClient, getFilesClient, getUserTag, checkAccessCode, deleteBranch } from '../../_turso.js';
+// POST /api/auth/delete-account  { state, client_mac }   (or { access_code } for
+// an account that hasn't switched to the new sign-in yet)
+// Deletes the signed-in account and everything the server can tie to it: its
+// shares (and every link reshared from them), files waiting in its inbox, its
+// assistant tokens, its key pair and its saved list of shares. Anonymous shares
+// carry no account link, so the browser deletes those first, with their keys.
+// It needs a fresh proof of the password, made the same way as signing in.
+import { verifyToken, getDb, getUserTag, checkAccessCode, deleteBranch } from '../../_turso.js';
+import { checkProof, readJson, fail } from '../../_auth.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
   const auth = await verifyToken(request.headers.get('Authorization'), env);
-  if (!auth) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!auth) return fail('Unauthorized', 401);
 
-  let password;
-  try {
-    ({ access_code: password } = await request.json());
-  } catch {
-    return Response.json({ error: 'Invalid request body' }, { status: 400 });
-  }
+  const body = (await readJson(request)) || {};
+  const db = getDb(env);
+  const user = (await db.execute({ sql: 'SELECT id, access_code FROM users WHERE id = ?', args: [auth.userId] })).rows[0];
+  if (!user) return fail('Unauthorized', 401);
 
-  const authDb = getAuthClient(env);
-  const user = (await authDb.execute({ sql: 'SELECT id, access_code FROM users WHERE id = ?', args: [auth.userId] })).rows[0];
-  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!password || !(await checkAccessCode(String(password), user.access_code, env)).ok) {
-    return Response.json({ error: 'Wrong password' }, { status: 403 });
+  if (body.state) {
+    const proven = await checkProof(context, body);
+    if (proven instanceof Response || proven.id !== auth.userId) return fail('Wrong password', 403);
+  } else if (!body.access_code || !(await checkAccessCode(String(body.access_code), user.access_code, env)).ok) {
+    return fail('Wrong password', 403);
   }
 
   const userTag = await getUserTag(auth.userId, env);
-  const files = getFilesClient(env);
-  // every link to the account's uploads, including ones other people reshared
-  const own = (await files.execute({
+  const own = (await db.execute({
     sql: 'SELECT short_id FROM files WHERE user_tag = ? OR (user_tag IS NULL AND user_id = ?)',
     args: [userTag, auth.userId]
   })).rows;
-  for (const { short_id } of own) await deleteBranch(files, short_id, env);
-  // the inbox column only exists once someone has sent a file
-  try {
-    await files.execute({ sql: 'DELETE FROM files WHERE recipient_user_tag = ?', args: [userTag] });
-  } catch {}
+  for (const { short_id } of own) await deleteBranch(db, short_id, env);
 
-  for (const sql of [
-    'DELETE FROM zk_challenge_log WHERE user_id = ?',
-    'DELETE FROM zk_challenges WHERE user_id = ?',
-    'DELETE FROM api_tokens WHERE user_id = ?',
+  // tables that may not exist yet on a new install
+  for (const [sql, arg] of [
+    ['DELETE FROM files WHERE recipient_user_tag = ?', userTag],
+    ['DELETE FROM api_tokens WHERE user_id = ?', auth.userId],
+    ['DELETE FROM token_issued WHERE account = ?', await getUserTag(`issue:${auth.userId}`, env)],
+    // left over from the retired zero-knowledge uploads
+    ['DELETE FROM zk_challenge_log WHERE user_id = ?', auth.userId],
+    ['DELETE FROM zk_challenges WHERE user_id = ?', auth.userId],
   ]) {
-    try { await authDb.execute({ sql, args: [auth.userId] }); } catch { /* table not created yet */ }
+    try { await db.execute({ sql, args: [arg] }); } catch {}
   }
-  await authDb.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [auth.userId] });
+  await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [auth.userId] });
 
   return Response.json({ deleted: true });
 }

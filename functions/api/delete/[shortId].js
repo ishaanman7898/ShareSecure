@@ -1,40 +1,32 @@
-import { getFilesClient, verifyToken, getUserTag, deleteBranch, tokensMatch } from '../../_turso.js';
+// POST /api/delete/:shortId  { deleteToken? }
+// Deletes a link. Allowed for the account that shared it, or anyone holding
+// the link's delete key. Deleting the original removes every link to the file;
+// deleting any other link removes it and the links shared on from it.
+import { getDb, verifyToken, getUserTag, deleteBranch, tokensMatch } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
-  const client = getFilesClient(env);
+  const db = getDb(env);
 
-  const res = await client.execute({
-    sql: 'SELECT short_id, user_id, user_tag, delete_token FROM files WHERE short_id = ?',
-    args: [params.shortId]
-  });
-
-  const file = res.rows[0];
+  const file = (await db.execute({
+    sql: 'SELECT short_id, user_id, user_tag, delete_token FROM files WHERE short_id = ?', args: [params.shortId]
+  })).rows[0];
   if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
 
+  // the account that shared it (older rows store the account id itself)
   const auth = await verifyToken(request.headers.get('Authorization'), env);
+  const userTag = auth && await getUserTag(auth.userId, env);
+  const isOwner = Boolean(auth) && (file.user_tag
+    ? file.user_tag === userTag
+    : Boolean(file.user_id) && String(file.user_id) === String(auth.userId));
 
-  let isOwner = false;
-  let authorizedViaToken = false;
-
-  if (auth) {
-    const userTag = await getUserTag(auth.userId, env);
-    if (file.user_tag && userTag && file.user_tag === userTag) isOwner = true;
-    else if (!file.user_tag && file.user_id && String(file.user_id) === String(auth.userId)) isOwner = true;
-  }
-
+  // or whoever holds the delete key
   if (!isOwner) {
-    let body = {};
-    try { body = await request.json(); } catch {}
-    if (await tokensMatch(body?.deleteToken, file.delete_token)) authorizedViaToken = true;
+    const { deleteToken } = await request.json().catch(() => ({}));
+    if (!(await tokensMatch(deleteToken, file.delete_token))) {
+      return Response.json({ error: 'Unauthorized' }, { status: 403 });
+    }
   }
 
-  if (!isOwner && !authorizedViaToken) {
-    return Response.json({ error: 'Unauthorized' }, { status: 403 });
-  }
-
-  // The original upload → every link to the file goes. Any other link → that
-  // link and the ones shared onward from it; the original and other branches stay.
-  const scope = await deleteBranch(client, file.short_id, env);
-  return Response.json({ deleted: true, scope });
+  return Response.json({ deleted: true, scope: await deleteBranch(db, file.short_id, env) });
 }

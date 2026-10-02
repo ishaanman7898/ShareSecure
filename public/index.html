@@ -16,11 +16,7 @@
   <div class="page-loader" id="page-loader" role="status" aria-label="Loading ShareSecure" hidden>
     <div class="page-loader-content" aria-hidden="true">
       <div class="page-loader-mark">
-        <svg class="page-loader-orbit" viewBox="0 0 120 120" fill="none">
-          <circle class="page-loader-track" cx="60" cy="60" r="54" />
-          <circle class="page-loader-arc" cx="60" cy="60" r="54" pathLength="100" />
-        </svg>
-        <img src="/app-icon.png" alt="" width="48" height="48" />
+        <img src="/rosette-loading.svg" alt="" width="112" height="112" />
       </div>
       <span class="page-loader-name">ShareSecure</span>
     </div>
@@ -30,7 +26,7 @@
   <!-- terms modal -->
   <div class="modal hidden tc-modal" id="tc-modal" role="dialog" aria-modal="true" aria-labelledby="tc-title">
     <div class="modal-content tc-modal-content">
-      <img class="tc-mark" src="/app-icon.png" alt="" width="40" height="40" />
+      <img class="tc-mark" src="/rosette.svg" alt="" width="40" height="40" />
       <h2 id="tc-title">Before you continue</h2>
       <div class="tc-content">
         <p>ShareSecure is a free project run by one person. By selecting “I accept”, you agree to the <a href="/terms" target="_blank">terms of use</a> and <a href="/privacy" target="_blank">privacy policy</a>.</p>
@@ -42,7 +38,7 @@
 
   <header class="topbar">
     <a class="brand" href="/" aria-label="ShareSecure home">
-      <img src="/app-icon.png" alt="" width="28" height="28" />
+      <img src="/rosette.svg" alt="" width="28" height="28" />
       <span>ShareSecure</span>
     </a>
     <div id="auth-status">
@@ -67,6 +63,10 @@
           <button class="menu-item hidden" role="menuitemcheckbox" aria-checked="false" id="notify-toggle">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <span id="notify-label"></span>
+          </button>
+          <button class="menu-item web-only-item hidden" role="menuitem" id="menu-code">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Security code</span>
           </button>
           <button class="menu-item" role="menuitem" id="menu-mcp">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
@@ -188,6 +188,16 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Let viewers download the file</span>
           </label>
+          <label class="switch hidden" id="e2e-wrap" title="The file is locked in this browser before it's uploaded. The key goes in the link after #, which is never sent to ShareSecure.">
+            <input type="checkbox" id="e2e-toggle" checked />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">End-to-end encrypted (ShareSecure can’t read it)</span>
+          </label>
+          <div class="field hidden" id="passcode-wrap">
+            <label for="passcode-input">Passcode <span class="label-optional">optional</span></label>
+            <input type="text" id="passcode-input" class="text-input" autocomplete="off" spellcheck="false" maxlength="128" placeholder="Needed with the link to open it" />
+            <span class="field-hint">Tell people the passcode some other way than the link. Anyone with only the link can’t open the file.</span>
+          </div>
           <label class="switch hidden" id="require-account-wrap">
             <input type="checkbox" id="require-account" />
             <span class="switch-track" aria-hidden="true"></span>
@@ -305,6 +315,31 @@
   </div>
 
   <!-- delete account -->
+  <div class="modal hidden" id="code-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="code-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="code-title">Your security code</h2>
+        <button class="btn-icon" data-close aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <p class="security-code" id="my-code">…</p>
+      <p class="modal-text">Files sent to you are locked to your account’s key. Read this code to the people who send you files, and have them check it against the code ShareSecure shows them for you. If the codes match, nobody, including ShareSecure, swapped your key.</p>
+      <form class="modal-block" id="check-code-form" novalidate>
+        <div class="form-group">
+          <label for="check-code-user">Someone else’s code</label>
+          <input type="text" id="check-code-user" placeholder="Their username" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="security-code is-small" id="their-code"></p>
+        <p class="auth-error" id="check-code-error" role="alert"></p>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-ghost">Show their code</button>
+          <button type="button" class="btn btn-primary hidden" id="trust-code-btn">Their code matches</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="modal hidden" id="delete-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="delete-title">
     <div class="modal-content">
       <div class="modal-header">

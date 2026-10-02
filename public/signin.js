@@ -1,3 +1,6 @@
+import { setUpKeys, newKeyFields } from './keys.js';
+import { signIn as opaqueSignIn, register as opaqueRegister, postWith } from './opaque.js';
+
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
 
@@ -13,14 +16,19 @@ const submit = $('auth-submit');
 // Only viewer links are allowed, so the parameter can't send anyone elsewhere.
 function afterSignIn() {
   const next = new URLSearchParams(location.search).get('next') || '';
-  return /^\/r\/[A-Za-z0-9]{4,32}$/.test(next) ? next : '/';
+  if (!/^\/r\/[A-Za-z0-9]{4,32}$/.test(next)) return '/';
+  // An end-to-end encrypted link's key waits in this tab's storage, not in the
+  // address, because the address of this page is sent to the server.
+  const hash = sessionStorage.getItem('return_hash') || '';
+  sessionStorage.removeItem('return_hash');
+  return next + (/^#[kf]=[A-Za-z0-9_-]{43}$/.test(hash) ? hash : '');
 }
 const errorEl = $('auth-error');
 
 // signin | signup (browser version) | setup | owner-signin (self-hosted)
 let mode = 'signin';
 let selfHost = false;
-let minLength = 6;
+let minLength = 10;
 
 const COPY = {
   signin: {
@@ -96,12 +104,39 @@ async function post(url, body) {
   return { ok: res.ok && data.success !== false, data };
 }
 
-async function signIn(user, pass) {
+// Passwords people pick most often, refused for new accounts. The server
+// never sees the password, so this check can only happen here.
+const COMMON = new Set(('password password1 password123 passw0rd 1234567890 12345678910 123456789a qwertyuiop ' +
+  'qwerty1234 qwerty123456 iloveyou123 1q2w3e4r5t 1qaz2wsx3edc abcdefghij abc1234567 letmein123 welcome123 ' +
+  'sharesecure sharesecure1 administrator changeme123 football123 baseball123 superman123 sunshine123 ' +
+  'princess123 dragon1234 monkey1234 trustno1234 zaq12wsxcde 0987654321 1111111111 0000000000 aaaaaaaaaa').split(' '));
+
+function weakPassword(pass, user) {
+  const lower = pass.toLowerCase();
+  if (COMMON.has(lower)) return 'That password is one of the most common ones. Pick another.';
+  if (user && lower.includes(user.toLowerCase())) return 'Don’t put your username in your password.';
+  if (/^(.)\1+$/.test(pass)) return 'Use more than one character over and over.';
+  return null;
+}
+
+const send = postWith(fetch);
+
+// On the website, sign-in never sends the password (OPAQUE, see opaque.js).
+// It also unlocks this account's end-to-end key, or makes one the first time.
+async function signInWebsite(user, pass) {
+  const done = await opaqueSignIn(send, user, pass, newKeyFields);
+  sessionStorage.setItem('user_token', done.token);
+  if (done.username) sessionStorage.setItem('user_name', done.username);
+  submit.textContent = 'Unlocking your keys…';
+  await setUpKeys({ token: done.token, username: done.username || user, exportKey: done.exportKey, publicKey: done.publicKey, privateKeyBox: done.privateKeyBox });
+}
+
+// A ShareSecure you run yourself keeps its one owner password on your own machine.
+async function signInSelfHosted(user, pass) {
   const { ok, data } = await post('/api/auth/login', { username: user, access_code: pass });
   if (!ok || !data.token) throw new Error(data.error || 'Wrong username or password.');
   sessionStorage.setItem('user_token', data.token);
   if (data.username) sessionStorage.setItem('user_name', data.username);
-  location.replace(afterSignIn());
 }
 
 form.addEventListener('submit', async e => {
@@ -118,6 +153,8 @@ form.addEventListener('submit', async e => {
     password.focus();
     return;
   }
+  const weak = creating && weakPassword(pass, user);
+  if (weak) { errorEl.textContent = weak; password.focus(); return; }
   if (creating && pass !== confirm.value) {
     errorEl.textContent = 'The passwords don’t match.';
     confirm.focus();
@@ -129,11 +166,17 @@ form.addEventListener('submit', async e => {
   submit.textContent = creating ? 'Creating account…' : 'Signing in…';
 
   try {
-    if (creating) {
-      const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass });
-      if (!ok) throw new Error(data.error || 'Couldn’t create the account. Try again.');
+    if (selfHost) {
+      if (creating) {
+        const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass });
+        if (!ok) throw new Error(data.error || 'Couldn’t create the account. Try again.');
+      }
+      await signInSelfHosted(user, pass);
+    } else {
+      if (creating) await opaqueRegister(send, user, pass, newKeyFields);
+      await signInWebsite(user, pass);
     }
-    await signIn(user, pass);
+    location.replace(afterSignIn());
   } catch (err) {
     errorEl.textContent = err.message || 'Something went wrong. Try again.';
     submit.disabled = false;

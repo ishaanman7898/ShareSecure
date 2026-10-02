@@ -1,3 +1,13 @@
+import {
+  newFileKey, lockFile, lockMeta, unlockText, linkWithKey, keyFromLink, sealKey, toB64url, fromB64url,
+  newPasscodeSalt, passcodeKey
+} from './sealed.js';
+import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
+import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey } from './keys.js';
+import { refill, takeToken, forgetTokens } from './tokens.js';
+import { loadVault, saveVault } from './vault.js';
+import { prove, postWith } from './opaque.js';
+
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
 
@@ -437,6 +447,8 @@ function clearSelection() {
   const nameInput = document.getElementById('display-name-input');
   if (nameWrap) nameWrap.classList.add('hidden');
   if (nameInput) nameInput.value = '';
+  const passcodeInput = document.getElementById('passcode-input');
+  if (passcodeInput) passcodeInput.value = '';
   updateUploadLabel();
 }
 
@@ -469,29 +481,53 @@ fileInput.addEventListener('change', () => {
 clearFile.addEventListener('click', clearSelection);
 
 // upload
-function buildUploadForm() {
-  const formData = new FormData();
-  formData.append('file', selectedFile);
-  formData.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
-  formData.append('allow_annotations', document.getElementById('allow-annotations')?.checked ? '1' : '0');
-  formData.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
-  formData.append('require_account', document.getElementById('require-account').checked ? '1' : '0');
+// Builds the upload. With end-to-end encryption on, the file is checked and
+// locked here first, and only the locked box leaves this browser.
+// → { form, key, name, type } or { error }
+async function buildUploadForm() {
+  const form = new FormData();
+  form.append('expires_hours', expiresSelect.value === 'custom' ? customExpiryHours : expiresSelect.value);
+  form.append('allow_annotations', document.getElementById('allow-annotations')?.checked ? '1' : '0');
+  form.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
+  form.append('require_account', document.getElementById('require-account').checked ? '1' : '0');
+  const displayName = document.getElementById('display-name-input')?.value.trim() || '';
 
-  // Send custom display name if the user changed it
-  const displayNameInput = document.getElementById('display-name-input');
-  if (displayNameInput && displayNameInput.value.trim()) {
-    formData.append('display_name', displayNameInput.value.trim());
+  if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
+    form.append('file', selectedFile);
+    if (displayName) form.append('display_name', displayName);
+    return { form, key: null };
   }
-  return formData;
+
+  const bytes = new Uint8Array(await selectedFile.arrayBuffer());
+  const type = detectType(bytes, selectedFile.name, selectedFile.type);
+  if (!type || type === NOT_UTF8) return { error: type ? ENCODING_ERROR : TYPES_ERROR };
+  // The link carries linkKey. With a passcode, the file's key also needs the
+  // passcode, so the link alone isn't enough.
+  const linkKey = newFileKey();
+  const passcode = document.getElementById('passcode-input')?.value || '';
+  const salt = passcode ? newPasscodeSalt() : null;
+  const key = passcode ? await passcodeKey(linkKey, passcode, salt) : linkKey;
+  const name = nameFor(displayName, selectedFile.name, type);
+  form.append('file', new Blob([await lockFile(key, bytes)]), 'sealed.bin');
+  form.append('e2e', '1');
+  form.append('meta', await lockMeta(key, { name, type }));
+  if (salt) form.append('passcode_salt', salt);
+  // also sealed to you, so the link shows up in Your shares on any device
+  const me = await myKeys();
+  if (me?.publicKey) form.append('owner_key', await sealKey(me.publicKey, ownerKeys(linkKey, key)));
+  return { form, key, linkKey, name, type };
 }
 
 // Sends one upload and resolves with { status, body }. status is 0 if the
 // server couldn't be reached.
-function sendUpload(formData, withBearer) {
+// With an anonymous token it goes without the sign-in, so the server can't
+// tie it to the account.
+function sendUpload(formData, withBearer, token = null) {
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/upload');
-    if (withBearer && userToken) xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
+    if (token) xhr.setRequestHeader('X-ShareSecure-Token', token);
+    else if (withBearer && userToken) xhr.setRequestHeader('Authorization', `Bearer ${userToken}`);
     xhr.upload.addEventListener('progress', e => {
       if (e.lengthComputable) progressBar.style.width = Math.round((e.loaded / e.total) * 100) + '%';
     });
@@ -543,15 +579,24 @@ uploadBtn.addEventListener('click', async () => {
   progressWrap.classList.remove('hidden');
   progressBar.style.width = '0%';
 
-  // Use the signed session. The experimental proof protocol is not a secure
-  // authentication or anonymity boundary and has been disabled on the server.
-  const result = await sendUpload(buildUploadForm(), true);
+  const built = await buildUploadForm().catch(() => ({ error: 'Couldn’t encrypt the file. Try again.' }));
+  if (built.error) {
+    showToast(built.error, 'error', 6000);
+    resetUploadButton();
+    return;
+  }
+  // end-to-end uploads spend an anonymous token when there is one; if it's
+  // refused (say, it ran out at midnight) the upload goes signed in instead
+  const token = built.key ? takeToken(tokenUsername(), 'upload') : null;
+  let result = await sendUpload(built.form, !token, token);
+  if (token && result.status === 401) result = await sendUpload((await buildAgain(built)).form, true);
 
   if (result.status === 200) {
     const data = result.body;
+    if (built.key) data.shortUrl = linkWithKey(data.shortUrl, built.linkKey);
     if (sendTo) uploadBtn.textContent = 'Sending…';
-    const delivery = sendTo ? await sendToUsers(data.shortId, sendTo, data.deleteToken) : null;
-    showResult(data, selectedFile, delivery);
+    const delivery = sendTo ? await sendToUsers(data.shortId, sendTo, data.deleteToken, built.key) : null;
+    showResult(data, selectedFile, delivery, built);
     if (!delivery) showToast('Link created.', 'success');
     else if (delivery.sent.length) showToast('Sent.', 'success');
     // ready for the next file
@@ -575,30 +620,39 @@ uploadBtn.addEventListener('click', async () => {
   }
 });
 
-function showResult(data, file, delivery) {
-  // Determine the display name (custom name takes precedence over original filename)
-  const displayNameInput = document.getElementById('display-name-input');
-  const usedName = (displayNameInput && displayNameInput.value.trim())
-    ? displayNameInput.value.trim()
-    : file.name;
+// The same upload again, for a retry (a FormData can only be sent once by XHR
+// in some browsers).
+async function buildAgain(built) {
+  const form = new FormData();
+  for (const [k, v] of built.form.entries()) form.append(k, v);
+  return { ...built, form };
+}
 
-  // store delete token so the viewer tab recognizes this browser as the owner
+function showResult(data, file, delivery, built = {}) {
+  // the name people see: what was typed in, or the file's own name
+  const usedName = built.name || document.getElementById('display-name-input')?.value.trim() || file.name;
+
+  // the delete key lets the viewer tab know this browser owns the link
   if (data.deleteToken) {
     localStorage.setItem('owner_' + data.shortId, data.deleteToken);
   }
 
-  // Save full record to client-side dashboard history (no server-side user→file link)
+  // Your shares is kept in this browser. For an end-to-end encrypted share,
+  // short_url includes the key after #.
   const record = {
     short_id:          data.shortId,
     short_url:         data.shortUrl,
     original_filename: usedName,
-    mime_type:         file.type || 'application/octet-stream',
+    mime_type:         built.type || file.type || 'application/octet-stream',
     size_bytes:        file.size,
     expires_at:        data.expiresAt,
     uploaded_at:       new Date().toISOString(),
     delete_token:      data.deleteToken || null,
+    // with a passcode, the file's key isn't in the link; keep it to send it on
+    full_key:          built.key && built.key !== built.linkKey ? toB64url(built.key) : null,
   };
   saveUploadToHistory(record);
+  vaultChanged();
 
   // a new link opens in a new tab; one sent to people doesn't need to
   if (!delivery) window.open(data.shortUrl, '_blank', 'noopener,noreferrer');
@@ -614,6 +668,13 @@ function shareUrl(record) {
   const path = `/r/${encodeURIComponent(record.short_id)}`;
   if (selfHostMode && publicBase) return publicBase + path;
   return record.short_url || location.origin + path;
+}
+
+// The file key of an end-to-end encrypted share this browser knows, or null.
+function shareKey(shortId) {
+  const record = loadUploadHistory().find(f => f.short_id === shortId);
+  if (!record) return null;
+  return record.full_key ? fromB64url(record.full_key) : keyFromLink(record.short_url);
 }
 
 // A share's dialog: send it to people, copy the link, or show its QR code. It
@@ -731,7 +792,7 @@ resultSendForm.addEventListener('submit', async e => {
   btn.disabled = true;
   btn.textContent = 'Sending…';
   const seq = resultSendSeq;
-  const d = await sendToUsers(currentShortId, input, currentDeleteToken);
+  const d = await sendToUsers(currentShortId, input, currentDeleteToken, shareKey(currentShortId) || keyFromLink(currentHistoryRecord?.short_url));
   // the dialog was closed, or now shows another share: just say how it went
   if (seq !== resultSendSeq || resultCard.classList.contains('hidden')) {
     if (seq === resultSendSeq) { btn.disabled = false; btn.textContent = 'Send'; }
@@ -943,6 +1004,46 @@ document.getElementById('mcp-revoke').addEventListener('click', async () => {
   } catch { showToast('Couldn’t turn it off. Try again.', 'error'); }
 });
 
+// ── security codes ───────────────────────────────────────────────────────────
+// Your code, to read to people, and anyone's code, to check against theirs.
+const codeModal = document.getElementById('code-modal');
+document.getElementById('menu-code')?.addEventListener('click', async () => {
+  document.getElementById('my-code').textContent = (await myCode()) || 'Sign out and in again to make your code.';
+  document.getElementById('their-code').textContent = '';
+  document.getElementById('check-code-error').textContent = '';
+  document.getElementById('trust-code-btn').classList.add('hidden');
+  openModal(codeModal);
+});
+document.getElementById('check-code-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('check-code-user').value.trim().replace(/^@/, '');
+  const out = document.getElementById('their-code');
+  const error = document.getElementById('check-code-error');
+  const trust = document.getElementById('trust-code-btn');
+  out.textContent = ''; error.textContent = ''; trust.classList.add('hidden');
+  if (!name) return;
+  try {
+    const found = await publicKeyFor(name);
+    if (found === undefined) error.textContent = 'There’s no user with that name.';
+    else if (!found) error.textContent = 'They haven’t signed in since security codes were added.';
+    else out.textContent = `@${name}: ${found.code}`;
+  } catch (err) {
+    error.textContent = err.message;
+    // their key changed: once they've confirmed their new code, it can be trusted
+    if (err.code === 'key_changed') {
+      trust.classList.remove('hidden');
+      trust.onclick = async () => { await trustNewKey(name); trust.classList.add('hidden'); error.textContent = `@${name}’s new key is trusted now.`; };
+    }
+  }
+});
+
+// The passcode only applies to end-to-end encrypted links.
+function syncPasscodeField() {
+  const on = !selfHostMode && document.getElementById('e2e-toggle')?.checked;
+  document.getElementById('passcode-wrap')?.classList.toggle('hidden', !on);
+}
+document.getElementById('e2e-toggle')?.addEventListener('change', syncPasscodeField);
+
 // ── delete account ────────────────────────────────────────────────────────────
 const deleteModal = document.getElementById('delete-modal');
 const deleteForm = document.getElementById('delete-form');
@@ -966,10 +1067,18 @@ deleteForm.addEventListener('submit', async e => {
   btn.textContent = 'Deleting…';
   deleteError.textContent = '';
   try {
+    // on the website the password is proven the same way as signing in, so it
+    // never leaves this browser
+    let body = { access_code: password };
+    if (!selfHostMode) {
+      const proven = await prove(postWith(fetch), tokenUsername(), password).catch(() => null);
+      if (!proven) throw new Error('That password isn’t right.');
+      if (!proven.legacy) body = proven.proof;
+    }
     const res = await fetch('/api/auth/delete-account', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({ access_code: password }),
+      body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.deleted) throw new Error(res.status === 403 ? 'That password isn’t right.' : (data.error || 'Couldn’t delete the account. Try again.'));
@@ -982,7 +1091,7 @@ deleteForm.addEventListener('submit', async e => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deleteToken: f.delete_token || localStorage.getItem('owner_' + f.short_id) }),
       })));
-      try { localStorage.removeItem('zk_secret'); localStorage.removeItem('zk_commitment'); } catch {}
+      await forgetKeys();
     }
     try {
       localStorage.removeItem(historyKey());
@@ -1018,6 +1127,11 @@ function initAuth() {
     showSignedIn(username);
     // a self-hosted install has one account, so this only makes sense on the website
     document.getElementById('require-account-wrap')?.classList.remove('hidden');
+    document.getElementById('e2e-wrap')?.classList.remove('hidden');
+    document.getElementById('menu-code')?.classList.remove('hidden');
+    syncPasscodeField();
+    // tokens are picked up a little after the page opens, not when they're used
+    setTimeout(() => refill(username, authHeaders()), 4000 + Math.random() * 8000);
     updateDashboard();
     startInboxPolling();
   } else {
@@ -1060,10 +1174,50 @@ async function updateDashboard() {
     if (!res.ok) return;
     const data = await res.json();
     if (selfHostMode && 'publicUrl' in data) publicBase = data.publicUrl || null;
-    if (mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
+    if (await mergeServerShares(data.files || [])) renderFileList(loadUploadHistory());
   } catch { /* network error — keep showing cached list */ }
+  if (!selfHostMode) await syncVault();
   pruneDeletedShares();
 }
+
+// ── the sealed list of your shares (public/vault.js) ─────────────────────────
+// Anonymous uploads aren't tied to the account on the server, so this list is
+// how they show up on your other devices. It's merged in when the page opens,
+// and saved a minute or two later or when you leave, never right after an upload.
+let vaultDirty = false;
+let vaultTimer = null;
+
+function vaultChanged() {
+  if (selfHostMode) return;
+  vaultDirty = true;
+  clearTimeout(vaultTimer);
+  vaultTimer = setTimeout(flushVault, 60000 + Math.random() * 120000);
+}
+
+async function flushVault() {
+  if (!vaultDirty || !userToken) return;
+  vaultDirty = false;
+  if (!(await saveVault(authHeaders(), loadUploadHistory()))) vaultDirty = true;
+}
+
+async function syncVault() {
+  const list = await loadVault(authHeaders());
+  if (!list) return;
+  const history = loadUploadHistory();
+  const known = new Set(history.map(f => f.short_id));
+  const fresh = list.filter(f => f.short_id && !known.has(f.short_id) && new Date(f.expires_at) > Date.now());
+  if (fresh.length) {
+    try {
+      const merged = [...history, ...fresh].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
+      localStorage.setItem(historyKey(), JSON.stringify(merged.slice(0, 50)));
+    } catch {}
+    renderFileList(loadUploadHistory());
+  }
+  // this device knows shares the list doesn't (or the list has old ones): save later
+  if (history.some(f => !list.find(v => v.short_id === f.short_id)) || list.length !== loadUploadHistory().length) vaultChanged();
+}
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushVault(); });
 
 // Drops shares deleted somewhere else: by a link they came from, or on another device.
 async function pruneDeletedShares() {
@@ -1088,20 +1242,29 @@ function parseServerTime(value) {
   return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : s.replace(' ', 'T') + 'Z');
 }
 
-// Adds server-listed shares missing from this browser's list. True if any were added.
-function mergeServerShares(files) {
+// Adds server-listed shares missing from this browser's list. End-to-end
+// encrypted ones are opened with this account's private key, since their name
+// and link key are sealed to it. True if any were added.
+async function mergeServerShares(files) {
   const history = loadUploadHistory();
   const known = new Set(history.map(f => f.short_id));
-  const fresh = files.filter(f => f.short_id && !known.has(f.short_id)).map(f => ({
-    short_id: f.short_id,
-    short_url: f.short_url || null,
-    original_filename: f.original_filename || 'Untitled',
-    mime_type: f.mime_type || 'application/octet-stream',
-    size_bytes: f.size_bytes || 0,
-    expires_at: f.expires_at,
-    uploaded_at: parseServerTime(f.uploaded_at).toISOString(),
-    delete_token: f.delete_token || null,
-  }));
+  const fresh = [];
+  for (const f of files) {
+    if (!f.short_id || known.has(f.short_id)) continue;
+    const opened = f.e2e ? await openRow(f, f.owner_key) : null;
+    if (f.e2e && !opened) continue;   // can't open it here, so there's no working link to show
+    fresh.push({
+      short_id: f.short_id,
+      short_url: opened ? opened.url : (f.short_url || null),
+      full_key: opened && opened.key !== opened.linkKey ? toB64url(opened.key) : null,
+      original_filename: opened ? opened.name : (f.original_filename || 'Untitled'),
+      mime_type: opened ? opened.type : (f.mime_type || 'application/octet-stream'),
+      size_bytes: f.size_bytes || 0,
+      expires_at: f.expires_at,
+      uploaded_at: parseServerTime(f.uploaded_at).toISOString(),
+      delete_token: f.delete_token || null,
+    });
+  }
   if (!fresh.length) return false;
   try {
     const merged = [...history, ...fresh].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
@@ -1196,7 +1359,9 @@ async function updateInbox() {
     if (res.status === 401) { logout(); return; }
     if (!res.ok) return;
     const data = await res.json();
-    const files = (data.files || []).filter(f => !f.expires_at || new Date(f.expires_at) > Date.now());
+    const files = await Promise.all((data.files || [])
+      .filter(f => !f.expires_at || new Date(f.expires_at) > Date.now())
+      .map(openInboxRow));
     const pending = files.filter(f => f.status === 'pending');
 
     const seen = seenRequests();
@@ -1209,6 +1374,17 @@ async function updateInbox() {
     renderRequests(pending);
     renderInbox(files.filter(f => f.status !== 'pending'));
   } catch {}
+}
+
+// An end-to-end encrypted file sent to you: its key is sealed to your account,
+// and its name and note are sealed with that key.
+async function openInboxRow(f) {
+  if (!f.e2e) return f;
+  const opened = await openRow(f, f.inbox_key);
+  if (!opened) return { ...f, original_filename: 'Encrypted file (sign in again to open it)', note: null };
+  let note = null;
+  if (f.note) { try { note = await unlockText(opened.key, f.note, 'note'); } catch {} }
+  return { ...f, original_filename: opened.name, mime_type: opened.type, note, url: opened.url };
 }
 
 function startInboxPolling() {
@@ -1285,7 +1461,7 @@ function renderInbox(files) {
         <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, ${f.expires_at ? `${formatCountdown(new Date(f.expires_at) - Date.now())} left` : 'No expiry'}</span>
       </div>
       <div class="file-item-actions">
-        <a class="btn btn-ghost btn-open" href="/r/${encodeURIComponent(f.short_id)}" target="_blank" rel="noopener noreferrer">Open</a>
+        <a class="btn btn-ghost btn-open" href="${escapeHtml(f.url || `/r/${encodeURIComponent(f.short_id)}`)}" target="_blank" rel="noopener noreferrer">Open</a>
       </div>
     </div>`).join('');
 }
@@ -1294,7 +1470,7 @@ function renderInbox(files) {
 // "alice, bob" or "@alice bob"; each person gets their own copy to accept. On
 // this computer the local server passes it on through the linked account.
 // The delete key proves to the website that the share is yours.
-async function sendToUsers(shortId, input, deleteToken) {
+async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(shortId)) {
   const names = [...new Set(input.split(/[\s,;]+/).map(u => u.replace(/^@/, '')).filter(Boolean))].slice(0, 20);
   let key = deleteToken || null;
   if (!key) {
@@ -1304,11 +1480,32 @@ async function sendToUsers(shortId, input, deleteToken) {
   for (let i = 0; i < names.length; i++) {
     const username = names[i];
     try {
-      const res = await fetch(`/api/send/${encodeURIComponent(shortId)}`, {
+      const body = { targetUsername: username, deleteToken: key };
+      // an end-to-end encrypted file's key is sealed to the person it's for
+      let token = null;
+      if (fileKey) {
+        let sealed;
+        try { sealed = await sealFor(username, fileKey); } catch (err) {
+          result.failed.push({ username, reason: err.message });
+          continue;
+        }
+        if (sealed === undefined) { result.missing.push(username); continue; }
+        if (!sealed) {
+          result.failed.push({ username, reason: 'They need to sign in to ShareSecure once before they can get end-to-end encrypted files.' });
+          continue;
+        }
+        body.sealed_key = sealed;
+        // with the link's delete key, an anonymous token is enough: the server
+        // doesn't learn who sent it
+        if (key && !selfHostMode) token = takeToken(tokenUsername(), 'send');
+      }
+      const post = headers => fetch(`/api/send/${encodeURIComponent(shortId)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ targetUsername: username, deleteToken: key }),
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
       });
+      let res = await post(token ? { 'X-ShareSecure-Token': token } : authHeaders());
+      if (token && res.status === 401) res = await post(authHeaders());
       const data = await res.json().catch(() => ({}));
       if (data.sent) result.sent.push(username);
       else if (data.error === 'User not found') result.missing.push(username);
@@ -1337,7 +1534,7 @@ function renderSendHint() {
   if (!selfHostMode) return;
   const hint = document.getElementById('send-to-hint');
   if (cloudState.linked) {
-    hint.textContent = `Sent through your ShareSecure account, @${cloudState.username}. They get an encrypted copy that works even while this computer is off.`;
+    hint.textContent = `Sent through your ShareSecure account, @${cloudState.username}. They get an end-to-end encrypted copy (ShareSecure can’t read it, or tell it came from you) that works even while this computer is off.`;
     return;
   }
   hint.textContent = 'Sending to usernames needs your ShareSecure account. Leave it empty to just get a link. ';
@@ -1494,7 +1691,7 @@ function renderFileList(files) {
         <span class="expiry-bar" aria-hidden="true"><span></span></span>
       </div>
       <div class="file-item-actions">
-        <a href="/r/${encodeURIComponent(f.short_id)}" target="_blank" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
+        <a href="${escapeHtml(shareUrl(f))}" target="_blank" rel="noopener noreferrer" class="btn-icon" title="Open" aria-label="Open ${escapeHtml(f.original_filename)}">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </a>
         <button class="btn-icon send-file-btn" data-id="${escapeHtml(f.short_id)}" title="Send, copy the link or show the QR code" aria-label="Send ${escapeHtml(f.original_filename)}">${SEND_ICON}</button>
@@ -1566,6 +1763,8 @@ function renderFileList(files) {
 }
 
 function logout() {
+  forgetKeys();
+  forgetTokens(tokenUsername());
   userToken = null;
   sessionStorage.removeItem('user_token');
   sessionStorage.removeItem('user_name');

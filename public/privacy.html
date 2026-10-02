@@ -18,7 +18,7 @@
 
   <header class="topbar">
     <a class="topbar-brand" href="/">
-      <img src="/app-icon.png" alt="" width="26" height="26" />
+      <img src="/rosette.svg" alt="" width="26" height="26" />
       ShareSecure
     </a>
     <a class="topbar-back" href="/">
@@ -97,7 +97,8 @@
 
     <section id="security">
       <h2>6. How your files are protected</h2>
-      <p>Each file is encrypted with its own key, and those keys come from a master key kept on the server. That protects files if the database is ever copied, but it isn't end-to-end encryption. Whoever controls the server could decrypt files while they exist. If that matters for what you're sharing, run ShareSecure yourself so the key stays on your own machine.</p>
+      <p>By default, files are end-to-end encrypted: your browser encrypts the file, its name, any note and any drawings before they're uploaded, and the key is only in the link (after the <code>#</code>, the part browsers never send to a server). We store files we can't read. Files are padded to standard sizes, so we only know roughly how big they are. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it, and your account's private key is stored locked with a key only your browser has.</p>
+      <p>If you turn end-to-end encryption off, each file is encrypted on the server with its own key derived from a master key we hold. That protects files if the database is copied, but whoever controls the server could decrypt them while they exist. End-to-end encrypted files you share or send from the website use anonymous tokens, so we can't tell which account shared or sent them. (Files an AI assistant shares for you are tied to your account, so it can list and delete them.) We do see who a file was sent to, and when. If that matters, run ShareSecure yourself.</p>
       <p>See the <a href="/security">security page</a> for how to report a problem.</p>
     </section>
 

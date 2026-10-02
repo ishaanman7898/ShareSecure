@@ -28,6 +28,8 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 ## Features
 
+- **End-to-end encrypted.** On the website, files are locked in your browser before they're uploaded, and the key lives only in the link. ShareSecure can't read them. Add a passcode and the link alone isn't enough.
+- **Private by design.** Your password never leaves your browser, uploads and sends can't be tied to your account, and file sizes are padded. [How.](docs/SECURITY.md)
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **View-only by default.** Choose per file whether people can download it or draw on it, and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
@@ -63,17 +65,19 @@ bearer_token_env_var = "SHARESECURE_TOKEN"
 
 **ChatGPT**: make a custom GPT that shares and sends files and text from the chat, including files ChatGPT made itself. In **GPTs → Create → Configure**, add an action by importing `https://sharesecure-du8.pages.dev/openapi.json`, set authentication to API key (Bearer) with your token, and use `https://sharesecure-du8.pages.dev/privacy` as the privacy policy. The dialog has instructions to paste in. If your plan supports connectors in developer mode, you can add the connector URL there instead.
 
+Assistant shares are end-to-end encrypted by default: the link's key (after `#`) isn't kept by ShareSecure, so the assistant gives you the whole link, and passes it to `send_share` to send it on later. Tool results also come back as structured data (`structuredContent`) for clients that read it.
+
 Assistants share text they wrote with `share_text`, and pass files in the call (`content_base64`) or as a link (`source_url`), so the Claude and ChatGPT apps can finish the job themselves. Only when an assistant can't get at the file does `share_file` give you a one-time upload page to pick it.
 
 In the desktop app's “this computer” mode and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one). The Claude app connector works there too through the public link.
 
 | Tool | What it does |
 |---|---|
-| `share_file` | Shares a file. Give it `path` (the assistant runs on the same computer), `content_base64` with `filename` (a small file the assistant has), or `source_url` (a public https link). Optional: `expires_hours` (1–240, default 24), `allow_download`, `require_account` (website only), `name`, `send_to` (usernames to deliver it to) and `note` (shown to them). On the website, `ask_user` is a last resort that gives you an upload page. |
+| `share_file` | Shares a file, end-to-end encrypted unless `private: false`. Give it `path` (the assistant runs on the same computer), `content_base64` with `filename` (a small file the assistant has), or `source_url` (a public https link). Optional: `expires_hours` (1–240, default 24), `allow_download`, `require_account` (website only), `name`, `send_to` (usernames to deliver it to) and `note` (shown to them). On the website, `ask_user` is a last resort that gives you an upload page. |
 | `share_text` | Shares text the assistant wrote as a document, with the same options. |
 | `begin_upload`, `upload_chunk`, `finish_upload` | Upload a bigger file (up to 10 MB) in pieces, for assistants that can base64 it in code. |
 | `upload_status` | Website only: checks an `ask_user` upload page and returns the link once you've picked the file. |
-| `send_share` | Sends an existing share to usernames, with an optional `note`. |
+| `send_share` | Sends an existing share to usernames, with an optional `note`. Pass the whole `link` for a private share. |
 | `list_shares` | Lists live shares with their links and time left. |
 | `delete_share` | Deletes a share so its link stops working. |
 
@@ -81,13 +85,18 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
 
 ## How files are protected
 
-- Files, their names and notes are encrypted with AES-256-GCM.
-  - **Website:** each file's key is derived from a server master key.
+- **Website, end to end (the default):** the file, its name and type, notes and drawings are encrypted in your browser with AES-256-GCM, using a key that only exists in the link after `#`, and padded to a standard size. An optional passcode makes the link only half the key. Files sent to a username have that key sealed to the recipient's public key (ECDH P-256), so only their browser can open it.
+- **Sign-in** never sends your password (based on OPAQUE, RFC 9807), and your private key is locked with a key only your browser gets from signing in.
+- **Anonymous uploads and sends:** your browser spends blind-signed tokens (RFC 9474) instead of your sign-in, so the server can enforce daily limits without knowing who uploaded or sent a file.
+- **Security codes** let you check nobody swapped someone's key, and your browser warns you if a contact's key ever changes.
+- **No third-party code:** pdf.js and mammoth are served from the site, and the desktop app runs the site's code from its own copy.
+- Otherwise, files, their names and notes are encrypted on the server with AES-256-GCM.
+  - **Website (end to end off):** each file's key is derived from a server master key.
   - **Self-hosted:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
 - File types are checked from the file's contents, not its name. The self-hosted server also strips author and editing metadata from PDF and DOCX files.
 - Pages are sent with `noindex`, `no-store` and `frame-ancestors 'none'`.
 
-Encryption isn't end-to-end: whoever holds the master key can decrypt files while they exist. For sensitive files, self-host so the key stays on your machine. Anyone with a link can open the file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
+Files shared with end-to-end encryption off can be read by whoever holds the master key while they exist. Anyone with the whole link (and passcode) can open a file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
 
 ## Self-hosting
 
@@ -146,7 +155,7 @@ public/       website and app UI (served by both backends)
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
 desktop/      Electron app, icons and the first-run welcome screen
-docs/         security, signing, and the retired zero-knowledge uploads
+docs/         security and signing
 ```
 
 ## License

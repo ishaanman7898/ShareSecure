@@ -2,10 +2,16 @@
 // Sending to ShareSecure usernames from a private ShareSecure.
 //
 // Usernames only exist on the ShareSecure website, so the owner links their
-// ShareSecure account here. Sending a share to someone uploads an encrypted copy
-// to the website with that account (once per share, however many people get it)
-// and asks the website to deliver it. That way the recipient can open it even
-// when this computer is off. The copy expires when the share here does.
+// ShareSecure account here. Sending a share to someone uploads a copy to the
+// website (once per share, however many people get it) and asks the website to
+// deliver it. That way the recipient can open it even when this computer is off.
+// The copy expires when the share here does.
+//
+// The copy is end-to-end encrypted exactly like the website's own uploads
+// (public/sealed.js): sealed here, padded, with its key sealed to each person
+// it's sent to, so ShareSecure can't read it. Uploads and sends spend anonymous
+// tokens (public/blindrsa.js) that this computer picks up in the background, so
+// ShareSecure can't tell they came from this account either.
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -57,6 +63,84 @@ function saveCopies(copies) {
   settings.set('cloudCopies', Object.keys(copies).length ? encryptString(JSON.stringify(copies), getEncKey()) : null);
 }
 
+// The browser modules (ES modules) that do the cryptography.
+const lib = () => Promise.all([
+  import('../../public/sealed.js'), import('../../public/filetypes.js'), import('../../public/blindrsa.js'),
+]).then(([sealed, filetypes, blindrsa]) => ({ ...sealed, ...filetypes, ...blindrsa }));
+
+// ── anonymous tokens ─────────────────────────────────────────────────────────
+// A few tokens are kept here (encrypted, like everything in settings), topped
+// up a while after linking or starting, never right before they're spent.
+const KEEP = { upload: 2, send: 10 };
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function loadTokens() {
+  try {
+    const stored = settings.get('cloudTokens');
+    const list = stored ? JSON.parse(decryptString(stored, getEncKey())) : [];
+    return list.filter(t => t.day >= Math.floor(Date.now() / DAY_MS) - 1);
+  } catch { return []; }
+}
+
+function saveTokens(list) {
+  settings.set('cloudTokens', list.length ? encryptString(JSON.stringify(list), getEncKey()) : null);
+}
+
+// Takes one token → the header value to send it with, or null.
+function takeToken(kind) {
+  const list = loadTokens();
+  const i = list.findIndex(t => t.kind === kind);
+  if (i < 0) return null;
+  const [t] = list.splice(i, 1);
+  saveTokens(list);
+  return `${t.kind}.${t.day}.${t.nonce}.${t.sig}`;
+}
+
+let refilling = false;
+async function refillTokens() {
+  const token = cloudToken();
+  if (refilling || !token) return;
+  refilling = true;
+  try {
+    const { issuerKey, blind, finalize, tokenMessage, newFileKey, toB64url, fromB64url } = await lib();
+    const auth = { Authorization: `Bearer ${token}` };
+    const info = await cloudFetch('/api/tokens', { headers: auth });
+    if (info.status !== 200 || !info.body.available) return;
+    const key = await issuerKey(info.body.publicKey);
+    for (const kind of ['upload', 'send']) {
+      let want = Math.min(KEEP[kind] - loadTokens().filter(t => t.kind === kind).length, info.body.left[kind]);
+      while (want-- > 0) {
+        await new Promise(r => setTimeout(r, 500 + Math.random() * 2000));
+        const nonce = newFileKey();
+        const msg = tokenMessage(kind, info.body.day, info.body.keyId, nonce);
+        const { blinded, inv } = await blind(key, msg);
+        const signed = await cloudFetch('/api/tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...auth },
+          body: JSON.stringify({ kind, blinded: toB64url(blinded) }),
+        });
+        if (signed.status !== 200) break;
+        const sig = await finalize(key, msg, fromB64url(signed.body.signature), inv);
+        saveTokens([...loadTokens(), { kind, day: info.body.day, nonce: toB64url(nonce), sig: toB64url(sig) }]);
+      }
+    }
+  } catch { /* without tokens, uploads and sends use the account's sign-in */ }
+  finally { refilling = false; }
+}
+
+// some minutes from now, so getting tokens and spending them don't line up
+function refillLater() {
+  setTimeout(() => refillTokens(), (1 + Math.random() * 4) * 60 * 1000).unref?.();
+}
+refillLater();
+
+// A username's public key → string, null (none yet) or undefined (no such user).
+async function publicKeyOf(username) {
+  const out = await cloudFetch(`/api/keys?username=${encodeURIComponent(username)}`);
+  if (out.status === 404) return undefined;
+  return out.body.publicKey || null;
+}
+
 async function cloudFetch(pathname, options = {}) {
   const res = await fetch(cloud() + pathname, { ...options, signal: AbortSignal.timeout(120000) });
   let body = {};
@@ -98,27 +182,42 @@ function cloudCopy(shortId, token) {
     let bytes;
     try { bytes = readShare(file); } catch { return { status: 500, error: 'Couldn’t read the file.' }; }
 
+    // sealed here: a fresh key, the file padded and locked with it, and the
+    // name and type locked too
+    const { newFileKey, lockFile, lockMeta, sealKey, nameFor, isAllowedType, toB64url } = await lib();
+    if (!isAllowedType(mime)) return { status: 415, error: 'That kind of file can’t be sent.' };
+    const key = newFileKey();
+    const form = new FormData();
+    form.append('file', new Blob([await lockFile(key, new Uint8Array(bytes))]), 'sealed.bin');
+    form.append('e2e', '1');
+    form.append('meta', await lockMeta(key, { name: nameFor(name, '', mime), type: mime }));
+    // sealed to the linked account too, so it shows in Your shares on the website
+    const ownKey = await publicKeyOf(settings.get('cloudUsername') || '').catch(() => null);
+    if (ownKey) form.append('owner_key', await sealKey(ownKey, key));
     // the website's copy lasts exactly as long as the share here
     const hoursLeft = (new Date(file.expires_at).getTime() - Date.now()) / 3600000;
-    const form = new FormData();
-    form.append('file', new Blob([bytes], { type: mime }), name);
     form.append('expires_hours', String(Math.min(Math.max(hoursLeft, 1 / 60), 240)));
     form.append('allow_download', file.allow_download ? '1' : '0');
     form.append('allow_annotations', file.allow_annotations ? '1' : '0');
     // it's only ever for the people it's sent to, who are signed in
     form.append('require_account', '1');
-    form.append('display_name', name);
 
-    const { status: code, body } = await cloudFetch('/api/upload', {
+    // an anonymous token when there is one, so the upload isn't tied to the account
+    const anon = takeToken('upload');
+    let { status: code, body } = await cloudFetch('/api/upload', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` },
       body: form,
     });
+    if (anon && code === 401) {
+      ({ status: code, body } = await cloudFetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }));
+    }
+    if (anon) refillLater();
     if (code === 401) return { status: 401, error: 'link_expired' };
     if (code === 429) return { status: 429, error: 'Your ShareSecure account has reached today’s upload limit. Try again tomorrow.' };
     if (code !== 200 || !body.shortId) return { status: 502, error: body.error || 'ShareSecure didn’t take the file. Try again.' };
 
-    const copy = { id: body.shortId, deleteToken: body.deleteToken || null, expiresAt: body.expiresAt || file.expires_at };
+    const copy = { id: body.shortId, deleteToken: body.deleteToken || null, expiresAt: body.expiresAt || file.expires_at, key: toB64url(key) };
     // taken back while it was uploading: delete the new copy instead of keeping it
     const stillHere = db.prepare('SELECT 1 FROM files WHERE short_id = ? AND is_active = 1').get(shortId);
     if (!stillHere || forgotten.has(shortId) || generation !== copiesGeneration) {
@@ -149,11 +248,25 @@ async function sendOne(shortId, username, note) {
       if (copy.status === 401) forgetToken();
       return { status: copy.status, body: { error: copy.error } };
     }
-    const { status: code, body } = await cloudFetch(`/api/send/${encodeURIComponent(copy.id)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ targetUsername: username, note, deleteToken: copy.deleteToken }),
+    // copies made before end-to-end encryption are sent as they are
+    const request = { targetUsername: username, deleteToken: copy.deleteToken, note };
+    let anon = null;
+    if (copy.key) {
+      const { sealKey, lockText, fromB64url } = await lib();
+      const theirKey = await publicKeyOf(username);
+      if (theirKey === undefined) return { status: 404, body: { error: 'User not found' } };
+      if (!theirKey) return { status: 409, body: { error: 'They need to sign in to ShareSecure once before they can get end-to-end encrypted files.' } };
+      const fileKey = fromB64url(copy.key);
+      request.sealed_key = await sealKey(theirKey, fileKey);
+      if (note) request.note = await lockText(fileKey, note, 'note');
+      anon = takeToken('send');
+    }
+    const send = headers => cloudFetch(`/api/send/${encodeURIComponent(copy.id)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(request),
     });
+    let { status: code, body } = await send(anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` });
+    if (anon && code === 401) ({ status: code, body } = await send({ Authorization: `Bearer ${token}` }));
+    if (anon) refillLater();
     if (code === 401) {
       forgetToken();
       return { status: 401, body: { error: 'link_expired' } };
@@ -252,18 +365,25 @@ router.post('/cloud/link', requireOwner, async (req, res) => {
   const accessCode = String(req.body?.access_code || '');
   if (!username || !accessCode) return res.status(400).json({ error: 'Enter your username and password.' });
 
+  // The website never sees the password: this computer proves it the same way
+  // a browser does (OPAQUE, public/opaque.js). Older accounts send it once to
+  // switch over, and make their end-to-end keys while they're at it.
   let out;
   try {
-    out = await cloudFetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, access_code: accessCode }),
-    });
-  } catch {
+    const { signIn, postWith } = await import('../../public/opaque.js');
+    const { makeKeyPair, lockPrivateKey } = await import('../../public/sealed.js');
+    const newKeys = async exportKey => {
+      const pair = await makeKeyPair();
+      return { public_key: pair.publicKey, private_key_box: await lockPrivateKey(pair.privateKey, exportKey) };
+    };
+    const post = postWith((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(120000) }), cloud());
+    out = { status: 200, body: await signIn(post, username, accessCode, newKeys) };
+  } catch (err) {
+    if (err.status === 429) return res.status(429).json({ error: err.message || 'Too many tries. Wait a few minutes and try again.' });
+    if (err.status === 401 || err.status === 400) return res.status(403).json({ error: 'Wrong username or password.' });
     return res.status(502).json({ error: 'Couldn’t reach ShareSecure. Check your connection and try again.' });
   }
-  if (out.status === 429) return res.status(429).json({ error: out.body.error || 'Too many tries. Wait a few minutes and try again.' });
-  if (out.status !== 200 || !out.body.token) return res.status(403).json({ error: 'Wrong username or password.' });
+  if (!out.body.token) return res.status(403).json({ error: 'Wrong username or password.' });
 
   // copies made with a different account are taken back; the same account's stay
   const newName = out.body.username || username;
@@ -271,6 +391,8 @@ router.post('/cloud/link', requireOwner, async (req, res) => {
   if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) forgetAllCloudCopies().catch(() => {});
   settings.set('cloudToken', encryptString(out.body.token, getEncKey()));
   settings.set('cloudUsername', newName);
+  saveTokens([]);   // tokens belong to the account that got them
+  refillLater();
   res.json(status());
 });
 
@@ -281,6 +403,7 @@ router.delete('/cloud', requireOwner, (_req, res) => {
   forgetAllCloudCopies().catch(() => {});
   settings.set('cloudToken', null);
   settings.set('cloudUsername', null);
+  saveTokens([]);
   res.json(status());
 });
 
@@ -303,3 +426,4 @@ module.exports.sendToCloud = sendToCloud;
 module.exports.forgetCloudCopy = forgetCloudCopy;
 module.exports.forgetAllCloudCopies = forgetAllCloudCopies;
 module.exports.cloudStatus = status;
+module.exports.refillTokens = refillTokens;

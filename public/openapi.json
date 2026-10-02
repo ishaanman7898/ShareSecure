@@ -28,6 +28,7 @@
                   "expires_hours": { "type": "number", "description": "Hours until the link stops working, 1 to 240. Default 24." },
                   "allow_download": { "type": "boolean", "description": "Let people who open the link download the file. Default false (view only)." },
                   "require_account": { "type": "boolean", "description": "Only people signed in to ShareSecure can open the link. Default false." },
+                  "private": { "type": "boolean", "description": "End-to-end encrypt it. Default true: the key goes in the link after #, so ShareSecure can’t read the stored file. Always give the user the whole link. Set false only if the user asks, or a recipient couldn’t be sent a private copy." },
                   "name": { "type": "string", "description": "Name shown to people who open the link, when sharing one file." },
                   "send_to": {
                     "type": "array",
@@ -83,6 +84,7 @@
                   "expires_hours": { "type": "number", "description": "Hours until the link stops working, 1 to 240. Default 24." },
                   "allow_download": { "type": "boolean", "description": "Let people who open the link download it. Default false (view only)." },
                   "require_account": { "type": "boolean", "description": "Only people signed in to ShareSecure can open the link. Default false." },
+                  "private": { "type": "boolean", "description": "End-to-end encrypt it. Default true: the key goes in the link after #, so ShareSecure can’t read the stored file. Always give the user the whole link. Set false only if the user asks, or a recipient couldn’t be sent a private copy." },
                   "send_to": {
                     "type": "array",
                     "items": { "type": "string" },
@@ -113,9 +115,10 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["id", "send_to"],
+                "required": ["send_to"],
                 "properties": {
-                  "id": { "type": "string", "description": "The share id." },
+                  "link": { "type": "string", "description": "The full share link, including the part after #. Needed for private (end-to-end encrypted) shares, whose key ShareSecure doesn’t keep." },
+                  "id": { "type": "string", "description": "The share id, if you don’t have the link (only for shares that aren’t private)." },
                   "send_to": { "type": "array", "items": { "type": "string" }, "description": "ShareSecure usernames, up to 20." },
                   "note": { "type": "string", "maxLength": 140, "description": "Short note shown to the people it's sent to." }
                 }

@@ -6,45 +6,62 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 ## How files are protected
 
-- Files, their names and notes are encrypted with AES-256-GCM. Each file has its own key, derived from a server master key.
-- Links expire after 1 hour to 10 days. Expired files are erased.
-- Every upload uses a signed session and is tagged to the account with an HMAC of its id. The experimental zero-knowledge uploads are turned off; see [Known limitations](#known-limitations).
-- The self-hosted server checks file types by their contents, not their names, and strips author and editing metadata from PDF and DOCX files.
-- Pages send `noindex`, `no-store` and a Content-Security-Policy that only runs the site's own scripts, plus pdf.js and mammoth from jsDelivr for the viewer. There are no analytics.
-- On the hosted site, session tokens are signed and expire after 30 days. Access codes are stored as salted PBKDF2-SHA256 hashes, and repeated failed sign-ins are slowed down.
+**End-to-end encryption** (on by default on the website and for AI assistants)
 
-## Known limitations
+- Your browser encrypts the file, its name and type, any note and any drawings with AES-256-GCM before uploading. The key is only in the link, after `#k=`, which browsers never send to a server. ShareSecure stores files it can't read.
+- Files are padded to standard sizes (1 KB, 2 KB, 4 KB … 8 MB, 10 MB), so the server only learns roughly how big a file is.
+- A link can also need a **passcode**. Then the link holds only half the key, and the passcode (stretched with 600,000 rounds of PBKDF2) is the other half. Anyone who only has the link can't open the file.
+- Files sent to a username have their key sealed to that person's public key (ECDH P-256 + HKDF + AES-GCM). Only their browser can open it.
+- Files shared by an assistant are sealed by the server, which then forgets the key.
+- Code: [`public/sealed.js`](../public/sealed.js).
 
-- **Encryption happens on the server, not end-to-end.** Files are encrypted inside the hosted server after they arrive. The hosting provider (Cloudflare), and anyone who holds `ENCRYPTION_KEY` or the other server secrets, can read files, their names and notes while they exist. They can also see who sends a file to whom: sending to a username goes through the server signed in, and the server links the sender's link to the recipient. Self-host for sensitive files.
-- **The Unigroth proofs are turned off.** Uploads use a signed session, and the proof endpoints answer 410. They were experimental and neither sound nor unlinkable:
-  - The verifier only re-checks 32 consecutive constraints out of about 549, and trusts an `aggregatedCheck` value the prover supplies. A proof-of-concept forged 10 out of 10 proofs this way, without the secret.
-  - Each challenge is issued to a signed-in account and stored with it, and the proof carries that account's commitment, so the server knows which account is uploading.
-  - The commitment hash can be worked backwards to a small set of candidate secrets.
+**Sign-in never sends your password** (based on [OPAQUE, RFC 9807](https://www.rfc-editor.org/rfc/rfc9807); [`public/opaque.js`](../public/opaque.js) lists where it differs)
 
-  `tests/unigroth-risk.test.cjs` reproduces the forgery and checks that production refuses the proof path. Don't turn it back on without an independently reviewed replacement.
-- The viewer loads pdf.js and mammoth from jsDelivr. mammoth is pinned with an integrity hash; pdf.js is loaded as a module and isn't yet.
-- Anyone with a link can open the file until it expires.
-- The hosting provider and your network can see your IP address. Use Tor or a VPN if that matters.
+- Your browser blinds the password before anything is sent. The server keeps a record it can check sign-ins against, but it never sees the password, can't learn it from the record, and can't test guesses against a stolen database without its own secret.
+- Signing in also produces an export key that only your browser has. It locks your account's private key, which the server stores without being able to use.
+- Older accounts send their password one last time when they next sign in, switch over, and the password hash is deleted.
+- Deleting your account takes a fresh proof of the password, made the same way.
+- New passwords need at least 10 characters and can't be one of the most common ones.
 
-## Planned
+**Uploads and sends that can't be tied to you** (Privacy Pass-style tokens, [`public/blindrsa.js`](../public/blindrsa.js))
 
-- End-to-end encryption in the browser: the file is encrypted before upload and the key goes in the part of the link after `#`, which browsers never send to a server.
-- Sealed sends: files sent to a username are encrypted to the recipient's public key, so the server can't read them or see who sent them.
-- Replacing Unigroth with an audited anonymous-credential scheme, or removing it.
-- Serving pdf.js and mammoth from this site instead of a CDN.
+- While you're signed in, your browser picks up a few tokens a day. The server signs them blinded ([RFC 9474](https://www.rfc-editor.org/rfc/rfc9474) blind RSA), so it never sees the token it signed.
+- End-to-end uploads and sends spend a token instead of your sign-in. The server can check the token is real and unspent, but it can't tell which account it gave it to. The daily limits (5 uploads, 60 sends) still hold.
+- Tokens are picked up a while before they're used, so timing doesn't link them either.
+- Your list of shares is kept on the server sealed to your own key (padded to 4 KB steps), so "Your shares" still works on every device.
 
-## Fixed in this release
+**Nobody can swap someone's key unnoticed**
 
-- Session tokens can no longer be made up when `TOKEN_SECRET` isn't set. Sign-in now refuses to work instead, and the old unsigned token format is no longer accepted.
-- Session tokens expire 30 days after they're issued. Older tokens without an expiry stop working 30 days after they were issued.
-- Access codes are hashed with PBKDF2-SHA256 and a random salt per account (10,000 iterations by default to fit the free plan's CPU limit; raise it with PBKDF2_ITER, up to 100,000). Older unsalted SHA-256 hashes are upgraded the next time the person signs in.
-- Sign-in is limited to 10 failed attempts per username and per IP address every 15 minutes. IP addresses are stored only as a keyed hash.
-- Sign-in errors no longer include internal error details.
-- New usernames are 3 to 32 letters, numbers, dots, dashes or underscores, and names that differ only by capitalisation count as the same name.
-- Word documents are cleaned before they're shown: only basic formatting, `http`, `https` and `mailto` links, and embedded images are kept. A document can no longer run script through a `javascript:` link.
-- Pages send a full Content-Security-Policy instead of only `frame-ancestors`.
-- Annotations can only be read and saved by the owner of the link, who proves it with the link's delete token. Saved strokes are checked against a strict format and size limit, and expired links can't be annotated.
-- Delete tokens are compared in constant time.
-- Plain text, Markdown and CSV files are shown as plain text, never as HTML.
+- Every account has a **security code** (account menu → Security code): 30 digits from its public key. Compare codes with the people you send to.
+- Your browser remembers each person's key the first time you send to them. If the server ever hands out a different one, sending stops and you're told to compare codes.
+- Accounts can't replace their key once it's set.
+
+**Code the server can't change**
+
+- Every script, pdf.js and mammoth included, is served from this site, and the Content-Security-Policy allows no others. mammoth is also pinned with an integrity hash.
+- The desktop app, signed in to an account, runs the website's code from its own copy instead of downloading it, so a compromised server can't change the code that encrypts your files.
+
+**Everything else**
+
+- Links expire after 1 minute to 10 days. Expired files are erased.
+- Files shared with end-to-end encryption turned off are still encrypted on the server, each with its own key.
+- The self-hosted server checks file types by their contents and strips author and editing metadata from PDF and DOCX files.
+- Pages send `noindex`, `no-store` and `frame-ancestors 'none'`. There are no analytics.
+- Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
+
+## What's left
+
+- **Anyone with the whole link** (and the passcode, if there is one) can open the file until it expires. For anything that matters, add a passcode, send it to a username, or turn on "Only people signed in".
+- **The website itself is still served by the server.** In a browser, you trust the page you load. The desktop app doesn't have this problem.
+- **The server knows who a file was sent to, and when.** It doesn't know who sent it.
+- **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
+
+## Removed
+
+The experimental Unigroth zero-knowledge proofs are gone. The verifier spot-checked 32 of about 549 constraints and trusted a value the prover sent, so proofs could be forged without the secret, and each challenge was tied to a signed-in account. Privacy Pass-style tokens now do what it was meant to do, using a standard scheme (RFC 9474 blind RSA) that's checked against the RFC's own test vectors in `tests/`. The hash-to-curve step of sign-in is checked against RFC 9380's vectors the same way. These are this project's own implementations, not an audited library, so an outside review is still worth getting.
+
+## Setting up the server
+
+`TOKEN_ISSUER_KEY` (an RSA-2048 private key; make one with `npm run token-key`) turns on anonymous tokens. Without it, uploads and sends use the signed-in session instead. OPAQUE's keys come from `ENCRYPTION_KEY`, so they need nothing extra.
 
 The same information for users is at [/security](https://sharesecure-du8.pages.dev/security) and [/privacy](https://sharesecure-du8.pages.dev/privacy).

@@ -14,7 +14,9 @@
     "postdist": "npm rebuild better-sqlite3",
     "generate-key": "node -e \"console.log('ENCRYPTION_KEY=' + require('crypto').randomBytes(32).toString('hex'))\"",
     "deploy": "wrangler pages deploy public --project-name sharesecure",
-    "icons": "electron desktop/render-icons.js"
+    "icons": "electron desktop/render-icons.js",
+    "token-key": "node -e \"console.log('TOKEN_ISSUER_KEY=' + require('crypto').generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64'))\"",
+    "rosette": "node desktop/rosette.js"
   },
   "keywords": [],
   "author": "Ishaan",
@@ -54,6 +56,7 @@
       "!**/*.map",
       "!desktop/logo.js",
       "!desktop/render-icons.js",
+      "!desktop/rosette.js",
       "!desktop/logo.svg",
       "!desktop/entitlements.mac.plist"
     ],

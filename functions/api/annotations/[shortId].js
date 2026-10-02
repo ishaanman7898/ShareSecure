@@ -3,7 +3,11 @@
 // assignFreshId in viewer.js), so nobody is meant to read or write the notes
 // on someone else's link. Reading and saving both need that link's delete
 // token, which only its owner holds, sent in the X-Delete-Token header.
-import { getClientById, getEncKey, encryptStr, decryptStr, ensureFileColumns, signInRequired, tokensMatch } from '../../_turso.js';
+//
+// On an end-to-end encrypted file the drawing is sealed with the file key in
+// the browser, so the server stores { sealed: "e2e:…" } it can't read.
+import { getDb, encryptStr, decryptStr, ensureFileColumns, signInRequired, tokensMatch } from '../../_turso.js';
+import { isSealed } from '../../../public/sealed.js';
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_STROKES = 5000;
@@ -35,10 +39,10 @@ function cleanStrokes(list) {
   return out;
 }
 
-async function findFile(client, shortId) {
-  await ensureFileColumns(client);
-  return (await client.execute({
-    sql: 'SELECT short_id, annotations, allow_annotations, require_account, recipient_user_tag, expires_at, delete_token FROM files WHERE short_id = ? AND is_active = 1',
+async function findFile(db, shortId) {
+  await ensureFileColumns(db);
+  return (await db.execute({
+    sql: 'SELECT short_id, annotations, allow_annotations, require_account, recipient_user_tag, expires_at, delete_token, e2e FROM files WHERE short_id = ? AND is_active = 1',
     args: [shortId]
   })).rows[0];
 }
@@ -59,26 +63,22 @@ async function refuse(file, request, env) {
 
 export async function onRequestGet(context) {
   const { params, env, request } = context;
-  const client = await getClientById(params.shortId, env);
-  const file = await findFile(client, params.shortId);
+  const db = getDb(env);
+  const file = await findFile(db, params.shortId);
   const refused = await refuse(file, request, env);
   if (refused) return refused;
 
-  const encKey = await getEncKey(env);
-  const raw = await decryptStr(file.annotations, encKey, env, params.shortId);
+  const raw = await decryptStr(file.annotations, null, env, params.shortId);
+  if (isSealed(raw)) return Response.json({ sealed: raw, annotations: [], allow_annotations: file.allow_annotations !== 0 });
   let annotations = [];
   try { annotations = raw ? JSON.parse(raw) : []; } catch {}
-
-  return Response.json({
-    annotations,
-    allow_annotations: file.allow_annotations !== 0
-  });
+  return Response.json({ annotations, allow_annotations: file.allow_annotations !== 0 });
 }
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
-  const client = await getClientById(params.shortId, env);
-  const file = await findFile(client, params.shortId);
+  const db = getDb(env);
+  const file = await findFile(db, params.shortId);
   const refused = await refuse(file, request, env);
   if (refused) return refused;
   if (file.allow_annotations === 0) {
@@ -96,22 +96,24 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const annotations = cleanStrokes(body?.annotations);
-  if (!annotations) {
-    return Response.json({ error: 'Invalid annotations' }, { status: 400 });
+  // a sealed drawing can't be checked, only limited in size; an open one is
+  // rebuilt from the strokes' known fields
+  let stored;
+  if (file.e2e) {
+    if (!isSealed(body?.sealed)) return Response.json({ error: 'Drawings on this file have to be sealed.' }, { status: 400 });
+    stored = body.sealed;
+  } else {
+    const annotations = cleanStrokes(body?.annotations);
+    if (!annotations) return Response.json({ error: 'Invalid annotations' }, { status: 400 });
+    stored = JSON.stringify(annotations);
   }
-
-  const annotStr = JSON.stringify(annotations);
-  if (annotStr.length > MAX_BYTES) {
+  if (stored.length > MAX_BYTES * (file.e2e ? 2 : 1)) {
     return Response.json({ error: 'Annotations data too large' }, { status: 413 });
   }
 
-  const encKey = await getEncKey(env);
-  const encAnnot = await encryptStr(annotStr, encKey, env, params.shortId);
-
-  await client.execute({
+  await db.execute({
     sql: 'UPDATE files SET annotations = ? WHERE short_id = ?',
-    args: [encAnnot, params.shortId]
+    args: [file.e2e ? stored : await encryptStr(stored, null, env, params.shortId), params.shortId]
   });
 
   return Response.json({ saved: true });
