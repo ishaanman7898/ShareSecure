@@ -105,7 +105,10 @@ async function refillTokens() {
     const { issuerKey, blind, finalize, tokenMessage, newFileKey, toB64url, fromB64url } = await lib();
     const auth = { Authorization: `Bearer ${token}` };
     const info = await cloudFetch('/api/tokens', { headers: auth });
-    if (info.status !== 200 || !info.body.available) return;
+    if (info.status !== 200 || !info.body.available || !info.body.left) return;
+    // only the key pinned for this site (see public/tokens.js)
+    const { trustedIssuer } = await import('../../public/tokens.js');
+    if (!(await trustedIssuer(cloud(), info.body.publicKey))) return;
     const key = await issuerKey(info.body.publicKey);
     for (const kind of ['upload', 'send']) {
       let want = Math.min(KEEP[kind] - loadTokens().filter(t => t.kind === kind).length, info.body.left[kind]);

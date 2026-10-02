@@ -34,6 +34,5 @@ app.whenReady().then(async () => {
     fs.writeFileSync(path.join(ROOT, job.file), img.resize({ width: job.size, height: job.size, quality: 'best' }).toPNG());
     console.log('wrote', job.file);
   }
-  fs.writeFileSync(path.join(ROOT, 'desktop/logo.svg'), logo({ canvas: 1024, margin: 16 }));
   app.quit();
 });

@@ -268,29 +268,12 @@ app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
 // this app, not downloaded, so a compromised server can't change that code.
 // Only the API (/api, /mcp, /connect) goes over the network.
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const TYPES = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png',
-  '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8',
-};
+const { bundledFile: findFile, TYPES } = require('./site-files');
 const PAGE_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
   "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; " +
   "frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-// "/r/abc" → viewer.html, "/signin" → signin.html, … or null for anything else
-function bundledFile(pathname) {
-  if (pathname === '/') return 'index.html';
-  if (/^\/r\/[A-Za-z0-9]+$/.test(pathname)) return 'viewer.html';
-  if (/^\/drop\/[A-Za-z0-9]+$/.test(pathname)) return 'drop.html';
-  let rel;
-  try { rel = decodeURIComponent(pathname).replace(/^\/+/, ''); } catch { return null; }
-  if (!rel || rel.includes('..') || rel.includes('\\')) return null;
-  for (const name of [rel, rel + '.html']) {
-    const full = path.join(PUBLIC_DIR, name);
-    if (full.startsWith(PUBLIC_DIR + path.sep) && TYPES[path.extname(name)] && fs.existsSync(full) && fs.statSync(full).isFile()) return name;
-  }
-  return null;
-}
+const bundledFile = pathname => findFile(PUBLIC_DIR, pathname);
 
 function serveBundledSite() {
   session.defaultSession.protocol.handle('https', async request => {

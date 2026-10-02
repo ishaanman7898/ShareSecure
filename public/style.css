@@ -202,9 +202,8 @@ body:has(#landing-page:not(.hidden)) .container {
 .page-loader[hidden] { display: none; }
 .page-loader.is-complete { opacity: 0; visibility: hidden; pointer-events: none; }
 .page-loader-content { display: flex; flex-direction: column; align-items: center; padding: 24px; }
-.page-loader-mark { position: relative; display: grid; place-items: center; width: 120px; height: 120px; margin-bottom: 24px; }
+.page-loader-mark { position: relative; display: grid; place-items: center; width: 120px; height: 120px; }
 .page-loader-mark img { width: 112px; height: 112px; }
-.page-loader-name { font-size: 1.4rem; font-weight: 600; letter-spacing: -0.04em; }
 body.page-loading > :not(.page-loader) { visibility: hidden; }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -1348,3 +1347,20 @@ a.menu-item { text-decoration: none; }
 .security-code.is-small { font-size: 0.95rem; padding: 8px; margin: 8px 0 0; }
 .security-code:empty { display: none; }
 #passcode-wrap { margin-top: 2px; }
+
+/* ── Advanced sharing options, folded away by default ─────────────────────── */
+.advanced { border: 1px solid var(--line); border-radius: 12px; }
+.advanced > summary {
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+  cursor: pointer; list-style: none; user-select: none;
+}
+.advanced > summary::-webkit-details-marker { display: none; }
+.advanced > summary::after {
+  content: ''; margin-left: auto; width: 8px; height: 8px;
+  border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg); transition: transform 0.2s ease; opacity: 0.6;
+}
+.advanced[open] > summary::after { transform: rotate(225deg); }
+.advanced-title { font-weight: 600; }
+.advanced-state { color: var(--muted); font-size: 0.85rem; }
+.advanced-body { display: grid; gap: 14px; padding: 4px 14px 14px; }

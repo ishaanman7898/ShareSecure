@@ -49,6 +49,17 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Pages send `noindex`, `no-store` and `frame-ancestors 'none'`. There are no analytics.
 - Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
 
+## Tested by trying to break it
+
+`npm test` includes attacks, each run against the real handlers with a throwaway database:
+
+- **A stolen session** can't take over an older account (switching to the new sign-in needs the password), can't plant keys to receive someone's files (setting keys needs a sign-in from the last 10 minutes), and can't delete the account (that needs a fresh password proof).
+- **Replayed or tampered sign-in proofs** are refused, and the password never appears in a request or the database.
+- **Forged, reused or wrong-kind tokens** are refused, and the daily limits hold across tokens and signed-in uploads.
+- **A malicious server** can't tag people with their own token key: the apps only accept the key pinned in their code, checked against the key itself.
+- **Without the right key or passcode**, a stored file opens to nothing, and a box moved into another slot or changed in transit fails to open.
+- **Crafted names** can't become HTML or script files, and **crafted paths** can't make the desktop app serve anything outside its own copy of the site.
+
 ## What's left
 
 - **Anyone with the whole link** (and the passcode, if there is one) can open the file until it expires. For anything that matters, add a passcode, send it to a username, or turn on "Only people signed in".

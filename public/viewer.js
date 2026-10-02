@@ -528,16 +528,7 @@ async function renderAllPages() {
   const container = $('pdf-container');
   container.innerHTML = '';
 
-  const loader = $('loader');
-  let progressEl = loader?.querySelector('.loader-progress');
-  if (!progressEl && loader) {
-    progressEl = document.createElement('span');
-    progressEl.className = 'loader-progress';
-    loader.appendChild(progressEl);
-  }
-
   for (let n = 1; n <= pdfDoc.numPages; n++) {
-    if (progressEl) progressEl.textContent = `Page ${n} of ${pdfDoc.numPages}`;
     const page = await pdfDoc.getPage(n);
     const vp = page.getViewport({ scale: zoomScale, rotation: currentRotation });
 

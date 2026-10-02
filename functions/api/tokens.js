@@ -17,13 +17,19 @@ async function left(db, auth, env) {
   return { upload: Math.max(0, DAILY.upload - uploads), send: Math.max(0, DAILY.send - await issuedToday(db, account, 'send')) };
 }
 
+// The key is the same for everyone and public, so anyone can check it (the
+// apps compare it with the one pinned in their code: a server handing different
+// people different keys could tell their tokens apart). What's left today
+// needs signing in.
 export async function onRequestGet(context) {
   const { env, request } = context;
-  const auth = await verifyToken(request.headers.get('Authorization'), env);
-  if (!auth) return fail('Sign in first.', 401);
   const key = await getIssuer(env);
   if (!key) return Response.json({ available: false });
-  return Response.json({ available: true, publicKey: key.publicJwk, keyId: key.keyId, day: today(), left: await left(getDb(env), auth, env) });
+  const auth = await verifyToken(request.headers.get('Authorization'), env);
+  return Response.json({
+    available: true, publicKey: key.publicJwk, keyId: key.keyId, day: today(),
+    ...(auth ? { left: await left(getDb(env), auth, env) } : {}),
+  });
 }
 
 export async function onRequestPost(context) {

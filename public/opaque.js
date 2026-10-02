@@ -237,7 +237,7 @@ export async function signIn(post, username, password, afterKeys) {
     const auth = { Authorization: `Bearer ${old.token}` };
     const made = await makeRecord(post, '/api/auth/upgrade', username, password, auth);
     const extra = afterKeys && !old.publicKey ? await afterKeys(made.exportKey) : {};
-    await step(post, '/api/auth/upgrade/finish', { record: made.record, ...extra }, auth);
+    await step(post, '/api/auth/upgrade/finish', { access_code: password, record: made.record, ...extra }, auth);
     proven = await prove(post, username, password);
     if (proven.legacy) throw new Error('Couldn’t update your sign-in. Try again.');
   }

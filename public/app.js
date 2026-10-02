@@ -449,6 +449,7 @@ function clearSelection() {
   if (nameInput) nameInput.value = '';
   const passcodeInput = document.getElementById('passcode-input');
   if (passcodeInput) passcodeInput.value = '';
+  updateAdvancedState();
   updateUploadLabel();
 }
 
@@ -1041,8 +1042,27 @@ document.getElementById('check-code-form')?.addEventListener('submit', async e =
 function syncPasscodeField() {
   const on = !selfHostMode && document.getElementById('e2e-toggle')?.checked;
   document.getElementById('passcode-wrap')?.classList.toggle('hidden', !on);
+  updateAdvancedState();
 }
 document.getElementById('e2e-toggle')?.addEventListener('change', syncPasscodeField);
+
+// The folded "Advanced" section says what it's set to, e.g.
+// "End-to-end encrypted · view only", so nobody has to open it to check.
+function updateAdvancedState() {
+  const checked = id => document.getElementById(id)?.checked;
+  const parts = [];
+  if (!selfHostMode) parts.push(checked('e2e-toggle') ? 'End-to-end encrypted' : 'Encrypted on the server');
+  if (!selfHostMode && checked('e2e-toggle') && document.getElementById('passcode-input')?.value) parts.push('passcode');
+  parts.push(checked('allow-download') ? 'downloads on' : 'view only');
+  if (checked('allow-annotations')) parts.push('annotations on');
+  if (!selfHostMode && checked('require-account')) parts.push('signed-in only');
+  const state = document.getElementById('advanced-state');
+  if (state) state.textContent = parts.join(' · ');
+}
+for (const id of ['allow-download', 'allow-annotations', 'require-account']) {
+  document.getElementById(id)?.addEventListener('change', updateAdvancedState);
+}
+document.getElementById('passcode-input')?.addEventListener('input', updateAdvancedState);
 
 // ── delete account ────────────────────────────────────────────────────────────
 const deleteModal = document.getElementById('delete-modal');
@@ -1152,6 +1172,7 @@ function initSelfHost() {
   selfHostMode = true;
   const username = userToken && tokenUsername();
   if (!username) { location.replace('/signin'); return; }
+  updateAdvancedState();
 
   showSignedIn(username);
   updateDashboard();

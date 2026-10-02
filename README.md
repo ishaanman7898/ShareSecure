@@ -145,18 +145,34 @@ npm install
 npm start           # self-hosted server at http://localhost:3000
 npm run desktop     # the desktop app (rebuilds the SQLite driver for Electron, then back)
 npm run dist        # desktop installer for this platform, in dist/
+npm test            # security tests, including attempts to break in
 npm run icons       # re-render the app icons from desktop/logo.js
+npm run rosette     # re-draw the rosette logo from desktop/rosette.js
 ```
 
 Releases are `vX.Y.Z` tags. Pushing one builds the Windows, macOS and Linux installers in GitHub Actions and attaches them to the release. Self-hosted installs and the desktop app update from the latest release. Signing the macOS build is described in [docs/SIGNING.md](docs/SIGNING.md).
 
 ```
-public/       website and app UI (served by both backends)
+public/       website and app UI (served by both backends), including the
+              encryption, sign-in and token code that runs in the browser
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
-desktop/      Electron app, icons and the first-run welcome screen
+desktop/      Electron app, icons, the logo and the first-run welcome screen
+tests/        security tests and the RFC test vectors they check against
 docs/         security and signing
+db/           the database tables, for reference (the API creates them itself)
 ```
+
+The website runs on Cloudflare Pages with a Turso database. It needs these
+settings (as encrypted secrets, under Pages → Settings → Variables and Secrets):
+
+| Setting | What it is |
+|---|---|
+| `TURSO_URL`, `TURSO_TOKEN` | The Turso database and a token for it. |
+| `ENCRYPTION_KEY` | 64 hex characters (`npm run generate-key`). Also the source of the sign-in server's keys. |
+| `TOKEN_SECRET` | Signs sessions. Any long random string. |
+| `TAG_SECRET` | Optional. Keys the hashes that stand in for account ids; defaults to `TOKEN_SECRET`. |
+| `TOKEN_ISSUER_KEY` | Signs anonymous tokens (`npm run token-key`). Pin its id in `public/tokens.js`. |
 
 ## License
 

@@ -13,7 +13,7 @@ fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module","version":"0
 fs.cpSync(path.join(root, 'functions'), path.join(temp, 'functions'), { recursive: true });
 // the API shares a few modules with the browser
 fs.mkdirSync(path.join(temp, 'public'));
-for (const f of ['sealed.js', 'filetypes.js', 'opaque.js', 'p256.js', 'blindrsa.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
+for (const f of ['sealed.js', 'filetypes.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
 // Cloudflare's bundler reads package.json on its own; Node needs to be told it's JSON
 for (const f of ['_mcp.js']) {
   const p = path.join(temp, 'functions', f);
@@ -537,4 +537,92 @@ test('hash-to-curve matches the RFC 9380 test vectors (P256_XMD:SHA-256_SSWU_RO_
   const pub = await crypto.subtle.importKey('raw', p256.encodePoint(H), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, pair.privateKey, 256));
   assert.equal(p256.bytesToBig(shared), p256.multiply(H, d).x);
+});
+
+// ── trying to break in ───────────────────────────────────────────────────────
+// Each test plays an attacker with something partial (a stolen session, a link
+// without its key, a forged token, a crafted path) and checks it gets nowhere.
+
+test('attack: a stolen session cannot take over an older account', async () => {
+  const opaque = await publicLib('opaque.js');
+  const { post } = await authPost();
+  db.prepare('INSERT INTO users (username, access_code) VALUES (?, ?)').run('erin', await api.hashAccessCode('erins-real-pass', env));
+  const erin = db.prepare("SELECT id FROM users WHERE username = 'erin'").get().id;
+  const stolen = { Authorization: 'Bearer ' + await api.signToken({ userId: erin, username: 'erin' }, env) };
+  // the attacker makes a record from a password of their own…
+  const forged = { record: { client_public_key: keyPairs.bob.publicKey, masking_key: sealed.toB64url(new Uint8Array(32)), envelope: sealed.toB64url(new Uint8Array(64)) } };
+  // …but saving it needs erin's current password
+  assert.equal((await post('/api/auth/upgrade/finish', forged, stolen)).status, 403);
+  assert.equal((await post('/api/auth/upgrade/finish', { ...forged, access_code: 'a guess' }, stolen)).status, 403);
+  assert.equal(db.prepare('SELECT opaque_record FROM users WHERE id = ?').get(erin).opaque_record, null);
+  // erin herself still switches over fine
+  const done = await opaque.signIn(post, 'erin', 'erins-real-pass');
+  assert(done.token);
+});
+
+test('attack: an old stolen session cannot plant keys to receive someone’s files', async () => {
+  db.prepare("INSERT INTO users (username, access_code) VALUES ('frank', 'opaque')").run();
+  const frank = db.prepare("SELECT id FROM users WHERE username = 'frank'").get().id;
+  const session = await api.signToken({ userId: frank, username: 'frank' }, env);
+  const attackerKeys = await sealed.makeKeyPair();
+  const plant = () => keysApi.onRequestPost(context('/api/keys', { user: null, headers: { Authorization: 'Bearer ' + session, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ public_key: attackerKeys.publicKey, private_key_box: 'e2e:AAAA' }) }));
+  // the same session 11 minutes later, as if it had been stolen
+  const realNow = Date.now;
+  Date.now = () => realNow() + 11 * 60 * 1000;
+  try { assert.equal((await plant()).status, 401); } finally { Date.now = realNow; }
+  assert.equal(db.prepare('SELECT public_key FROM users WHERE id = ?').get(frank).public_key, null);
+});
+
+test('attack: the server cannot tag people with their own token key', async () => {
+  const tokens = await publicLib('tokens.js');
+  const real = { n: 'AQAB' };   // any key that isn't the pinned one
+  assert.equal(await tokens.trustedIssuer('https://sharesecure-du8.pages.dev', real), false);
+  // a test copy of the site has no pin and uses its own key
+  assert.equal(await tokens.trustedIssuer('http://127.0.0.1:8788', real), true);
+  // the key is public: anyone can read and compare it, signed in or not
+  const info = await (await (await load('api/tokens.js')).onRequestGet(context('/api/tokens', { user: null, method: 'GET' }))).json();
+  assert(info.publicKey.n && !info.left);
+});
+
+test('attack: links, tokens and uploads without the right secret get nothing', async () => {
+  freshDay();
+  // a sealed upload with no sign-in and no token
+  const key = sealed.newFileKey();
+  const form = new FormData();
+  form.set('file', new File([await sealed.lockFile(key, new TextEncoder().encode('x'))], 'sealed.bin'));
+  form.set('e2e', '1'); form.set('expires_hours', '1');
+  form.set('meta', await sealed.lockMeta(key, { name: 'x.txt', type: 'text/plain' }));
+  assert.equal((await uploadHandler(context('/api/upload', { user: null, body: form }))).status, 401);
+  // a made-up token
+  const fake = `upload.${Math.floor(Date.now() / 86400000)}.${sealed.toB64url(sealed.newFileKey())}.${sealed.toB64url(new Uint8Array(256).fill(1))}`;
+  assert.equal((await uploadHandler(context('/api/upload', { user: null, headers: { 'X-ShareSecure-Token': fake }, body: form }))).status, 401);
+
+  // someone else's share: an anonymous send needs the link's delete key
+  const own = await uploadHandler(context('/api/upload', { user: 'alice', body: form }));
+  const share = await own.json();
+  const send = sendHandler(context('/api/send/' + share.shortId, { user: 'mallory', params: { shortId: share.shortId }, headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetUsername: 'bob', sealed_key: 'e2e:AAAA' }) }));
+  assert.equal((await send).status, 403);
+  // the stored file is a box: the wrong key opens nothing, and neither does a wrong passcode
+  const raw = new Uint8Array(await (await rawHandler(context('/api/raw/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }))).arrayBuffer());
+  await assert.rejects(sealed.unlockFile(sealed.newFileKey(), raw));
+  const salt = sealed.newPasscodeSalt();
+  await assert.rejects(sealed.unlockFile(await sealed.passcodeKey(key, 'wrong', salt), raw));
+  // a name built to inject HTML or a script file comes out harmless
+  const filetypes = await publicLib('filetypes.js');
+  assert.equal(filetypes.nameFor('<img src=x onerror=alert(1)>.html', '', 'text/plain'), 'img src=x onerror=alert(1).txt');
+  assert.equal(filetypes.nameFor('payload.hta', '', 'application/pdf'), 'payload.pdf');
+});
+
+test('attack: the desktop app never serves files from outside its own copy of the site', () => {
+  const { bundledFile } = require(path.join(root, 'desktop', 'site-files.js'));
+  const dir = path.join(root, 'public');
+  for (const p of ['/../package.json', '/..%2fpackage.json', '/%2e%2e/%2e%2e/Windows/win.ini', '/C:/Windows/win.ini',
+    '/vendor/..%5c..%5cpackage.json', '/.git/config', '/%00index.html', '/../../server/settings.js']) {
+    assert.equal(bundledFile(dir, p), null, p);
+  }
+  assert.equal(bundledFile(dir, '/signin'), 'signin.html');
+  assert.equal(bundledFile(dir, '/vendor/pdf.min.mjs'), 'vendor/pdf.min.mjs');
+  assert.equal(bundledFile(dir, '/r/abc123'), 'viewer.html');
 });

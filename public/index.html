@@ -18,7 +18,6 @@
       <div class="page-loader-mark">
         <img src="/rosette-loading.svg" alt="" width="112" height="112" />
       </div>
-      <span class="page-loader-name">ShareSecure</span>
     </div>
   </div>
   <script src="/page-loading.js"></script>
@@ -178,16 +177,12 @@
             <span id="custom-expiry-err" class="field-error" role="alert"></span>
           </div>
 
-          <label class="switch">
-            <input type="checkbox" id="allow-annotations" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Let viewers annotate</span>
-          </label>
-          <label class="switch">
-            <input type="checkbox" id="allow-download" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Let viewers download the file</span>
-          </label>
+          <details class="advanced" id="advanced">
+            <summary>
+              <span class="advanced-title">Advanced</span>
+              <span class="advanced-state" id="advanced-state"></span>
+            </summary>
+            <div class="advanced-body">
           <label class="switch hidden" id="e2e-wrap" title="The file is locked in this browser before it's uploaded. The key goes in the link after #, which is never sent to ShareSecure.">
             <input type="checkbox" id="e2e-toggle" checked />
             <span class="switch-track" aria-hidden="true"></span>
@@ -198,11 +193,23 @@
             <input type="text" id="passcode-input" class="text-input" autocomplete="off" spellcheck="false" maxlength="128" placeholder="Needed with the link to open it" />
             <span class="field-hint">Tell people the passcode some other way than the link. Anyone with only the link can’t open the file.</span>
           </div>
+          <label class="switch">
+            <input type="checkbox" id="allow-annotations" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Let viewers annotate</span>
+          </label>
+          <label class="switch">
+            <input type="checkbox" id="allow-download" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Let viewers download the file</span>
+          </label>
           <label class="switch hidden" id="require-account-wrap">
             <input type="checkbox" id="require-account" />
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Only people signed in to ShareSecure can open it</span>
           </label>
+            </div>
+          </details>
         </div>
 
         <button class="btn btn-primary btn-full btn-lg" id="upload-btn" disabled>Create link</button>

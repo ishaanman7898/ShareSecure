@@ -34,10 +34,15 @@ export async function onRequestGet(context) {
   return Response.json({ publicKey: me?.public_key || null, privateKeyBox: me?.private_key_box || null });
 }
 
+// Setting keys needs a sign-in from the last 10 minutes, so an old session
+// someone stole can't put in keys of their own for an account that has none.
+const FRESH_S = 10 * 60;
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   if (!auth) return fail('Sign in first.', 401);
+  if (Date.now() / 1000 - auth.issuedAt > FRESH_S) return fail('Sign in again to set up your keys.', 401);
 
   let body;
   try { body = await request.json(); } catch { return fail('Send JSON.', 400); }

@@ -39,12 +39,38 @@
 
     <div class="timeline">
 
-      <!-- v1.11.0 -->
+      <!-- v1.11.1 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.11.1</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Changes</h3>
+          <ul class="change-list">
+            <li><strong>Advanced options</strong> — Sharing shows just the name, who it’s for and when it expires. Encryption, the passcode, downloads and the rest are under Advanced, which says what they’re set to without opening it. End-to-end encryption stays on by default.</li>
+            <li><strong>Quieter loading</strong> — The loading screens are just the turning rosette.</li>
+            <li><strong>Security codes</strong> read as two even rows.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Security</h3>
+          <ul class="change-list">
+            <li><strong>Stolen sessions can do less</strong> — Moving an older account to the new sign-in needs its password, and setting up an account’s encryption keys needs a recent sign-in, so a stolen session can’t take over an account or receive its files.</li>
+            <li><strong>Pinned token key</strong> — The website and the desktop app only accept ShareSecure’s one published key for anonymous tokens, so the server can’t give anyone a key of their own to recognise them by.</li>
+            <li><strong>Attack tests</strong> — Each of these, and other ways of trying to break in, now runs as a test with every change.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.11.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.11.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">

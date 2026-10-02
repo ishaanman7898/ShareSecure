@@ -223,7 +223,8 @@ export async function verifyToken(authHeader, env) {
     const userId = parseInt(payload.userId, 10);
     if (!Number.isSafeInteger(userId) || userId < 1) return null;
     const user = (await getDb(env).execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] })).rows[0];
-    return user ? { userId, username: user.username } : null;
+    // issuedAt lets sensitive steps ask for a recent sign-in
+    return user ? { userId, username: user.username, issuedAt: Number(payload.iat) || 0 } : null;
   } catch {
     return null;
   }

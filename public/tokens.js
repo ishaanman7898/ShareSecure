@@ -9,6 +9,22 @@ import { issuerKey, blind, finalize, tokenMessage } from './blindrsa.js';
 import { randomBytes, toB64url, fromB64url } from './sealed.js';
 
 const KEEP = { upload: 2, send: 10 };
+
+// The one token-signing key each ShareSecure site may use, by the SHA-256 of
+// its modulus. If the server hands out any other key, no tokens are taken:
+// a server giving different people different keys could tell their tokens
+// apart. (A site not listed here, like a test copy, uses whatever key it has.)
+export const PINNED_ISSUERS = {
+  'https://sharesecure-du8.pages.dev': 'RaTJnJlLUVBRXDFDVjvASBjIZEUxYe_Nfu822xfFsAo',
+};
+
+// Is this the key this site is meant to use? Checked against the key itself,
+// never the id the server claims for it.
+export async function trustedIssuer(origin, publicKey) {
+  const id = toB64url(new Uint8Array(await crypto.subtle.digest('SHA-256', fromB64url(publicKey.n))));
+  const pinned = PINNED_ISSUERS[origin];
+  return pinned ? id === pinned : true;
+}
 const walletKey = user => `ss_tokens:${String(user || '').toLowerCase()}`;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const today = () => Math.floor(Date.now() / DAY_MS);
@@ -37,7 +53,7 @@ export async function refill(user, authHeaders) {
     const res = await fetch('/api/tokens', { headers: authHeaders });
     if (!res.ok) return;
     const info = await res.json();
-    if (!info.available) return;
+    if (!info.available || !info.left || !(await trustedIssuer(location.origin, info.publicKey))) return;
     const key = await issuerKey(info.publicKey);
     for (const kind of ['upload', 'send']) {
       let want = Math.min(KEEP[kind] - load(user).filter(t => t.kind === kind).length, info.left[kind]);

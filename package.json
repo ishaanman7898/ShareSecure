@@ -1,6 +1,6 @@
 {
   "name": "sharesecure",
-  "version": "1.11.0",
+  "version": "1.11.1",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "desktop/main.js",
   "type": "commonjs",
@@ -57,7 +57,6 @@
       "!desktop/logo.js",
       "!desktop/render-icons.js",
       "!desktop/rosette.js",
-      "!desktop/logo.svg",
       "!desktop/entitlements.mac.plist"
     ],
     "asarUnpack": [
