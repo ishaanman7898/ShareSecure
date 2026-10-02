@@ -958,16 +958,14 @@ function renderMcp(state, token) {
 
   // Claude's and ChatGPT's apps connect over the internet, and their connector
   // form only takes a URL, so the token rides in the connector URL
-  const connector = document.getElementById('mcp-connector');
-  connector.textContent = state.publicUrl ? `${state.publicUrl}/connect/${token}` : '';
-  connector.closest('.code-box').classList.toggle('hidden', !state.publicUrl);
+  const connectorUrl = state.publicUrl ? `${state.publicUrl}/connect/${token}` : '';
+  for (const id of ['mcp-connector', 'mcp-connector-chatgpt']) {
+    const box = document.getElementById(id);
+    box.textContent = connectorUrl;
+    box.closest('.code-box').classList.toggle('hidden', !connectorUrl);
+  }
   document.querySelector('.mcp-no-public').classList.toggle('hidden', Boolean(state.publicUrl));
   document.querySelector('.mcp-tunnel-warn').classList.toggle('hidden', !/\.loca\.lt$/i.test(state.publicUrl ? new URL(state.publicUrl).hostname : ''));
-  document.querySelector('.mcp-gpt').classList.toggle('hidden', !state.gptActions);
-  if (state.gptActions) {
-    document.getElementById('mcp-openapi').textContent = `${state.publicUrl}/openapi.json`;
-    document.getElementById('mcp-privacy').textContent = `${state.publicUrl}/privacy`;
-  }
 }
 
 document.querySelector('.mcp-tabs').addEventListener('click', e => {

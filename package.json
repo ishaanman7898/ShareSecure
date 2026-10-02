@@ -57,6 +57,7 @@
       "!desktop/logo.js",
       "!desktop/render-icons.js",
       "!desktop/rosette.js",
+      "!desktop/plugin-icon.py",
       "!desktop/entitlements.mac.plist"
     ],
     "asarUnpack": [

@@ -260,7 +260,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <p class="modal-text">Let Claude Code, Codex or any MCP client share files for you. Ask it something like “share report.pdf for 2 days” and it hands you the link.</p>
+      <p class="modal-text">Let Claude, ChatGPT, Claude Code, Codex or any MCP client share files for you. Ask it something like “share report.pdf for 2 days” and it hands you the link.</p>
 
       <div id="mcp-off" class="modal-block">
         <button class="btn btn-primary btn-full" id="mcp-create">Create a connection token</button>
@@ -290,27 +290,34 @@
           </div>
 
           <div class="mcp-panel hidden" data-panel="claude-app" role="tabpanel">
-            <p class="field-hint" id="mcp-app-steps">In Claude on the web or the desktop app, open <strong>Settings → Connectors → Add custom connector</strong>. Name it <strong>ShareSecure</strong> and paste this as the MCP server URL. Then ask Claude to share or send something, and it does it for you.</p>
-            <div class="code-box"><code id="mcp-connector"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-connector">Copy</button></div>
+            <p class="field-hint">In Claude on the web or the desktop app, open <strong>Settings → Connectors → Add custom connector</strong>.</p>
+            <ol class="mcp-steps">
+              <li>Name it <strong>ShareSecure</strong>, and paste this as the server URL:
+                <div class="code-box"><code id="mcp-connector"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-connector">Copy</button></div>
+              </li>
+              <li>Under <strong>Authentication</strong>, choose <strong>No sign-in</strong>. Your token is already in the URL, so leave <strong>Request headers</strong> empty.</li>
+              <li>Leave <strong>Advanced → Transport</strong> on <strong>Streamable HTTP</strong>, and add the connector.</li>
+              <li>In a chat, make sure ShareSecure is turned on in the tools menu, then ask Claude to share or send something. It does it for you.</li>
+            </ol>
             <p class="field-hint mcp-tunnel-warn hidden">This URL has your token in it, and it goes through the free public tunnel (loca.lt), so the tunnel can see it. Anyone with it can share and send files as you. Keep it private, and use <strong>Replace token</strong> if it gets out.</p>
             <p class="field-hint mcp-no-public hidden">Apps like Claude need a public https address. Turn on the public link (<code>USE_LOCAL_TUNNEL</code>) or set <code>BASE_URL</code> to your domain, then create the token again.</p>
           </div>
 
           <div class="mcp-panel hidden" data-panel="chatgpt" role="tabpanel">
-            <div class="mcp-gpt">
-              <p class="field-hint"><strong>Make a ShareSecure GPT</strong> that shares and sends files and text from the chat. In ChatGPT, open <strong>GPTs → Create → Configure</strong>, then:</p>
-              <ol class="mcp-steps">
-                <li>Paste these as the GPT’s <strong>Instructions</strong>:
-                  <div class="code-box"><code id="mcp-gpt-instructions">You share files and text through ShareSecure, and you do it yourself. For text you wrote (a summary, notes, a table), call shareText with the full text. For files in the conversation, ones the user attached or ones you made, call shareFiles with them. When the user names who it’s for, pass their ShareSecure usernames in send_to; to send a link you already made, use sendShare. Never ask the user to download, save or attach anything. If they don’t say how long the link should last, use 24 hours. Give them the link from the response, say who it was sent to, and mention when it expires. Use listShares to show their links and deleteShare to remove one.</code><button class="btn btn-ghost btn-copy" data-copy="mcp-gpt-instructions">Copy</button></div>
-                </li>
-                <li>Under <strong>Actions</strong>, choose <strong>Create new action → Import from URL</strong> and enter:
-                  <div class="code-box"><code id="mcp-openapi"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-openapi">Copy</button></div>
-                </li>
-                <li>Set <strong>Authentication</strong> to <strong>API Key</strong>, auth type <strong>Bearer</strong>, and paste your token.</li>
-                <li>Set the privacy policy to <code id="mcp-privacy"></code>, then save the GPT (keep it private, or share it with a link).</li>
-              </ol>
-            </div>
-            <p class="field-hint">If your ChatGPT plan lets you add connectors in developer mode, you can add ShareSecure there instead, using the connector URL from the Claude app tab with no authentication.</p>
+            <p class="field-hint">In ChatGPT, open <strong>Plugins</strong>, choose <strong>Add</strong>, then <strong>Create new plugin</strong>, and fill it in:</p>
+            <ol class="mcp-steps">
+              <li><strong>Icon</strong>: <a href="/plugin-icon.png" download="sharesecure-icon.png">download the ShareSecure icon</a> (a 256 × 256 PNG under 10 KB) and upload it.</li>
+              <li><strong>Name</strong>: ShareSecure. <strong>Description</strong>: Share files and text through private links that expire.</li>
+              <li><strong>Connection</strong>: paste this URL:
+                <div class="code-box"><code id="mcp-connector-chatgpt"></code><button class="btn btn-ghost btn-copy" data-copy="mcp-connector-chatgpt">Copy</button></div>
+              </li>
+              <li><strong>Authentication</strong>: choose <strong>No authentication</strong>, not OAuth. Your token is already in the URL.</li>
+              <li>Tick <strong>I understand and want to continue</strong>, then create it.</li>
+              <li>Open <strong>Settings → Personalization → Custom instructions</strong> (“Give ChatGPT extra instructions and context for all chats”) and paste this:
+                <div class="code-box"><code id="mcp-chatgpt-instructions">When I ask you to share, send or hand over something, use the ShareSecure tools yourself; never ask me to download, save or upload anything. For text you wrote or have in the chat (a summary, notes, a table), use share_text with the full text. For a file you have or made, use share_file: pass content_base64 and filename (work out the base64 with code, never by hand), or source_url for a public https link. For files over 2 MB use begin_upload, upload_chunk and finish_upload. When I say who it’s for, pass their ShareSecure usernames in send_to. To send something already shared, use send_share with its whole link. Links are end-to-end encrypted: always give me the whole link exactly as returned, including the part after #, say when it expires and who it went to. If I don’t say how long it should last, use 24 hours.</code><button class="btn btn-ghost btn-copy" data-copy="mcp-chatgpt-instructions">Copy</button></div>
+              </li>
+              <li>In a chat, turn on the ShareSecure plugin and ask ChatGPT to share or send something.</li>
+            </ol>
           </div>
         </div>
         <div class="modal-actions">

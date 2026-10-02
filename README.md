@@ -61,9 +61,21 @@ url = "https://sharesecure-du8.pages.dev/mcp"
 bearer_token_env_var = "SHARESECURE_TOKEN"
 ```
 
-**Claude app** (web and desktop): open **Settings → Connectors → Add custom connector**, name it ShareSecure, and paste your connector URL, `https://sharesecure-du8.pages.dev/connect/<your token>`. The token is part of the URL because the connector form has no other place for it, so keep the URL private.
+**Claude app** (web and desktop): open **Settings → Connectors → Add custom connector**.
 
-**ChatGPT**: make a custom GPT that shares and sends files and text from the chat, including files ChatGPT made itself. In **GPTs → Create → Configure**, add an action by importing `https://sharesecure-du8.pages.dev/openapi.json`, set authentication to API key (Bearer) with your token, and use `https://sharesecure-du8.pages.dev/privacy` as the privacy policy. The dialog has instructions to paste in. If your plan supports connectors in developer mode, you can add the connector URL there instead.
+1. Name it ShareSecure and paste your connector URL, `https://sharesecure-du8.pages.dev/connect/<your token>`.
+2. Under **Authentication**, choose **No sign-in**, and leave **Request headers** empty. The token is already in the URL, which is also why the URL must stay private.
+3. Leave **Advanced → Transport** on **Streamable HTTP**, add it, and turn ShareSecure on in a chat's tools menu.
+
+**ChatGPT**: open **Plugins → Add → Create new plugin**.
+
+1. **Icon**: upload [`plugin-icon.png`](https://sharesecure-du8.pages.dev/plugin-icon.png) (256 × 256, under 10 KB).
+2. **Name**: ShareSecure. **Description**: Share files and text through private links that expire.
+3. **Connection**: your connector URL, the same one as for the Claude app.
+4. **Authentication**: **No authentication**, not OAuth (the token is in the URL). Tick **I understand and want to continue** and create it.
+5. In **Settings → Personalization → Custom instructions**, paste the instructions from the **Connect an AI assistant** dialog, so ChatGPT shares things itself instead of asking you to.
+
+The older custom-GPT actions (`/openapi.json`) still work for plans that have them.
 
 Assistant shares are end-to-end encrypted by default: the link's key (after `#`) isn't kept by ShareSecure, so the assistant gives you the whole link, and passes it to `send_share` to send it on later. Tool results also come back as structured data (`structuredContent`) for clients that read it.
 
