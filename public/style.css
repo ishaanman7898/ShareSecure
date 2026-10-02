@@ -1338,8 +1338,10 @@ a.menu-item { text-decoration: none; }
   letter-spacing: 0.06em;
   word-spacing: 0.35em;
   text-align: center;
+  /* 30 digits read as two rows of three groups, never a stray 4 + 2 */
+  max-width: 15em;
   padding: 14px 12px;
-  margin: 4px 0 14px;
+  margin: 4px auto 14px;
   border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
   border-radius: 10px;
 }
