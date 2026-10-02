@@ -790,6 +790,7 @@ const SHARE_RESULT = {
   type: 'object',
   properties: {
     url: { type: 'string', description: 'The share link. For a private share, the key is the part after #.' },
+    message: { type: 'string', description: 'What happened and what to do next, in words.' },
     name: { type: ['string', 'null'] },
     expires_at: { type: 'string' },
     id: { type: 'string' },
@@ -1041,7 +1042,9 @@ async function handleMessage(msg, user, context) {
         const args = params.arguments && typeof params.arguments === 'object' ? params.arguments : {};
         const out = await callTool(params.name, args, user, context);
         if (out.error) return reply({ content: [{ type: 'text', text: out.error }], isError: true });
-        return reply({ content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: out.data } : {}) });
+        // Some clients (Claude Code among them) show the model only the
+        // structured result, so the words travel inside it too.
+        return reply({ content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: { ...out.data, message: out.text } } : {}) });
       } catch (err) {
         console.error('mcp tool failed', params.name, err);
         return reply({ content: [{ type: 'text', text: 'Something went wrong. Try again.' }], isError: true });

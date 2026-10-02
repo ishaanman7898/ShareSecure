@@ -691,7 +691,7 @@ async function handleMessage(msg, req) {
         const out = await callTool(params.name, args, req);
         return reply(out.error
           ? { content: [{ type: 'text', text: out.error }], isError: true }
-          : { content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: out.data } : {}) });
+          : { content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: { ...out.data, message: out.text } } : {}) });
       } catch (err) {
         console.error('[mcp] tool failed:', params.name, err);
         return reply({ content: [{ type: 'text', text: 'Something went wrong. Try again.' }], isError: true });
