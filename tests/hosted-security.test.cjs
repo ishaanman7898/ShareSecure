@@ -19,20 +19,29 @@ for (const f of ['_mcp.js']) {
   const p = path.join(temp, 'functions', f);
   fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/from '\.\.\/package\.json';/, "from '../package.json' with { type: 'json' };"));
 }
+// the local MCP package, with the website's encryption code beside it as npm ships it
+fs.cpSync(path.join(root, 'packages', 'sharesecure-mcp', 'src'), path.join(temp, 'pkg', 'src'), { recursive: true });
+fs.mkdirSync(path.join(temp, 'pkg', 'lib'));
+for (const f of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'pkg', 'lib', f));
+fs.writeFileSync(path.join(temp, 'pkg', 'package.json'), '{"type":"module"}');
+const pkgLib = file => import(pathToFileURL(path.join(temp, 'pkg', 'src', file)).href);
 const load = file => import(pathToFileURL(path.join(temp, 'functions', file)).href);
 const sealedLib = () => import(pathToFileURL(path.join(temp, 'public', 'sealed.js')).href);
 const publicLib = file => import(pathToFileURL(path.join(temp, 'public', file)).href);
 const db = new DatabaseSync(':memory:');
 db.exec(fs.readFileSync(path.join(root, 'db/schema.sql'), 'utf8'));
 db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, access_code TEXT)');
-db.exec("INSERT INTO users (id, username, access_code) VALUES (1, 'alice', 'test'), (2, 'bob', 'test'), (3, 'mallory', 'test')");
+db.exec("INSERT INTO users (id, username, access_code) VALUES (1, 'alice', 'test'), (2, 'bob', 'test'), (3, 'mallory', 'test'), (4, 'zoe', 'test')");
 // a throwaway RSA key for the anonymous-token tests
 const issuerKey = require('node:crypto').generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
 const env = { TURSO_URL: 'https://audit.invalid', TURSO_TOKEN: 'test-only', TOKEN_SECRET: 'test-only-signing-secret', TAG_SECRET: 'test-only-tag-secret', ENCRYPTION_KEY: '42'.repeat(32), TOKEN_ISSUER_KEY: issuerKey };
 const realFetch = global.fetch;
+const sqlFailures = [];   // { match: RegExp, times: n } makes matching statements fail
 global.fetch = async (url, options) => {
   assert.equal(String(url), 'https://audit.invalid/v2/pipeline', 'Unexpected network request blocked');
   const stmt = JSON.parse(options.body).requests[0].stmt;
+  const failure = sqlFailures.find(f => f.times > 0 && f.match.test(stmt.sql));
+  if (failure) { failure.times--; return Response.json({ results: [{ type: 'error', error: { message: 'synthetic outage' } }] }); }
   const args = stmt.args.map(a => a.type === 'null' ? null : a.type === 'text' ? a.value : Number(a.value));
   try {
     const query = db.prepare(stmt.sql);
@@ -44,7 +53,7 @@ global.fetch = async (url, options) => {
     return Response.json({ results: [{ type: 'error', error: { message: error.message } }] });
   }
 };
-let api, mcp, uploadHandler, sendHandler, inboxHandler, rawHandler, infoHandler, reshareHandler, keysApi, sealed;
+let api, mcp, agent, agentApi, assistantApi, uploadHandler, sendHandler, inboxHandler, rawHandler, infoHandler, reshareHandler, keysApi, sealed;
 const tokens = {};
 // each test starts with a fresh daily upload limit
 const freshDay = () => db.exec("UPDATE files SET uploaded_at = '2000-01-01 00:00:00'");
@@ -68,7 +77,9 @@ async function send(id, recipient, ownerKey, user = 'alice') {
   return sendHandler(context('/api/send/' + id, { user, params: { shortId: id }, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetUsername: recipient, deleteToken: ownerKey }) }));
 }
 before(async () => {
-  api = await load('_turso.js'); mcp = await load('_mcp.js');
+  api = await load('_turso.js'); mcp = await load('_mcp.js'); agent = await load('_agent.js');
+  agentApi = (await load('api/agent/[[path]].js')).onRequest;
+  assistantApi = await load('api/auth/assistant.js');
   uploadHandler = (await load('api/upload.js')).onRequestPost;
   sendHandler = (await load('api/send/[shortId].js')).onRequestPost;
   inboxHandler = (await load('api/inbox/[shortId].js')).onRequestPost;
@@ -77,13 +88,15 @@ before(async () => {
   reshareHandler = (await load('api/reshare/[shortId].js')).onRequestPost;
   keysApi = await load('api/keys/index.js');
   sealed = await sealedLib();
-  for (const [i, username] of ['alice', 'bob', 'mallory'].entries()) tokens[username] = await api.signToken({ userId: i + 1, username }, env);
-  for (const username of ['alice', 'bob']) {
+  for (const [i, username] of ['alice', 'bob', 'mallory', 'zoe'].entries()) tokens[username] = await api.signToken({ userId: i + 1, username }, env);
+  for (const username of ['alice', 'bob', 'zoe']) {
     keyPairs[username] = await sealed.makeKeyPair();
     const res = await keysApi.onRequestPost(context('/api/keys', { user: username, headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ public_key: keyPairs[username].publicKey, private_key_box: await sealed.lockPrivateKey(keyPairs[username].privateKey, sealed.newFileKey()) }) }));
     assert.equal(res.status, 200, await res.clone().text());
   }
+  // alice has approved her assistants sending to bob; zoe is new to them
+  await agent.setAgentRules(1, env, { mode: 'approve', allowed: ['bob'] });
 });
 after(() => {
   global.fetch = realFetch; db.close();
@@ -625,4 +638,232 @@ test('attack: the desktop app never serves files from outside its own copy of th
   assert.equal(bundledFile(dir, '/signin'), 'signin.html');
   assert.equal(bundledFile(dir, '/vendor/pdf.min.mjs'), 'vendor/pdf.min.mjs');
   assert.equal(bundledFile(dir, '/r/abc123'), 'viewer.html');
+});
+
+// ── assistants: rules for sending, the local MCP server, and the inbox ────────
+
+const assistantCall = (method, user, body) => context('/api/auth/assistant', { user, method, headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+// requests left waiting by earlier tests would hit the per-sender inbox limit
+const clearRequests = () => db.exec("DELETE FROM files WHERE inbox_status = 'pending'");
+const handlerFor = { GET: 'onRequestGet', PUT: 'onRequestPut', POST: 'onRequestPost' };
+const assistant = async (method, user, body) => assistantApi[handlerFor[method]](assistantCall(method, user, body));
+
+test('attack: an assistant’s send to someone new waits for the owner, and only the owner can approve it', async () => {
+  freshDay(); clearRequests();
+  const token = await mcp.createToken(1, env);
+  const out = await rpc(token, 'share_text', { title: 'Injected', text: 'Something an injected page asked for', send_to: ['zoe', 'bob'] });
+  assert(!out.isError, JSON.stringify(out));
+  assert.deepEqual(out.structuredContent.sent_to, ['bob']);
+  assert.deepEqual(out.structuredContent.waiting_for_approval, ['zoe']);
+  assert.match(out.content[0].text, /Waiting for the user to approve/);
+  const zoeInbox = async () => (await (await (await load('api/inbox/index.js')).onRequestGet(context('/api/inbox', { user: 'zoe', method: 'GET' }))).json()).files;
+  assert.equal((await zoeInbox()).length, 0);
+
+  // the same send again doesn't queue twice
+  await rpc(token, 'send_share', { link: out.structuredContent.url, send_to: ['zoe'] });
+  const waiting = await (await assistant('GET', 'alice')).json();
+  assert.equal(waiting.waiting.length, 1);
+  assert.equal(waiting.waiting[0].username, 'zoe');
+  assert.equal(waiting.waiting[0].short_id, out.structuredContent.id);
+
+  // an assistant's token isn't a session: it can't see, approve or loosen its own rules
+  const asAgent = method => assistantApi[handlerFor[method]](context('/api/auth/assistant', { user: null, method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify({ id: waiting.waiting[0].id, action: 'approve', mode: 'anyone' }) }) }));
+  for (const method of ['GET', 'PUT', 'POST']) assert.equal((await asAgent(method)).status, 401);
+  // and nobody else's session can approve it either
+  assert.equal((await assistant('POST', 'mallory', { id: waiting.waiting[0].id, action: 'approve' })).status, 404);
+
+  const approved = await assistant('POST', 'alice', { id: waiting.waiting[0].id, action: 'approve', always: true });
+  assert.equal(approved.status, 200, await approved.clone().text());
+  const delivered = (await zoeInbox()).find(f => f.e2e);
+  assert(delivered);
+  // zoe opens it with her own key: approving didn't need or reveal the file key
+  const zoeKey = await sealed.openKey(keyPairs.zoe.privateKey, delivered.inbox_key);
+  assert.equal((await sealed.unlockMeta(zoeKey, delivered.original_filename)).name, 'Injected.md');
+  assert.equal((await assistant('POST', 'alice', { id: waiting.waiting[0].id, action: 'approve' })).status, 404);
+
+  // "always" put zoe on the list, so the next send goes straight to her
+  const again = await rpc(token, 'share_text', { title: 'Second', text: 'Again', send_to: ['zoe'] });
+  assert.deepEqual(again.structuredContent.sent_to, ['zoe']);
+
+  // "nobody": links still work, sends are refused
+  assert.equal((await assistant('PUT', 'alice', { mode: 'nobody' })).status, 200);
+  const refused = await rpc(token, 'share_text', { title: 'Third', text: 'No', send_to: ['bob'] });
+  assert.equal(refused.structuredContent.sent_to.length, 0);
+  assert.match(refused.structuredContent.not_sent[0].reason, /doesn’t let assistants send/);
+
+  // a declined send is gone
+  await assistant('PUT', 'alice', { mode: 'approve', allowed: ['bob'] });
+  const held = await rpc(token, 'share_text', { title: 'Fourth', text: 'Maybe', send_to: ['zoe'] });
+  assert.deepEqual(held.structuredContent.waiting_for_approval, ['zoe']);
+  const pending = (await (await assistant('GET', 'alice')).json()).waiting;
+  assert.equal((await assistant('POST', 'alice', { id: pending[0].id, action: 'decline' })).status, 200);
+  assert.equal((await (await assistant('GET', 'alice')).json()).waiting.length, 0);
+
+  // replacing the token drops whatever an old token left waiting
+  await rpc(token, 'share_text', { title: 'Fifth', text: 'Later', send_to: ['zoe'] });
+  await mcp.createToken(1, env);
+  assert.equal((await (await assistant('GET', 'alice')).json()).waiting.length, 0);
+});
+
+test('a send that hits a passing error is retried, and one that keeps failing says why', async () => {
+  freshDay(); clearRequests();
+  const token = await mcp.createToken(1, env);
+  sqlFailures.push({ match: /INSERT INTO send_log/, times: 1 });
+  const once = await rpc(token, 'share_text', { title: 'Flaky', text: 'Retried', send_to: ['bob'] });
+  assert.deepEqual(once.structuredContent.sent_to, ['bob'], JSON.stringify(once));
+  sqlFailures.push({ match: /INSERT INTO send_log/, times: 2 });
+  const twice = await rpc(token, 'share_text', { title: 'Down', text: 'Failed', send_to: ['bob'] });
+  assert.equal(twice.structuredContent.sent_to.length, 0);
+  assert.match(twice.structuredContent.not_sent[0].reason, /synthetic outage/);
+  // a failure after the copy was written takes the copy back, so nothing is half sent
+  const before = db.prepare("SELECT COUNT(*) n FROM files WHERE inbox_status = 'pending'").get().n;
+  sqlFailures.push({ match: /SUM\(CASE WHEN sender_tag/, times: 1 });
+  const late = await rpc(token, 'share_text', { title: 'Late', text: 'Late failure', send_to: ['bob'] });
+  assert.match(late.structuredContent.not_sent[0].reason, /nothing was sent/);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM files WHERE inbox_status = 'pending'").get().n, before);
+  sqlFailures.length = 0;
+});
+
+test('MCP inbox tools: list what was sent, without opening private files, and answer requests', async () => {
+  freshDay(); clearRequests();
+  const aliceToken = await mcp.createToken(1, env);
+  const made = (await rpc(aliceToken, 'share_text', { title: 'For bob inbox', text: 'Inbox test', note: 'secret note', send_to: ['bob'] })).structuredContent;
+  assert.deepEqual(made.sent_to, ['bob']);
+  const bobToken = await mcp.createToken(2, env);
+  const list = await rpc(bobToken, 'list_inbox');
+  const row = list.structuredContent.files.find(f => f.status === 'pending' && f.private);
+  assert(row);
+  // the hosted server can't read a private file's name or note, so it never shows them
+  assert.equal(row.name, null); assert.equal(row.note, null);
+  assert(!list.content[0].text.includes('For bob inbox') && !list.content[0].text.includes('secret note'));
+  assert(!JSON.stringify(list.structuredContent).includes('inbox_key'));
+  const accepted = await rpc(bobToken, 'answer_request', { id: row.id, action: 'accept' });
+  assert(!accepted.isError, JSON.stringify(accepted));
+  // alice's token can't answer bob's requests
+  assert((await rpc(aliceToken, 'answer_request', { id: row.id, action: 'decline' })).isError);
+});
+
+// The local package, talking to the real handlers through an in-process fetch.
+function localFetch() {
+  return async (url, init = {}) => {
+    const u = new URL(url);
+    const request = new Request(u.href, init);
+    const ctx = { env, request, waitUntil: promise => promise.catch(() => {}) };
+    if (u.pathname.startsWith('/api/agent/')) return agentApi({ ...ctx, params: { path: u.pathname.slice('/api/agent/'.length).split('/') } });
+    if (u.pathname === '/api/keys') return keysApi.onRequestGet({ ...ctx, params: {} });
+    throw new Error('Unexpected request ' + url);
+  };
+}
+
+async function localServer(userId, username, { linked = true } = {}) {
+  const { makeStore } = await pkgLib('store.js');
+  const { makeApi } = await pkgLib('api.js');
+  const { makeTools } = await pkgLib('tools.js');
+  const dir = fs.mkdtempSync(path.join(temp, `store-${username}-`));
+  const store = makeStore(dir);
+  if (linked) {
+    const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', keyPairs[username].privateKey));
+    store.saveIdentity({ url: 'https://sharesecure.test', username, publicKey: keyPairs[username].publicKey, pkcs8 });
+  }
+  const copied = [];
+  const token = await mcp.createToken(userId, env);
+  const tools = makeTools({
+    api: makeApi({ url: 'https://sharesecure.test', token, fetchImpl: localFetch() }),
+    store, copy: async text => { copied.push(text); return true; }, saveDir: path.join(dir, 'saved'),
+  });
+  return { tools, store, copied, token, dir };
+}
+
+test('local MCP: files are sealed on the computer, and the link’s key never reaches the assistant or the server', async () => {
+  freshDay(); clearRequests();
+  const alice = await localServer(1, 'alice');
+  const secret = 'Quarterly numbers only alice and bob should see';
+  const out = await alice.tools.call('share_text', { title: 'Local report', text: secret, note: 'from alice', send_to: ['bob'] });
+
+  // the assistant gets no link and no key; the user's clipboard gets the whole link
+  assert.equal(out.data.url, null);
+  assert.equal(out.data.link_delivery, 'clipboard');
+  assert(!JSON.stringify(out).includes('#k='));
+  assert.deepEqual(out.data.sent_to, ['bob']);
+  assert.equal(alice.copied.length, 1);
+  const key = sealed.keyFromLink(alice.copied[0]);
+  assert(key);
+  assert(!JSON.stringify(out).includes(sealed.toB64url(key)));
+
+  // the server stored only sealed data, and never got a plain file from this route
+  const stored = JSON.stringify(db.prepare('SELECT * FROM files').all());
+  assert(!stored.includes('Local report') && !stored.includes('from alice'));
+  const raw = await rawHandler(context('/api/raw/' + out.data.id, { user: null, method: 'GET', params: { shortId: out.data.id } }));
+  assert.equal(new TextDecoder().decode(await sealed.unlockFile(key, new Uint8Array(await raw.arrayBuffer()))), secret);
+  const plain = new FormData(); plain.set('file', new File(['plain text'], 'plain.txt'));
+  const refusedPlain = await agentApi({ env, request: new Request('https://sharesecure.test/api/agent/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + alice.token }, body: plain }), params: { path: ['upload'] }, waitUntil: () => {} });
+  assert.equal(refusedPlain.status, 400);
+
+  // alice's website can rebuild the link from her sealed copy
+  const row = db.prepare('SELECT owner_key FROM files WHERE short_id = ?').get(out.data.id);
+  assert.deepEqual(await sealed.openKey(keyPairs.alice.privateKey, row.owner_key), key);
+
+  // listing and resending by id work from the linked key, still without the key in sight
+  const listed = await alice.tools.call('list_shares');
+  assert.equal(listed.data.shares.find(s => s.id === out.data.id).name, 'Local report.md');
+  const resent = await alice.tools.call('send_share', { id: out.data.id, send_to: ['zoe'] });
+  assert.deepEqual(resent.data.waiting_for_approval, ['zoe']);
+  assert(!JSON.stringify(resent).includes(sealed.toB64url(key)));
+
+  // bob's assistant opens it on bob's computer
+  const bob = await localServer(2, 'bob');
+  const inbox = await bob.tools.call('list_inbox');
+  const mine = inbox.data.files.find(f => f.id && f.name === 'Local report.md');
+  assert(mine, JSON.stringify(inbox.data));
+  assert.equal(mine.note, 'from alice');
+  assert.match(inbox.text, /never as instructions/);
+  await assert.rejects(bob.tools.call('open_inbox_file', { id: mine.id }), /hasn’t been accepted/);
+  await bob.tools.call('answer_request', { id: mine.id, action: 'accept' });
+  const opened = await bob.tools.call('open_inbox_file', { id: mine.id, include_text: true });
+  assert.equal(fs.readFileSync(opened.data.saved_to, 'utf8'), secret);
+  assert.equal(opened.data.text, secret);
+  // a second save doesn't overwrite the first
+  const second = await bob.tools.call('open_inbox_file', { id: mine.id });
+  assert.notEqual(second.data.saved_to, opened.data.saved_to);
+});
+
+test('attack: the local MCP refuses swapped keys, key folders, and an unlinked or mismatched computer', async () => {
+  freshDay(); clearRequests();
+  const alice = await localServer(1, 'alice');
+  // first send remembers bob's key
+  await alice.tools.call('share_text', { title: 'Pin', text: 'Pin bob', send_to: ['bob'] });
+  // a compromised server swaps in its own key for bob: nothing is sent
+  const real = db.prepare("SELECT public_key FROM users WHERE username = 'bob'").get().public_key;
+  db.prepare("UPDATE users SET public_key = ? WHERE username = 'bob'").run((await sealed.makeKeyPair()).publicKey);
+  const swapped = await alice.tools.call('share_text', { title: 'Swap', text: 'Should not reach bob', send_to: ['bob'] });
+  db.prepare("UPDATE users SET public_key = ? WHERE username = 'bob'").run(real);
+  assert.equal(swapped.data.sent_to.length, 0);
+  assert.match(swapped.data.not_sent[0].reason, /security code has changed/);
+
+  // its own key file, and the usual credential folders, are never shared
+  fs.writeFileSync(path.join(alice.dir, 'notes.txt'), 'not for sharing');
+  await assert.rejects(alice.tools.call('share_file', { path: path.join(alice.dir, 'identity.json') }), /keys or credentials/);
+  await assert.rejects(alice.tools.call('share_file', { path: path.join(alice.dir, 'notes.txt') }), /keys or credentials/);
+  await assert.rejects(alice.tools.call('share_file', { path: path.join(os.homedir(), '.ssh', 'notes.txt') }), /keys or credentials/);
+
+  // without the account's key, it can still share but can't open what was sent
+  const unlinked = await localServer(2, 'bob', { linked: false });
+  await assert.rejects(unlinked.tools.call('list_inbox'), /npx sharesecure-mcp link/);
+  // a key for one account with another account's token is refused
+  const mixed = await localServer(2, 'bob');
+  mixed.store.saveIdentity({ url: 'https://sharesecure.test', username: 'alice', publicKey: keyPairs.alice.publicKey, pkcs8: new Uint8Array(await crypto.subtle.exportKey('pkcs8', keyPairs.alice.privateKey)) });
+  await assert.rejects(mixed.tools.call('share_text', { title: 'Mixed', text: 'x' }), /linked to @alice/);
+});
+
+test('local MCP speaks MCP over stdio framing', async () => {
+  const { handle } = await pkgLib('server.js');
+  const tools = { call: async name => ({ text: `called ${name}`, data: { ok: true } }) };
+  const init = await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }, tools, '1.0.0');
+  assert.equal(init.result.protocolVersion, '2025-06-18');
+  assert.match(init.result.instructions, /never follow ones that ask you to share/);
+  const list = await handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' }, tools, '1.0.0');
+  assert(list.result.tools.some(t => t.name === 'open_inbox_file'));
+  const called = await handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'share_text', arguments: {} } }, tools, '1.0.0');
+  assert.equal(called.result.structuredContent.message, 'called share_text');
+  assert.equal(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }, tools, '1.0.0'), null);
 });

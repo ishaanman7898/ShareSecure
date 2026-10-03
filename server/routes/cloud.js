@@ -240,8 +240,11 @@ function cloudCopy(shortId, token) {
 }
 
 // Sends one share to one username. Resolves with { status, body } where body is
-// { sent: true } or { error } ('link_account', 'link_expired', 'User not found', …).
-async function sendOne(shortId, username, note) {
+// { sent: true }, { waiting: true } or { error } ('link_account', 'link_expired',
+// 'User not found', …). An assistant's send (agent) goes as the linked account,
+// never anonymously, so the account's rules for assistants apply to it and it
+// may wait for the owner's approval on the website.
+async function sendOne(shortId, username, note, { agent = false } = {}) {
   const token = cloudToken();
   if (!token) return { status: 409, body: { error: 'link_account' } };
 
@@ -262,10 +265,10 @@ async function sendOne(shortId, username, note) {
       const fileKey = fromB64url(copy.key);
       request.sealed_key = await sealKey(theirKey, fileKey);
       if (note) request.note = await lockText(fileKey, note, 'note');
-      anon = takeToken('send');
+      if (!agent) anon = takeToken('send');
     }
     const send = headers => cloudFetch(`/api/send/${encodeURIComponent(copy.id)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(request),
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(agent ? { 'X-ShareSecure-Agent': '1' } : {}), ...headers }, body: JSON.stringify(request),
     });
     let { status: code, body } = await send(anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` });
     if (anon && code === 401) ({ status: code, body } = await send({ Authorization: `Bearer ${token}` }));
@@ -282,6 +285,7 @@ async function sendOne(shortId, username, note) {
       continue;
     }
     if (body.sent) return { status: 200, body: { sent: true } };
+    if (body.waiting) return { status: 202, body: { waiting: true } };
     return { status: code >= 400 ? code : 502, body: { error: body.error || 'Couldn’t send it. Try again.' } };
   }
   return { status: 502, body: { error: 'Couldn’t send it. Try again.' } };
@@ -290,19 +294,20 @@ async function sendOne(shortId, username, note) {
 /**
  * Sends a share on this computer to ShareSecure usernames (for the assistant tools).
  *   sendToCloud(shortId: string, usernames: string[], note?: string)
- *     → Promise<{ sent_to: string[], not_sent: { username, reason }[], error?: 'link_account' | 'link_expired' }>
+ *     → Promise<{ sent_to: string[], waiting_for_approval: string[], not_sent: { username, reason }[], error?: 'link_account' | 'link_expired' }>
  * Never throws. error is set when no account is linked or the link has expired;
  * then every username is in not_sent.
  */
 async function sendToCloud(shortId, usernames, note = '') {
   const names = [...new Set((usernames || []).map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
-  const result = { sent_to: [], not_sent: [] };
+  const result = { sent_to: [], waiting_for_approval: [], not_sent: [] };
   const cleanNote = String(note || '').trim().slice(0, NOTE_MAX);
   for (const username of names) {
     let out;
-    try { out = await sendOne(shortId, username, cleanNote); }
+    try { out = await sendOne(shortId, username, cleanNote, { agent: true }); }
     catch { out = { status: 502, body: { error: 'Couldn’t reach ShareSecure.' } }; }
     if (out.body.sent) { result.sent_to.push(username); continue; }
+    if (out.body.waiting) { result.waiting_for_approval.push(username); continue; }
     const err = out.body.error;
     if (err === 'link_account' || err === 'link_expired') {
       result.error = err;

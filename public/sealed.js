@@ -249,9 +249,16 @@ export async function lockPrivateKey(privateKey, exportKey) {
   return SEALED + toB64url(await lock(await exportWrapKey(exportKey), pkcs8, 'private key v2'));
 }
 
+// The private key's PKCS#8 bytes. Only the local MCP server wants these, to
+// keep the key on the user's own computer after they link it once.
+export async function unlockPrivateKeyBytes(sealed, exportKey) {
+  if (!isSealed(sealed)) throw new Error('Not a locked key');
+  return unlock(await exportWrapKey(exportKey), fromB64url(sealed.slice(SEALED.length)), 'private key v2');
+}
+
 // Gives back a private key that can be used but never read out again.
 export async function unlockPrivateKey(sealed, exportKey) {
-  if (!isSealed(sealed)) throw new Error('Not a locked key');
-  const pkcs8 = await unlock(await exportWrapKey(exportKey), fromB64url(sealed.slice(SEALED.length)), 'private key v2');
-  return subtle.importKey('pkcs8', pkcs8, ECDH, false, ['deriveBits']);
+  return importPrivateKey(await unlockPrivateKeyBytes(sealed, exportKey));
 }
+
+export const importPrivateKey = pkcs8 => subtle.importKey('pkcs8', pkcs8, ECDH, false, ['deriveBits']);

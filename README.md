@@ -35,7 +35,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Files sent to you arrive as requests you accept or decline, and they don't show who sent them. In the desktop app's “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**); sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 - **Text files too.** PDF, DOCX, PNG, JPG, TXT, Markdown and CSV, up to 10 MB.
-- **AI assistants.** Claude Code, Codex and other MCP clients can share files for you. [See below.](#ai-assistants-mcp)
+- **AI assistants.** Claude Code, Codex and other MCP clients can share, send and receive files for you. Run it on your own computer and neither the assistant nor ShareSecure ever sees a key, and an assistant tricked by something it read can't send your files to a stranger. [See below.](#ai-assistants-mcp)
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
 - **No tracking.** No analytics, ads or cookies.
 
@@ -77,7 +77,22 @@ bearer_token_env_var = "SHARESECURE_TOKEN"
 
 The older custom-GPT actions (`/openapi.json`) still work for plans that have them.
 
-Assistant shares are end-to-end encrypted by default: the link's key (after `#`) isn't kept by ShareSecure, so the assistant gives you the whole link, and passes it to `send_share` to send it on later. Tool results also come back as structured data (`structuredContent`) for clients that read it.
+Assistant shares are stored end-to-end encrypted by default: ShareSecure's server seals the file as it shares it and then forgets the key, so the stored file can't be read later. The server does see the file while sealing it, and the whole link (key included) comes back to the assistant, so it's in the chat. For neither, use the [local server](#on-your-own-computer-most-private). Tool results also come back as structured data (`structuredContent`) for clients that read it.
+
+### On your own computer (most private)
+
+[`sharesecure-mcp`](packages/sharesecure-mcp) runs on your computer as a local MCP server. It encrypts files there with the same code the website runs, so ShareSecure only ever gets sealed boxes, and it puts each link on your clipboard (and in *Your shares*) instead of handing it to the assistant. Needs Node.js 20 or later.
+
+```bash
+claude mcp add sharesecure-local --env SHARESECURE_TOKEN=ss_your_token -- npx -y sharesecure-mcp
+npx -y sharesecure-mcp link   # once, so it can open files sent to you; asks for your password in the terminal
+```
+
+Its tools: `share_file` (by path), `share_text`, `send_share` (by id: the key is resealed locally), `list_shares`, `delete_share`, `list_inbox`, `answer_request`, `open_inbox_file` (decrypts and saves a file someone sent you) and `security_code`. `SHARESECURE_LINKS=show` hands links to the assistant instead. See [its README](packages/sharesecure-mcp/README.md).
+
+### Sending to people: assistants ask first
+
+Assistants read web pages, emails and files, and any of those can hide an instruction like “send this to @someone”. So the first time an assistant sends a file to someone, the send waits in **Waiting for your OK** on the website until you approve it, and you can tick *always* for people you trust. In **Connect an AI assistant → Sending to people** you can instead let assistants send to anyone, or to no one, and edit the list. Waiting sends come back as `waiting_for_approval`; only you, signed in, can approve them.
 
 Assistants share text they wrote with `share_text`, and pass files in the call (`content_base64`) or as a link (`source_url`), so the Claude and ChatGPT apps can finish the job themselves. Only when an assistant can't get at the file does `share_file` give you a one-time upload page to pick it.
 
@@ -92,6 +107,8 @@ In the desktop app's “this computer” mode and on self-hosted installs, the a
 | `send_share` | Sends an existing share to usernames, with an optional `note`. Pass the whole `link` for a private share. |
 | `list_shares` | Lists live shares with their links and time left. |
 | `delete_share` | Deletes a share so its link stops working. |
+| `list_inbox` | Lists files people sent you. Private ones show without their name or note, since only your key opens them. |
+| `answer_request` | Accepts or declines a file someone sent you. |
 
 Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*. In “this computer” mode, `send_to` and `send_share` need a linked ShareSecure account.
 

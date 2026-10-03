@@ -955,6 +955,11 @@ function renderMcp(state, token) {
     `claude mcp add --transport http sharesecure ${state.mcpUrl} --header "Authorization: Bearer ${token}"`;
   document.getElementById('mcp-codex').textContent =
     `[mcp_servers.sharesecure]\nurl = "${state.mcpUrl}"\nbearer_token_env_var = "SHARESECURE_TOKEN"`;
+  // the local server encrypts on the user's computer; it talks to the website's /api/agent
+  const site = new URL(state.mcpUrl).origin;
+  const siteEnv = site === 'https://sharesecure-du8.pages.dev' ? '' : ` --env SHARESECURE_URL=${site}`;
+  document.getElementById('mcp-local').textContent =
+    `claude mcp add sharesecure-local --env SHARESECURE_TOKEN=${token}${siteEnv} -- npx -y sharesecure-mcp`;
 
   // Claude's and ChatGPT's apps connect over the internet, and their connector
   // form only takes a URL, so the token rides in the connector URL
@@ -984,15 +989,142 @@ async function mcpCall(method) {
 
 document.getElementById('menu-mcp').addEventListener('click', async () => {
   openModal(mcpModal);
+  // the local server and the sending rules live on the website, not in "this computer" mode
+  document.getElementById('mcp-local-tab').classList.toggle('hidden', selfHostMode);
   try { renderMcp(await mcpCall('GET')); } catch { showToast('Couldn’t load your assistant settings.', 'error'); }
+  loadAgentRules();
 });
 
 async function createMcpToken() {
   try {
     const data = await mcpCall('POST');
     renderMcp({ ...data, hasToken: true }, data.token);
+    loadAgentRules();
   } catch { showToast('Couldn’t create a token. Try again.', 'error'); }
 }
+
+// ── what assistants may send, and sends waiting for your OK ──────────────────
+// An assistant that sends to someone new waits here until you approve it, so
+// one tricked by a web page or email can't send your files to a stranger.
+let agentRules = null;
+const agentSection = document.getElementById('agent-section');
+const agentRequests = document.getElementById('agent-requests');
+const seenAgentRequests = new Set();
+let agentRequestsLoaded = false;
+
+async function assistantCall(method, body) {
+  const res = await fetch('/api/auth/assistant', {
+    method,
+    headers: { ...authHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.error || 'failed'), { status: res.status });
+  return data;
+}
+
+function renderAgentRules(rules) {
+  agentRules = rules;
+  document.getElementById('mcp-rules').classList.remove('hidden');
+  document.getElementById('mcp-mode').value = rules.mode;
+  document.getElementById('mcp-allowed-wrap').classList.toggle('hidden', rules.mode !== 'approve');
+  document.getElementById('mcp-allowed').innerHTML = rules.allowed.map(name => `
+    <li>@${escapeHtml(name)}<button type="button" data-remove="${escapeHtml(name)}" aria-label="Remove @${escapeHtml(name)}">×</button></li>`).join('');
+}
+
+async function loadAgentRules() {
+  const box = document.getElementById('mcp-rules');
+  if (selfHostMode) { box.classList.add('hidden'); return; }
+  try { renderAgentRules(await assistantCall('GET')); } catch { box.classList.add('hidden'); }
+}
+
+async function saveAgentRules(change, done) {
+  try {
+    renderAgentRules({ ...(await assistantCall('PUT', change)), waiting: agentRules?.waiting || [] });
+    if (done) showToast(done, 'success', 2500);
+  } catch {
+    showToast('Couldn’t save that. Try again.', 'error');
+    loadAgentRules();
+  }
+}
+
+document.getElementById('mcp-mode').addEventListener('change', e => saveAgentRules({ mode: e.target.value }, 'Saved.'));
+
+document.getElementById('mcp-allow-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = document.getElementById('mcp-allow-name');
+  const name = input.value.trim().replace(/^@/, '');
+  if (!name || !agentRules) return;
+  input.value = '';
+  saveAgentRules({ allowed: [...agentRules.allowed, name] });
+});
+
+document.getElementById('mcp-allowed').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-remove]');
+  if (!btn || !agentRules) return;
+  saveAgentRules({ allowed: agentRules.allowed.filter(n => n !== btn.dataset.remove) });
+});
+
+// a share's name, from Your shares (the server can't read private ones)
+function ownShareName(shortId) {
+  return loadUploadHistory().find(f => f.short_id === shortId)?.original_filename || 'One of your private shares';
+}
+
+function renderAgentRequests(waiting) {
+  agentSection.classList.toggle('hidden', !waiting.length);
+  agentRequests.innerHTML = waiting.map(w => {
+    const name = ownShareName(w.short_id);
+    const who = escapeHtml(w.username);
+    return `
+    <div class="request" data-id="${escapeHtml(w.id)}">
+      <div class="request-top">
+        <div class="file-icon">${getFileIcon(loadUploadHistory().find(f => f.short_id === w.short_id)?.mime_type || '')}</div>
+        <div class="file-item-info">
+          <span class="file-item-name">${escapeHtml(name)}</span>
+          <span class="file-item-meta">An assistant wants to send this to @${who}</span>
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" data-always />
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">From now on, let assistants send to @${who} without asking</span>
+      </label>
+      <div class="request-actions">
+        <button class="btn btn-ghost" data-action="decline">Don’t send</button>
+        <button class="btn btn-primary" data-action="approve">Send it</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function updateAgentRequests() {
+  if (!userToken || selfHostMode) return;
+  try {
+    const { waiting = [] } = await assistantCall('GET');
+    const fresh = waiting.filter(w => !seenAgentRequests.has(w.id));
+    // not on the very first load, so opening the page doesn't toast
+    if (fresh.length && agentRequestsLoaded) showToast(`An assistant is waiting for your OK to send a file to @${fresh[0].username}.`, 'info', 6000);
+    waiting.forEach(w => seenAgentRequests.add(w.id));
+    agentRequestsLoaded = true;
+    renderAgentRequests(waiting);
+  } catch {}
+}
+
+agentRequests.addEventListener('click', async e => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const card = btn.closest('.request');
+  const action = btn.dataset.action;
+  const always = card.querySelector('[data-always]')?.checked;
+  card.querySelectorAll('button, input').forEach(el => { el.disabled = true; });
+  try {
+    const out = await assistantCall('POST', { id: card.dataset.id, action, always: action === 'approve' && always });
+    showToast(action === 'approve' ? `Sent to @${out.username}.` : 'Not sent.', 'success', 3000);
+  } catch (err) {
+    showToast(err.status === 404 ? 'That send isn’t waiting any more.' : `Couldn’t do that: ${err.message}`, 'error');
+  }
+  updateAgentRequests();
+});
 
 document.getElementById('mcp-create').addEventListener('click', createMcpToken);
 document.getElementById('mcp-rotate').addEventListener('click', createMcpToken);
@@ -1393,6 +1525,7 @@ async function updateInbox() {
     renderRequests(pending);
     renderInbox(files.filter(f => f.status !== 'pending'));
   } catch {}
+  updateAgentRequests();
 }
 
 // An end-to-end encrypted file sent to you: its key is sealed to your account,

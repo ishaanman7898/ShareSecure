@@ -2,7 +2,7 @@
 // an account that hasn't switched to the new sign-in yet)
 // Deletes the signed-in account and everything the server can tie to it: its
 // shares (and every link reshared from them), files waiting in its inbox, its
-// assistant tokens, its key pair and its saved list of shares. Anonymous shares
+// assistant tokens and rules, its key pair and its saved list of shares. Anonymous shares
 // carry no account link, so the browser deletes those first, with their keys.
 // It needs a fresh proof of the password, made the same way as signing in.
 import { verifyToken, getDb, getUserTag, checkAccessCode, deleteBranch } from '../../_turso.js';
@@ -36,6 +36,8 @@ export async function onRequestPost(context) {
   for (const [sql, arg] of [
     ['DELETE FROM files WHERE recipient_user_tag = ?', userTag],
     ['DELETE FROM api_tokens WHERE user_id = ?', auth.userId],
+    ['DELETE FROM agent_rules WHERE user_id = ?', auth.userId],
+    ['DELETE FROM agent_waiting WHERE user_id = ?', auth.userId],
     ['DELETE FROM token_issued WHERE account = ?', await getUserTag(`issue:${auth.userId}`, env)],
     // left over from the retired zero-knowledge uploads
     ['DELETE FROM zk_challenge_log WHERE user_id = ?', auth.userId],

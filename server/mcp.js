@@ -111,13 +111,14 @@ async function share(file, opts) {
 // Usernames live on the ShareSecure website, so sending goes through the
 // account the owner linked in the app (routes/cloud.js).
 async function sendOn(shortId, recipients, note) {
-  if (!recipients.length) return { sent_to: [], not_sent: [] };
+  if (!recipients.length) return { sent_to: [], waiting_for_approval: [], not_sent: [] };
   const out = await sendToCloud(shortId, recipients, note);
   // names it never got to because the account isn't linked (or needs signing
   // in again) are listed apart, with what the user has to do
   const needsLink = x => out.error && /ShareSecure account/.test(x.reason || '');
   return {
     sent_to: out.sent_to,
+    waiting_for_approval: out.waiting_for_approval,
     not_sent: out.not_sent.filter(x => !needsLink(x)),
     unsent: out.not_sent.filter(needsLink).map(x => x.username),
     cloud_error: out.error || null,
@@ -135,10 +136,11 @@ function resultText(r) {
   if (r.name) lines.push(`Name: ${r.name}`);
   if (r.expires_at) lines.push(`Expires: ${r.expires_at}`);
   if (r.id) lines.push(`Share id: ${r.id} (for send_share or delete_share)`);
-  const sentTo = r.sent_to || [], notSent = r.not_sent || [], unsent = r.unsent || [];
-  if (!sentTo.length && !notSent.length && !unsent.length) lines.push('Sent to: no one (just the link)');
+  const sentTo = r.sent_to || [], notSent = r.not_sent || [], unsent = r.unsent || [], waiting = r.waiting_for_approval || [];
+  if (!sentTo.length && !notSent.length && !unsent.length && !waiting.length) lines.push('Sent to: no one (just the link)');
   else {
     lines.push(`Sent to: ${sentTo.length ? sentTo.join(', ') : 'no one'}`);
+    if (waiting.length) lines.push(`Waiting for the user to approve it on the ShareSecure website (an assistant hasn’t sent to them before; there’s nothing more for you to do): ${waiting.join(', ')}`);
     if (notSent.length) lines.push(`Not sent: ${notSent.map(x => `${x.username} (${x.reason})`).join('; ')}`);
     if (unsent.length) lines.push(`Not sent: ${unsent.join(', ')}. ${cloudHelp(r.cloud_error, r.id)}`);
   }

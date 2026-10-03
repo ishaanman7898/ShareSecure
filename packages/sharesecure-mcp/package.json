@@ -1,0 +1,37 @@
+{
+  "name": "sharesecure-mcp",
+  "version": "1.12.0",
+  "description": "Local MCP server for ShareSecure: assistants share and receive files end to end encrypted on your own computer, without the file or its key passing through the AI or the server",
+  "type": "module",
+  "bin": {
+    "sharesecure-mcp": "bin.js"
+  },
+  "files": [
+    "bin.js",
+    "src/",
+    "lib/",
+    "README.md"
+  ],
+  "scripts": {
+    "vendor": "node vendor.js",
+    "prepack": "node vendor.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "end-to-end-encryption",
+    "file-sharing",
+    "claude",
+    "codex"
+  ],
+  "author": "Ishaan",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ishaanman7898/ShareSecure.git",
+    "directory": "packages/sharesecure-mcp"
+  }
+}

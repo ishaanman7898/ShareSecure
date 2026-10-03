@@ -205,6 +205,7 @@
             "type": "array",
             "items": { "type": "object", "properties": { "username": { "type": "string" }, "reason": { "type": "string" } } }
           },
+          "waiting_for_approval": { "type": "array", "items": { "type": "string" }, "description": "People it goes to once the user approves it on the ShareSecure website. Tell the user; don't retry." },
           "error": { "type": "string" }
         }
       }

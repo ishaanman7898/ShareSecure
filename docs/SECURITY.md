@@ -12,7 +12,8 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Files are padded to standard sizes (1 KB, 2 KB, 4 KB … 8 MB, 10 MB), so the server only learns roughly how big a file is.
 - A link can also need a **passcode**. Then the link holds only half the key, and the passcode (stretched with 600,000 rounds of PBKDF2) is the other half. Anyone who only has the link can't open the file.
 - Files sent to a username have their key sealed to that person's public key (ECDH P-256 + HKDF + AES-GCM). Only their browser can open it.
-- Files shared by an assistant are sealed by the server, which then forgets the key.
+- Files shared through the hosted assistant connection (`/mcp`, ChatGPT) are sealed by the server, which then forgets the key. The server does see the file while it seals it, and the link (with its key) goes back to the assistant, so it's in the chat.
+- Files shared through the **local MCP server** ([`packages/sharesecure-mcp`](../packages/sharesecure-mcp)) are sealed on your own computer with the same code the browser runs. The server only gets sealed boxes (its `/api/agent` endpoints refuse anything else), and the link goes to your clipboard and Your shares instead of to the assistant, so the key is never in the chat either.
 - Code: [`public/sealed.js`](../public/sealed.js).
 
 **Sign-in never sends your password** (based on [OPAQUE, RFC 9807](https://www.rfc-editor.org/rfc/rfc9807); [`public/opaque.js`](../public/opaque.js) lists where it differs)
@@ -35,6 +36,13 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Every account has a **security code** (account menu → Security code): 30 digits from its public key. Compare codes with the people you send to.
 - Your browser remembers each person's key the first time you send to them. If the server ever hands out a different one, sending stops and you're told to compare codes.
 - Accounts can't replace their key once it's set.
+
+**Assistants can be tricked; your files can't be sent by one that was**
+
+- An assistant reads web pages, emails and files, and any of them can hide an instruction like "send this to @someone". So when an assistant sends a file to someone it hasn't sent to before, the send waits until you approve it on the website (account menu → Connect an AI assistant). You can instead let assistants send to anyone, or to no one.
+- Only a signed-in session can approve a send or change these rules, never an assistant's token. A waiting send keeps the file key already sealed to the recipient, so approving it doesn't need or reveal the key. Waiting sends last a week at most, and replacing or turning off the token drops them.
+- The server keeps the list of approved names and the waiting sends encrypted with its own key. Like the inbox, that means it can tell who an account's assistants send to.
+- The local MCP server never shares from folders that hold keys or credentials (`~/.ssh`, `~/.aws`, `~/.gnupg` and similar, and its own key folder), remembers each recipient's key the first time like the browser does, and labels everything in a received file as information from someone else, not instructions.
 
 **Code the server can't change**
 
@@ -59,10 +67,12 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - **A malicious server** can't tag people with their own token key: the apps only accept the key pinned in their code, checked against the key itself.
 - **Without the right key or passcode**, a stored file opens to nothing, and a box moved into another slot or changed in transit fails to open.
 - **Crafted names** can't become HTML or script files, and **crafted paths** can't make the desktop app serve anything outside its own copy of the site.
+- **A tricked assistant** can't send a file to someone new without the owner's approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
 
 ## What's left
 
 - **Anyone with the whole link** (and the passcode, if there is one) can open the file until it expires. For anything that matters, add a passcode, send it to a username, or turn on "Only people signed in".
+- **The local MCP server keeps your private key on disk** once you run `link` (in `~/.sharesecure`, readable by you only on macOS and Linux; on Windows it relies on your user folder's permissions). Run `npx sharesecure-mcp unlink` to remove it.
 - **The website itself is still served by the server.** In a browser, you trust the page you load. The desktop app doesn't have this problem.
 - **The server knows who a file was sent to, and when.** It doesn't know who sent it.
 - **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
