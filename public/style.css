@@ -426,7 +426,9 @@ body.page-loading > :not(.page-loader) { visibility: hidden; }
 .field > label,
 .form-group label { font-size: 0.86rem; font-weight: 500; color: var(--ink-2); }
 
-.label-optional { color: var(--muted); font-weight: 400; margin-left: 4px; }
+/* a field you have to fill in; a hint beside a label (like a minimum length) */
+.req { color: var(--danger); font-weight: 600; margin-left: 2px; }
+.label-hint { color: var(--muted); font-weight: 400; margin-left: 4px; }
 
 .text-input,
 select,

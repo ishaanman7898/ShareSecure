@@ -853,7 +853,7 @@ function showSendDialog() {
       <p class="delete-modal-title">Send to a user</p>
       <p class="delete-modal-sub" id="send-dialog-sub">They get a request and choose whether to accept it. They won’t see who sent it unless you say so in the note.</p>
       <input id="send-username-input" type="text" placeholder="Their username" autocomplete="off" spellcheck="false" aria-label="Username" />
-      <input id="send-note-input" type="text" placeholder="Note (optional)" maxlength="140" autocomplete="off" aria-label="Note" />
+      <input id="send-note-input" type="text" placeholder="Note" maxlength="140" autocomplete="off" aria-label="Note" />
       <div class="delete-modal-actions">
         <button class="delete-modal-cancel" id="send-cancel-btn">Cancel</button>
         <button class="delete-modal-confirm is-primary" id="send-confirm-btn">Send</button>

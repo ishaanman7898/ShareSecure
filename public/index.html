@@ -146,12 +146,12 @@
 
         <div class="fields">
           <div id="display-name-wrap" class="field hidden">
-            <label for="display-name-input">Name <span class="label-optional">optional</span></label>
+            <label for="display-name-input">Name</label>
             <input type="text" id="display-name-input" class="text-input" placeholder="Shown to people who open the link" maxlength="200" />
           </div>
 
           <div id="send-to-wrap" class="field">
-            <label for="send-to-input">Send to <span class="label-optional">optional</span></label>
+            <label for="send-to-input">Send to</label>
             <input type="text" id="send-to-input" class="text-input" placeholder="@username, @username" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="400" />
             <span class="field-hint" id="send-to-hint">It lands in their inbox and they choose whether to accept it. They won’t see who sent it. Leave it empty to just get a link.</span>
           </div>
@@ -172,8 +172,8 @@
           </div>
 
           <div id="custom-expiry-wrap" class="field hidden">
-            <label for="custom-expiry-input">Expires at</label>
-            <input type="datetime-local" id="custom-expiry-input" class="text-input" />
+            <label for="custom-expiry-input">Expires at <span class="req" aria-hidden="true">*</span></label>
+            <input type="datetime-local" id="custom-expiry-input" class="text-input" required />
             <span id="custom-expiry-err" class="field-error" role="alert"></span>
           </div>
 
@@ -189,7 +189,7 @@
             <span class="switch-text">End-to-end encrypted (ShareSecure can’t read it)</span>
           </label>
           <div class="field hidden" id="passcode-wrap">
-            <label for="passcode-input">Passcode <span class="label-optional">optional</span></label>
+            <label for="passcode-input">Passcode</label>
             <input type="text" id="passcode-input" class="text-input" autocomplete="off" spellcheck="false" maxlength="128" placeholder="Needed with the link to open it" />
             <span class="field-hint">Tell people the passcode some other way than the link. Anyone with only the link can’t open the file.</span>
           </div>
@@ -382,8 +382,8 @@
       <p class="modal-text">Make a link anyone can send you a file through, even without an account. Their browser encrypts it to your key, so only you can open it. It arrives in <strong>Sent to you</strong>.</p>
       <form class="modal-block" id="ask-form" novalidate>
         <div class="form-group">
-          <label for="ask-label">What do you need?</label>
-          <input type="text" id="ask-label" maxlength="300" autocomplete="off" placeholder="Your signed lease" />
+          <label for="ask-label">What do you need? <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="ask-label" maxlength="300" autocomplete="off" placeholder="Your signed lease" required />
         </div>
         <div class="ask-row">
           <div class="form-group">
@@ -430,8 +430,8 @@
       <p class="modal-text">Files sent to you are locked to your account’s key. Read this code to the people who send you files, and have them check it against the code ShareSecure shows them for you. If the codes match, nobody, including ShareSecure, swapped your key.</p>
       <form class="modal-block" id="check-code-form" novalidate>
         <div class="form-group">
-          <label for="check-code-user">Someone else’s code</label>
-          <input type="text" id="check-code-user" placeholder="Their username" autocomplete="off" spellcheck="false" />
+          <label for="check-code-user">Someone else’s code <span class="req" aria-hidden="true">*</span></label>
+          <input type="text" id="check-code-user" placeholder="Their username" autocomplete="off" spellcheck="false" required />
         </div>
         <p class="security-code is-small" id="their-code"></p>
         <p class="auth-error" id="check-code-error" role="alert"></p>
@@ -454,7 +454,7 @@
       <p class="modal-text" id="delete-text">This erases your account and every file you’ve shared from it, right away. Your links stop working. It can’t be undone.</p>
       <form id="delete-form" class="modal-block" novalidate>
         <div class="form-group">
-          <label for="delete-password">Enter your password to confirm</label>
+          <label for="delete-password">Enter your password to confirm <span class="req" aria-hidden="true">*</span></label>
           <input type="password" id="delete-password" autocomplete="current-password" required />
         </div>
         <p class="auth-error" id="delete-error" role="alert"></p>
@@ -479,11 +479,11 @@
       <p class="modal-text cloud-status" id="cloud-status" aria-live="polite"></p>
       <form id="cloud-form" class="modal-block" novalidate>
         <div class="form-group">
-          <label for="cloud-username">ShareSecure username</label>
+          <label for="cloud-username">ShareSecure username <span class="req" aria-hidden="true">*</span></label>
           <input type="text" id="cloud-username" autocomplete="off" autocapitalize="none" spellcheck="false" required />
         </div>
         <div class="form-group">
-          <label for="cloud-password">Password</label>
+          <label for="cloud-password">Password <span class="req" aria-hidden="true">*</span></label>
           <input type="password" id="cloud-password" autocomplete="off" required />
         </div>
         <p class="auth-error" id="cloud-error" role="alert"></p>
