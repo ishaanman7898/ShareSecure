@@ -133,6 +133,8 @@ try {
       reveal: process.env.SHARESECURE_LINKS === 'show',
     });
     serve(tools, version);
+    // tokens, rules and anything left queued from last time, in the background
+    tools.start().catch(() => {});
   } else {
     console.error(`Unknown command ${command}. Commands: link, unlink, status, trust <username>.`);
     process.exit(1);

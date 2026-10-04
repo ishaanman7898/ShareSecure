@@ -36,8 +36,9 @@ export async function onRequestPost(context) {
   for (const [sql, arg] of [
     ['DELETE FROM files WHERE recipient_user_tag = ?', userTag],
     ['DELETE FROM api_tokens WHERE user_id = ?', auth.userId],
-    ['DELETE FROM agent_rules WHERE user_id = ?', auth.userId],
-    ['DELETE FROM agent_waiting WHERE user_id = ?', auth.userId],
+    ['DELETE FROM agent_settings WHERE user_id = ?', auth.userId],
+    ['DELETE FROM agent_held WHERE user_id = ?', auth.userId],
+    ['DELETE FROM file_requests WHERE owner_id = ?', auth.userId],
     ['DELETE FROM token_issued WHERE account = ?', await getUserTag(`issue:${auth.userId}`, env)],
     // left over from the retired zero-knowledge uploads
     ['DELETE FROM zk_challenge_log WHERE user_id = ?', auth.userId],

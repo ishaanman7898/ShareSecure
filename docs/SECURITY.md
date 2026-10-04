@@ -12,8 +12,8 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Files are padded to standard sizes (1 KB, 2 KB, 4 KB … 8 MB, 10 MB), so the server only learns roughly how big a file is.
 - A link can also need a **passcode**. Then the link holds only half the key, and the passcode (stretched with 600,000 rounds of PBKDF2) is the other half. Anyone who only has the link can't open the file.
 - Files sent to a username have their key sealed to that person's public key (ECDH P-256 + HKDF + AES-GCM). Only their browser can open it.
-- Files shared through the hosted assistant connection (`/mcp`, ChatGPT) are sealed by the server, which then forgets the key. The server does see the file while it seals it, and the link (with its key) goes back to the assistant, so it's in the chat.
-- Files shared through the **local MCP server** ([`packages/sharesecure-mcp`](../packages/sharesecure-mcp)) are sealed on your own computer with the same code the browser runs. The server only gets sealed boxes (its `/api/agent` endpoints refuse anything else), and the link goes to your clipboard and Your shares instead of to the assistant, so the key is never in the chat either.
+- Files shared through the hosted assistant connection (`/mcp`, ChatGPT) are sealed by the server, which then forgets the key. The server does see the file while it seals it, the link (with its key) goes back to the assistant, so it's in the chat, and the share is tied to your account, like a signed-in upload.
+- Files shared through the **local MCP server** ([`packages/sharesecure-mcp`](../packages/sharesecure-mcp)) are sealed on your own computer with the same code the browser runs, and uploaded and sent with anonymous tokens, exactly like the website does: the server can't tell they came from you. The link goes to your clipboard and your sealed list of shares instead of to the assistant, so the key is never in the chat either. Its connection token is only used for what's tied to your account anyway (picking up tokens, your own sealed boxes, your inbox and file requests), and anything it posts about a share goes a few minutes later, so the timing doesn't point back at it.
 - Code: [`public/sealed.js`](../public/sealed.js).
 
 **Sign-in never sends your password** (based on [OPAQUE, RFC 9807](https://www.rfc-editor.org/rfc/rfc9807); [`public/opaque.js`](../public/opaque.js) lists where it differs)
@@ -51,9 +51,9 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 **Assistants can be tricked; your files can't be sent by one that was**
 
-- An assistant reads web pages, emails and files, and any of them can hide an instruction like "send this to @someone". So when an assistant sends a file to someone it hasn't sent to before, the send waits until you approve it on the website (account menu → Connect an AI assistant). You can instead let assistants send to anyone, or to no one.
-- Only a signed-in session can approve a send or change these rules, never an assistant's token. A waiting send keeps the file key already sealed to the recipient, so approving it doesn't need or reveal the key. Waiting sends last a week at most, and replacing or turning off the token drops them.
-- The server keeps the list of approved names and the waiting sends encrypted with its own key. Like the inbox, that means it can tell who an account's assistants send to.
+- An assistant reads web pages, emails and files, and any of them can hide an instruction like "send this to @someone". So when an assistant sends a file to someone not on your list, the send waits until you approve it on the website (account menu → Connect an AI assistant). You can instead let assistants send to anyone, or to no one.
+- The server only knows which of those three you chose. Your list of people is sealed to your own key, so only your browser and the assistant server on your computer can open and apply it; assistants connected through ShareSecure's servers can't, so they ask every time. A waiting send (which share, to whom, its key and note) is sealed to your key too. Approving one opens it in your browser, which sends it anonymously like any send you make. So the server sees your account store a box it can't read, and later an anonymous send it can't tie to you.
+- Only a signed-in session can approve or clear a waiting send, or change the rules, never an assistant's token. Waiting sends last a week at most, and replacing or turning off the token drops them.
 - The local MCP server never shares from folders that hold keys or credentials (`~/.ssh`, `~/.aws`, `~/.gnupg` and similar, and its own key folder), remembers each recipient's key the first time like the browser does, and labels everything in a received file as information from someone else, not instructions.
 
 **Code the server can't change**
@@ -81,7 +81,8 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - **Crafted names** can't become HTML or script files, and **crafted paths** can't make the desktop app serve anything outside its own copy of the site.
 - **A link that works once** gives the file out once even to simultaneous requests, and leaves no copy of the bytes behind.
 - **A file request** refuses anything not sealed in the browser, posts from other sites, and uploads past its limit or expiry, and only the owner can list or close it.
-- **A tricked assistant** can't send a file to someone new without the owner's approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
+- **A tricked assistant** can't send a file to someone off your list without your approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
+- **Nothing links you to what you share through the local MCP server**: its uploads and sends carry anonymous tokens and no account, the files and copies it makes have no account or sender tag, and the server keeps only boxes it can't open (your rules, your waiting sends, your list of shares).
 
 ## What's left
 

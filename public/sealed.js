@@ -232,6 +232,19 @@ export async function openKey(privateKey, sealed) {
   return key;
 }
 
+// Text only the owner of publicKey can read, for things kept on the server for
+// that person alone (their list of shares, their assistant's waiting sends):
+// a fresh key sealed to them, and the text locked with it. → "e2e:…|e2e:…"
+export async function sealText(publicKey, text, label) {
+  const key = newFileKey();
+  return `${await sealKey(publicKey, key)}|${await lockText(key, text, label)}`;
+}
+
+export async function openText(privateKey, box, label) {
+  const [sealed, locked] = String(box || '').split('|');
+  return unlockText(await openKey(privateKey, sealed), locked, label);
+}
+
 // ── keeping a private key locked ─────────────────────────────────────────────
 // Locked with the "export key" that signing in produces in the browser (see
 // opaque.js). The server never sees the password or the export key.

@@ -83,7 +83,7 @@ Assistant shares are stored end-to-end encrypted by default: ShareSecure's serve
 
 ### On your own computer (most private)
 
-[`sharesecure-mcp`](packages/sharesecure-mcp) runs on your computer as a local MCP server. It encrypts files there with the same code the website runs, so ShareSecure only ever gets sealed boxes, and it puts each link on your clipboard (and in *Your shares*) instead of handing it to the assistant. Needs Node.js 20 or later.
+[`sharesecure-mcp`](packages/sharesecure-mcp) runs on your computer as a local MCP server. It encrypts files there with the same code the website runs, so ShareSecure only ever gets sealed boxes, and uploads and sends them with anonymous tokens like the website does, so ShareSecure can't tell they came from you. It puts each link on your clipboard (and in *Your shares*) instead of handing it to the assistant. Needs Node.js 20 or later.
 
 ```bash
 claude mcp add sharesecure-local --env SHARESECURE_TOKEN=ss_your_token -- npx -y sharesecure-mcp
@@ -94,7 +94,9 @@ Its tools: `share_file` (by path), `share_text`, `send_share` (by id: the key is
 
 ### Sending to people: assistants ask first
 
-Assistants read web pages, emails and files, and any of those can hide an instruction like “send this to @someone”. So the first time an assistant sends a file to someone, the send waits in **Waiting for your OK** on the website until you approve it, and you can tick *always* for people you trust. In **Connect an AI assistant → Sending to people** you can instead let assistants send to anyone, or to no one, and edit the list. Waiting sends come back as `waiting_for_approval`; only you, signed in, can approve them.
+Assistants read web pages, emails and files, and any of those can hide an instruction like “send this to @someone”. So when an assistant sends a file to someone not on your list, the send waits in **Waiting for your OK** on the website until you approve it, and you can tick *always* for people you trust. In **Connect an AI assistant → Sending to people** you can instead let assistants send to anyone, or to no one, and edit the list. Waiting sends come back as `waiting_for_approval`; only you, signed in, can approve them.
+
+The list and the waiting sends are sealed to your own key, so ShareSecure can't see who you send to. Approved sends go out from your browser anonymously. The assistant on your own computer applies your list itself; assistants connected through ShareSecure's servers (the Claude app, ChatGPT) can't open it, so they ask every time.
 
 Assistants share text they wrote with `share_text`, and pass files in the call (`content_base64`) or as a link (`source_url`), so the Claude and ChatGPT apps can finish the job themselves. Only when an assistant can't get at the file does `share_file` give you a one-time upload page to pick it.
 

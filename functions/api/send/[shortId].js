@@ -10,17 +10,12 @@
 //   signed in              counted per account (60 a day)
 //   X-ShareSecure-Token    an anonymous send token, plus the link's delete key:
 //                          the server doesn't learn who sent it, even to itself
-//
-// A send an assistant makes (X-ShareSecure-Agent: 1) follows the account's
-// rules for assistants: it may wait for the owner's approval (202), or be
-// refused. See _agent.js.
 import {
   getDb, verifyToken, decryptStr, encryptStr, getUserTag, ensureFileColumns,
   signInRequired, branchFrom, randomId, hmacHex, tokensMatch, findLiveFile, findUser
 } from '../../_turso.js';
 import { spendToken } from '../../_tokens.js';
 import { isSealed } from '../../../public/sealed.js';
-import { AGENT_HEADER, ruleFor, holdSend } from '../../_agent.js';
 
 const MAX_WAITING = 20;          // requests anyone can have waiting at once
 const MAX_FROM_ONE_SENDER = 5;   // of those, from one signed-in sender
@@ -67,22 +62,6 @@ export async function onRequestPost(context) {
   const recipient = await findUser(db, username);
   if (!recipient) return fail('User not found', 404);
   const recipientTag = await getUserTag(recipient.id, env);
-
-  // an assistant only sends where the account's rules let it
-  if (request.headers.get(AGENT_HEADER) === '1') {
-    if (!sender) return fail('Sign in to send files to other users.', 401);
-    const rule = await ruleFor(sender.userId, sender.username, username, env);
-    if (rule === 'refuse') {
-      return fail('This account doesn’t let assistants send files to people. The owner can change that on the website: account menu → Connect an AI assistant.', 403);
-    }
-    if (rule === 'wait') {
-      const held = await holdSend(sender.userId, params.shortId,
-        { targetUsername: username, deleteToken: body.deleteToken || null, note: body.note || null, sealed_key: body.sealed_key || null },
-        file.expires_at, env);
-      if (held.error) return fail(held.error, 429);
-      return Response.json({ waiting: true, id: held.id }, { status: 202 });
-    }
-  }
 
   // An anonymous send spends a token (checked last, so a typo doesn't waste one).
   // Otherwise the sender must be signed in, and is limited by a tag of their own.

@@ -2,9 +2,10 @@
 
 A local [MCP](https://modelcontextprotocol.io) server for [ShareSecure](https://sharesecure-du8.pages.dev). Your assistant (Claude Code, Codex, Cursor, any MCP client) shares, sends and receives files, and the encryption happens on your computer:
 
-- **The server only gets sealed boxes.** Files, names, notes and keys are encrypted here with the same code the website runs (AES-256-GCM, keys sealed with ECDH P-256). ShareSecure's `/api/agent` endpoints refuse anything that isn't.
+- **The server only gets sealed boxes.** Files, names, notes and keys are encrypted here with the same code the website runs (AES-256-GCM, keys sealed with ECDH P-256).
+- **Nothing ties what you share to you.** Uploads and sends go out with anonymous blind-signed tokens (picked up ahead of time), never your connection token, exactly like the website, so ShareSecure can't tell they came from you. Your connection token is only used for what's yours anyway: picking up tokens, your own sealed boxes, your inbox and file requests.
 - **The assistant never sees a key.** A share's link holds its key, so it goes to your clipboard and to *Your shares* on the website, not into the chat. An assistant tricked by something it read can make a share, but can't hand anyone the link.
-- **Sends to someone new wait for you.** The first time an assistant sends to a person, it waits on the website until you approve it.
+- **Sends to people not on your list wait for you.** Your list is sealed to your key and applied here; anyone else waits on the website until you approve it. The waiting send is sealed to your key too, and posted a few minutes later so its timing doesn't point back at the share.
 - **Swapped keys are caught.** Each person's key is remembered the first time, like the website does. If the server ever hands out a different one, nothing is sent.
 
 ## Set up
@@ -24,7 +25,7 @@ Then, once, in a terminal:
 npx -y sharesecure-mcp link
 ```
 
-It asks for your username and password, signs in without sending the password (OPAQUE), and keeps your account's private key in `~/.sharesecure`, readable by you only. That lets your assistant open files people send you and resend your shares. Sharing works without it.
+It asks for your username and password, signs in without sending the password (OPAQUE), and keeps your account's private key in `~/.sharesecure`, readable by you only. That lets your assistant open files people send you, apply your list of people, and add what it shares to *Your shares* on the website. Sharing works without it, but then every send waits for your approval.
 
 | Command | |
 |---|---|

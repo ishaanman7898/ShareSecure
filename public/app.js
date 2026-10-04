@@ -1,6 +1,6 @@
 import {
   newFileKey, lockFile, lockMeta, lockText, unlockText, linkWithKey, keyFromLink, sealKey, openKey, toB64url, fromB64url,
-  newPasscodeSalt, passcodeKey
+  newPasscodeSalt, passcodeKey, sealText, openText
 } from './sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
 import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey } from './keys.js';
@@ -1006,9 +1006,12 @@ async function createMcpToken() {
 }
 
 // ── what assistants may send, and sends waiting for your OK ──────────────────
-// An assistant that sends to someone new waits here until you approve it, so
-// one tricked by a web page or email can't send your files to a stranger.
-let agentRules = null;
+// An assistant that sends to someone not on your list waits here until you
+// approve it, so one tricked by a web page or email can't send your files to a
+// stranger. The server can't read any of it: the list is sealed to your own
+// key, and so is each waiting send. Approving one opens it here and sends it
+// from this browser with an anonymous token, like any send you make yourself.
+let agentRules = null;   // { mode, allowed: [names], box }
 const agentSection = document.getElementById('agent-section');
 const agentRequests = document.getElementById('agent-requests');
 const seenAgentRequests = new Set();
@@ -1025,24 +1028,40 @@ async function assistantCall(method, body) {
   return data;
 }
 
-function renderAgentRules(rules) {
-  agentRules = rules;
+// the names in the sealed list, or [] when there's none (or it can't be opened here)
+async function openAllowed(box) {
+  const me = await myKeys();
+  if (!box || !me?.privateKey) return [];
+  try { return JSON.parse(await openText(me.privateKey, box, 'agent-list')).list || []; } catch { return []; }
+}
+
+async function sealAllowed(names) {
+  const me = await myKeys();
+  if (!me?.publicKey) throw new Error('no key');
+  const list = [...new Set(names.map(n => n.trim().replace(/^@/, '').toLowerCase()).filter(Boolean))].slice(0, 200);
+  return sealText(me.publicKey, JSON.stringify({ list }), 'agent-list');
+}
+
+async function renderAgentRules(state) {
+  agentRules = { mode: state.mode, allowed: await openAllowed(state.allowed_box) };
   document.getElementById('mcp-rules').classList.remove('hidden');
-  document.getElementById('mcp-mode').value = rules.mode;
-  document.getElementById('mcp-allowed-wrap').classList.toggle('hidden', rules.mode !== 'approve');
-  document.getElementById('mcp-allowed').innerHTML = rules.allowed.map(name => `
+  document.getElementById('mcp-mode').value = agentRules.mode;
+  document.getElementById('mcp-allowed-wrap').classList.toggle('hidden', agentRules.mode !== 'approve');
+  document.getElementById('mcp-allowed').innerHTML = agentRules.allowed.map(name => `
     <li>@${escapeHtml(name)}<button type="button" data-remove="${escapeHtml(name)}" aria-label="Remove @${escapeHtml(name)}">×</button></li>`).join('');
 }
 
 async function loadAgentRules() {
   const box = document.getElementById('mcp-rules');
   if (selfHostMode) { box.classList.add('hidden'); return; }
-  try { renderAgentRules(await assistantCall('GET')); } catch { box.classList.add('hidden'); }
+  try { await renderAgentRules(await assistantCall('GET')); } catch { box.classList.add('hidden'); }
 }
 
+// change: { mode } or { allowed: [names] }
 async function saveAgentRules(change, done) {
   try {
-    renderAgentRules({ ...(await assistantCall('PUT', change)), waiting: agentRules?.waiting || [] });
+    const body = change.allowed ? { allowed_box: await sealAllowed(change.allowed) } : change;
+    await renderAgentRules(await assistantCall('PUT', body));
     if (done) showToast(done, 'success', 2500);
   } catch {
     showToast('Couldn’t save that. Try again.', 'error');
@@ -1169,25 +1188,32 @@ document.getElementById('file-requests-list').addEventListener('click', async e 
   updateFileRequests();
 });
 
-// a share's name, from Your shares (the server can't read private ones)
-function ownShareName(shortId) {
-  return loadUploadHistory().find(f => f.short_id === shortId)?.original_filename || 'One of your private shares';
+// A waiting send, opened with your key → { id, short_id, username, file_key, delete_token, note, name }, or null
+async function openHeld(row) {
+  const me = await myKeys();
+  if (!me?.privateKey) return null;
+  try { return { id: row.id, ...JSON.parse(await openText(me.privateKey, row.box, 'agent-send')) }; } catch { return null; }
 }
 
+let heldSends = [];
+
 function renderAgentRequests(waiting) {
+  heldSends = waiting;
   agentSection.classList.toggle('hidden', !waiting.length);
   agentRequests.innerHTML = waiting.map(w => {
-    const name = ownShareName(w.short_id);
+    const known = loadUploadHistory().find(f => f.short_id === w.short_id);
+    const name = w.name || known?.original_filename || 'One of your private shares';
     const who = escapeHtml(w.username);
     return `
     <div class="request" data-id="${escapeHtml(w.id)}">
       <div class="request-top">
-        <div class="file-icon">${getFileIcon(loadUploadHistory().find(f => f.short_id === w.short_id)?.mime_type || '')}</div>
+        <div class="file-icon">${getFileIcon(known?.mime_type || '')}</div>
         <div class="file-item-info">
           <span class="file-item-name">${escapeHtml(name)}</span>
           <span class="file-item-meta">An assistant wants to send this to @${who}</span>
         </div>
       </div>
+      ${w.note ? `<p class="request-note">“${escapeHtml(w.note)}”</p>` : ''}
       <label class="switch">
         <input type="checkbox" data-always />
         <span class="switch-track" aria-hidden="true"></span>
@@ -1205,12 +1231,13 @@ async function updateAgentRequests() {
   if (!userToken || selfHostMode) return;
   try {
     const { waiting = [] } = await assistantCall('GET');
-    const fresh = waiting.filter(w => !seenAgentRequests.has(w.id));
+    const opened = (await Promise.all(waiting.map(openHeld))).filter(Boolean);
+    const fresh = opened.filter(w => !seenAgentRequests.has(w.id));
     // not on the very first load, so opening the page doesn't toast
     if (fresh.length && agentRequestsLoaded) showToast(`An assistant is waiting for your OK to send a file to @${fresh[0].username}.`, 'info', 6000);
-    waiting.forEach(w => seenAgentRequests.add(w.id));
+    opened.forEach(w => seenAgentRequests.add(w.id));
     agentRequestsLoaded = true;
-    renderAgentRequests(waiting);
+    renderAgentRequests(opened);
   } catch {}
 }
 
@@ -1218,14 +1245,30 @@ agentRequests.addEventListener('click', async e => {
   const btn = e.target.closest('button[data-action]');
   if (!btn) return;
   const card = btn.closest('.request');
-  const action = btn.dataset.action;
+  const held = heldSends.find(w => w.id === card.dataset.id);
+  if (!held) return;
   const always = card.querySelector('[data-always]')?.checked;
   card.querySelectorAll('button, input').forEach(el => { el.disabled = true; });
   try {
-    const out = await assistantCall('POST', { id: card.dataset.id, action, always: action === 'approve' && always });
-    showToast(action === 'approve' ? `Sent to @${out.username}.` : 'Not sent.', 'success', 3000);
+    if (btn.dataset.action === 'approve') {
+      // sent from here, anonymously, with the key checked against the one you know for them
+      const out = await sendToUsers(held.short_id, held.username, held.delete_token, held.file_key ? fromB64url(held.file_key) : null, held.note || '');
+      if (!out.sent.length) {
+        const why = out.missing.length ? 'There’s no user with that name.' : out.failed[0]?.reason || 'Try again.';
+        throw new Error(why);
+      }
+      if (always) {
+        // the list may not be loaded yet (it is once the assistant dialog has been opened)
+        const current = agentRules ? agentRules.allowed : await openAllowed((await assistantCall('GET')).allowed_box);
+        await saveAgentRules({ allowed: [...current, held.username] });
+      }
+      showToast(`Sent to @${held.username}.`, 'success', 3000);
+    } else {
+      showToast('Not sent.', 'success', 3000);
+    }
+    await assistantCall('POST', { action: 'done', id: held.id });
   } catch (err) {
-    showToast(err.status === 404 ? 'That send isn’t waiting any more.' : `Couldn’t do that: ${err.message}`, 'error');
+    showToast(`Couldn’t send it: ${err.message}`, 'error', 6000);
   }
   updateAgentRequests();
 });
@@ -1789,7 +1832,7 @@ function renderInbox(files) {
 // "alice, bob" or "@alice bob"; each person gets their own copy to accept. On
 // this computer the local server passes it on through the linked account.
 // The delete key proves to the website that the share is yours.
-async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(shortId)) {
+async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(shortId), note = '') {
   const names = [...new Set(input.split(/[\s,;]+/).map(u => u.replace(/^@/, '')).filter(Boolean))].slice(0, 20);
   let key = deleteToken || null;
   if (!key) {
@@ -1814,10 +1857,12 @@ async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(short
           continue;
         }
         body.sealed_key = sealed;
+        if (note) body.note = await lockText(fileKey, note, 'note');
         // with the link's delete key, an anonymous token is enough: the server
         // doesn't learn who sent it
         if (key && !selfHostMode) token = takeToken(tokenUsername(), 'send');
       }
+      if (!fileKey && note) body.note = note;
       const post = headers => fetch(`/api/send/${encodeURIComponent(shortId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },

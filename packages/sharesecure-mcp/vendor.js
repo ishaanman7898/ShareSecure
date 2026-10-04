@@ -10,7 +10,7 @@ const site = path.join(here, '..', '..', 'public');
 const lib = path.join(here, 'lib');
 
 fs.mkdirSync(lib, { recursive: true });
-for (const file of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js']) {
+for (const file of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js', 'blindrsa.js', 'tokens.js']) {
   fs.copyFileSync(path.join(site, file), path.join(lib, file));
 }
 fs.writeFileSync(path.join(lib, 'package.json'), '{ "type": "module" }\n');

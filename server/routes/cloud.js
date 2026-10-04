@@ -240,11 +240,8 @@ function cloudCopy(shortId, token) {
 }
 
 // Sends one share to one username. Resolves with { status, body } where body is
-// { sent: true }, { waiting: true } or { error } ('link_account', 'link_expired',
-// 'User not found', …). An assistant's send (agent) goes as the linked account,
-// never anonymously, so the account's rules for assistants apply to it and it
-// may wait for the owner's approval on the website.
-async function sendOne(shortId, username, note, { agent = false } = {}) {
+// { sent: true } or { error } ('link_account', 'link_expired', 'User not found', …).
+async function sendOne(shortId, username, note) {
   const token = cloudToken();
   if (!token) return { status: 409, body: { error: 'link_account' } };
 
@@ -265,10 +262,10 @@ async function sendOne(shortId, username, note, { agent = false } = {}) {
       const fileKey = fromB64url(copy.key);
       request.sealed_key = await sealKey(theirKey, fileKey);
       if (note) request.note = await lockText(fileKey, note, 'note');
-      if (!agent) anon = takeToken('send');
+      anon = takeToken('send');
     }
     const send = headers => cloudFetch(`/api/send/${encodeURIComponent(copy.id)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...(agent ? { 'X-ShareSecure-Agent': '1' } : {}), ...headers }, body: JSON.stringify(request),
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(request),
     });
     let { status: code, body } = await send(anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` });
     if (anon && code === 401) ({ status: code, body } = await send({ Authorization: `Bearer ${token}` }));
@@ -285,10 +282,36 @@ async function sendOne(shortId, username, note, { agent = false } = {}) {
       continue;
     }
     if (body.sent) return { status: 200, body: { sent: true } };
-    if (body.waiting) return { status: 202, body: { waiting: true } };
     return { status: code >= 400 ? code : 502, body: { error: body.error || 'Couldn’t send it. Try again.' } };
   }
   return { status: 502, body: { error: 'Couldn’t send it. Try again.' } };
+}
+
+// The account's rule for assistants → 'approve' | 'anyone' | 'nobody', or { error }
+async function agentMode(token) {
+  const out = await cloudFetch('/api/auth/assistant', { headers: { Authorization: `Bearer ${token}` } });
+  if (out.status === 401) { forgetToken(); return { error: 'link_expired' }; }
+  return out.body.mode || 'approve';
+}
+
+// Keeps a send for the owner's OK on the website: which copy, to whom, and its
+// key, sealed to the account's own key, so the server can't read any of it.
+// The owner's browser opens it and sends it anonymously if they approve.
+async function holdForApproval(shortId, username, note, token) {
+  const copy = await cloudCopy(shortId, token);
+  if (copy.error) return { status: copy.status, body: { error: copy.error } };
+  const me = settings.get('cloudUsername');
+  const ownKey = me ? await publicKeyOf(me) : null;
+  if (!ownKey) return { status: 409, body: { error: 'The linked account has no key yet. Sign in on the website once.' } };
+  const { sealText } = await lib();
+  const box = await sealText(ownKey, JSON.stringify({
+    short_id: copy.id, username, file_key: copy.key, delete_token: copy.deleteToken, note: note || null, name: null,
+  }), 'agent-send');
+  const out = await cloudFetch('/api/auth/assistant', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action: 'hold', box }),
+  });
+  return out.body.waiting ? { status: 202, body: { waiting: true } } : { status: out.status, body: { error: out.body.error || 'Couldn’t keep it for approval.' } };
 }
 
 /**
@@ -302,10 +325,22 @@ async function sendToCloud(shortId, usernames, note = '') {
   const names = [...new Set((usernames || []).map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
   const result = { sent_to: [], waiting_for_approval: [], not_sent: [] };
   const cleanNote = String(note || '').trim().slice(0, NOTE_MAX);
+  const token = cloudToken();
+  // This app can't open the owner's list of people (it's sealed to their key),
+  // so under "approve" every send waits for their OK on the website.
+  let mode = 'approve';
+  if (token) {
+    try { mode = await agentMode(token); } catch { mode = 'approve'; }
+  }
   for (const username of names) {
     let out;
-    try { out = await sendOne(shortId, username, cleanNote, { agent: true }); }
-    catch { out = { status: 502, body: { error: 'Couldn’t reach ShareSecure.' } }; }
+    try {
+      if (!token) out = { status: 409, body: { error: 'link_account' } };
+      else if (mode?.error) out = { status: 401, body: { error: mode.error } };
+      else if (mode === 'nobody') out = { status: 403, body: { error: 'The account doesn’t let assistants send files to people. The owner can change that on the website: account menu → Connect an AI assistant.' } };
+      else if (mode === 'anyone') out = await sendOne(shortId, username, cleanNote);
+      else out = await holdForApproval(shortId, username, cleanNote, token);
+    } catch { out = { status: 502, body: { error: 'Couldn’t reach ShareSecure.' } }; }
     if (out.body.sent) { result.sent_to.push(username); continue; }
     if (out.body.waiting) { result.waiting_for_approval.push(username); continue; }
     const err = out.body.error;
