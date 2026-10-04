@@ -36,6 +36,9 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Every account has a **security code** (account menu → Security code): 30 digits from its public key. Compare codes with the people you send to.
 - Your browser remembers each person's key the first time you send to them. If the server ever hands out a different one, sending stops and you're told to compare codes.
 - Accounts can't replace their key once it's set.
+- **A public key log** ([`public/kt.js`](../public/kt.js)) records every account's key: an append-only Merkle tree, the same scheme Certificate Transparency uses (RFC 9162). Every key your browser, the desktop app or the local MCP server is given for someone comes with a proof that it's in the log, and is refused without one. Each also remembers the log it last saw and checks the new one only grew from it, so history can't be rewritten under them. Your browser checks the log shows *your* key for your username each time you open the site, and warns you if it doesn't.
+- So to read files meant for someone, a server would have to publish a second key for them, where everyone can see it. Anyone can check the whole log with `node scripts/kt-monitor.mjs`: it rebuilds the tree, and flags any account that got a different key without being deleted first. A public [GitHub Action](../.github/workflows/key-log.yml) runs it every day and keeps each day's log on the `key-log-witness` branch, so the record can't be changed afterwards either.
+- The log names accounts by a hash of the username, not the name. Like looking up a key, it lets someone check whether a username they guess exists.
 
 **Asking for a file**
 
@@ -82,6 +85,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - **Crafted names** can't become HTML or script files, and **crafted paths** can't make the desktop app serve anything outside its own copy of the site.
 - **A link that works once** gives the file out once even to simultaneous requests, and leaves no copy of the bytes behind.
 - **A file request** refuses anything not sealed in the browser, posts from other sites, and uploads past its limit or expiry, and only the owner can list or close it.
+- **A swapped key is caught by the key log**: a key that isn't in the log is refused, a second key for someone shows up in the log, and a log rewritten after someone looked fails their check.
 - **A tricked assistant** can't send a file to someone off your list without your approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
 - **Nothing links you to what you share through the local MCP server**: its uploads and sends carry anonymous tokens and no account, the files and copies it makes have no account or sender tag, and the server keeps only boxes it can't open (your rules, your waiting sends, your list of shares).
 

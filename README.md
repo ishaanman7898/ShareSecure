@@ -125,6 +125,7 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
 - **Sign-in** never sends your password (based on OPAQUE, RFC 9807), and your private key is locked with a key only your browser gets from signing in.
 - **Anonymous uploads and sends:** your browser spends blind-signed tokens (RFC 9474) instead of your sign-in, so the server can enforce daily limits without knowing who uploaded or sent a file.
 - **Security codes** let you check nobody swapped someone's key, and your browser warns you if a contact's key ever changes.
+- **A public key log** records every account's key in an append-only Merkle tree. Every key you're given must come with proof it's in the log, your browser checks the log shows your own key, and anyone can audit the whole log (`node scripts/kt-monitor.mjs`; a public check runs daily). A server trying to read someone's files would have to publish a second key for them where everyone can see it.
 - **No third-party code:** pdf.js and mammoth are served from the site, and the desktop app runs the site's code from its own copy.
 - Otherwise, files, their names and notes are encrypted on the server with AES-256-GCM.
   - **Website (end to end off):** each file's key is derived from a server master key.

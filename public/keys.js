@@ -10,9 +10,15 @@
 // the server ever hands out a different key for them, sending stops and you're
 // told to compare security codes with them, because a swapped key is how a
 // compromised server would try to read files meant for someone else.
+//
+// Every key is also checked against the public key log (see kt.js): it has to
+// be in the log, and the log has to have only grown since this browser last
+// looked. A key the server made up for someone would have to be published
+// there for everyone to see.
 import {
   makeKeyPair, lockPrivateKey, unlockPrivateKey, openKey, sealKey, unlockMeta, linkWithKey, fingerprint, join
 } from './sealed.js';
+import { checkKey } from './kt.js';
 
 const DB_NAME = 'sharesecure';
 const STORE = 'keys';
@@ -96,6 +102,28 @@ export async function trustNewKey(username) {
   if (pub) rememberContact(me?.username, username, pub);
 }
 
+// ── the public key log ───────────────────────────────────────────────────────
+// The biggest log this browser has seen, so the next one can be checked to be
+// the same log, grown.
+const HEAD_KEY = 'ss_kt_head';
+function knownHead() {
+  try { return JSON.parse(localStorage.getItem(HEAD_KEY) || 'null'); } catch { return null; }
+}
+async function fetchConsistency(from, to) {
+  const res = await fetch(`/api/transparency?from=${from}&to=${to}`);
+  if (!res.ok) throw new Error('Couldn’t check the public key log.');
+  return (await res.json()).path || [];
+}
+// → { ok, reason }. On success, remembers the log it was checked against.
+export async function checkLogged(username, publicKey, proof) {
+  let checked;
+  try { checked = await checkKey(username, publicKey, proof, knownHead(), fetchConsistency); } catch (err) {
+    return { ok: false, reason: err.message };
+  }
+  if (checked.ok) { try { localStorage.setItem(HEAD_KEY, JSON.stringify(checked.head)); } catch {} }
+  return checked;
+}
+
 // Someone's public key, checked against the one remembered for them.
 // → { publicKey, code } | null if they have no key yet | undefined if no such
 // user. Throws when the key changed.
@@ -103,8 +131,13 @@ export async function publicKeyFor(username) {
   const res = await fetch(`/api/keys?username=${encodeURIComponent(username)}`);
   if (res.status === 404) return undefined;
   if (!res.ok) throw new Error('Couldn’t look up their key.');
-  const pub = (await res.json()).publicKey;
+  const data = await res.json();
+  const pub = data.publicKey;
   if (!pub) return null;
+  const logged = await checkLogged(username, pub, data.transparency);
+  if (!logged.ok) {
+    throw Object.assign(new Error(`Couldn’t confirm @${username}’s key in the public key log, so nothing was sent. ${logged.reason}`), { code: 'key_log', username });
+  }
   const me = await myKeys();
   const known = contacts(me?.username)[username.toLowerCase()];
   const code = await fingerprint(pub);

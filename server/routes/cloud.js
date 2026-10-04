@@ -65,8 +65,8 @@ function saveCopies(copies) {
 
 // The browser modules (ES modules) that do the cryptography.
 const lib = () => Promise.all([
-  import('../../public/sealed.js'), import('../../public/filetypes.js'), import('../../public/blindrsa.js'),
-]).then(([sealed, filetypes, blindrsa]) => ({ ...sealed, ...filetypes, ...blindrsa }));
+  import('../../public/sealed.js'), import('../../public/filetypes.js'), import('../../public/blindrsa.js'), import('../../public/kt.js'),
+]).then(([sealed, filetypes, blindrsa, kt]) => ({ ...sealed, ...filetypes, ...blindrsa, ...kt }));
 
 // ── anonymous tokens ─────────────────────────────────────────────────────────
 // A few tokens are kept here (encrypted, like everything in settings), topped
@@ -138,10 +138,19 @@ function refillLater() {
 refillLater();
 
 // A username's public key → string, null (none yet) or undefined (no such user).
+// It has to be in the public key log, and the log has to have only grown since
+// this app last looked (see public/kt.js); otherwise it throws.
 async function publicKeyOf(username) {
   const out = await cloudFetch(`/api/keys?username=${encodeURIComponent(username)}`);
   if (out.status === 404) return undefined;
-  return out.body.publicKey || null;
+  const pub = out.body.publicKey || null;
+  if (!pub) return null;
+  const { checkKey } = await lib();
+  const consistency = async (from, to) => (await cloudFetch(`/api/transparency?from=${from}&to=${to}`)).body.path || [];
+  const logged = await checkKey(username, pub, out.body.transparency, settings.get('ktHead') || null, consistency);
+  if (!logged.ok) throw new Error(`Couldn’t confirm @${username}’s key in the public key log, so nothing was sent. ${logged.reason}`);
+  settings.set('ktHead', logged.head);
+  return pub;
 }
 
 async function cloudFetch(pathname, options = {}) {
@@ -340,7 +349,7 @@ async function sendToCloud(shortId, usernames, note = '') {
       else if (mode === 'nobody') out = { status: 403, body: { error: 'The account doesn’t let assistants send files to people. The owner can change that on the website: account menu → Connect an AI assistant.' } };
       else if (mode === 'anyone') out = await sendOne(shortId, username, cleanNote);
       else out = await holdForApproval(shortId, username, cleanNote, token);
-    } catch { out = { status: 502, body: { error: 'Couldn’t reach ShareSecure.' } }; }
+    } catch (err) { out = { status: 502, body: { error: /key log/.test(err?.message) ? err.message : 'Couldn’t reach ShareSecure.' } }; }
     if (out.body.sent) { result.sent_to.push(username); continue; }
     if (out.body.waiting) { result.waiting_for_approval.push(username); continue; }
     const err = out.body.error;
@@ -459,8 +468,9 @@ router.post('/send/:shortId', requireOwner, async (req, res) => {
   try {
     const out = await sendOne(req.params.shortId, username, note);
     res.status(out.status).json(out.body);
-  } catch {
-    res.status(502).json({ error: 'Couldn’t reach ShareSecure. Check your connection and try again.' });
+  } catch (err) {
+    // a key the public log can't confirm is a reason worth showing as it is
+    res.status(502).json({ error: /key log/.test(err?.message) ? err.message : 'Couldn’t reach ShareSecure. Check your connection and try again.' });
   }
 });
 

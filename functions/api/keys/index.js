@@ -1,6 +1,7 @@
 // /api/keys — end-to-end encryption keys for accounts.
 //
-//   GET  ?username=alice   alice's public key, so you can seal a file to her.
+//   GET  ?username=alice   alice's public key, so you can seal a file to her,
+//                          with proof it's in the public key log (see public/kt.js).
 //                          No sign-in needed: public keys are public, and
 //                          looking one up shouldn't say who's about to send.
 //   GET                    your own public key and locked private key
@@ -14,6 +15,7 @@
 // stolen session swap in their own key to receive files meant for you.
 import { getDb, verifyToken, ensureUserColumns, findUser } from '../../_turso.js';
 import { isSealed, isPublicKey } from '../../../public/sealed.js';
+import { keyProof } from '../../_kt.js';
 
 const fail = (error, status) => Response.json({ error }, { status });
 
@@ -26,7 +28,8 @@ export async function onRequestGet(context) {
   if (username) {
     const user = await findUser(db, username.trim().replace(/^@/, ''), 'username, public_key');
     if (!user) return fail('User not found', 404);
-    return Response.json({ username: user.username, publicKey: user.public_key || null });
+    const transparency = user.public_key ? await keyProof(env, user.username, user.public_key) : null;
+    return Response.json({ username: user.username, publicKey: user.public_key || null, transparency });
   }
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   if (!auth) return fail('Sign in first.', 401);

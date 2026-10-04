@@ -13,7 +13,7 @@ fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module","version":"0
 fs.cpSync(path.join(root, 'functions'), path.join(temp, 'functions'), { recursive: true });
 // the API shares a few modules with the browser
 fs.mkdirSync(path.join(temp, 'public'));
-for (const f of ['sealed.js', 'filetypes.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
+for (const f of ['sealed.js', 'filetypes.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
 // Cloudflare's bundler reads package.json on its own; Node needs to be told it's JSON
 for (const f of ['_mcp.js']) {
   const p = path.join(temp, 'functions', f);
@@ -22,7 +22,7 @@ for (const f of ['_mcp.js']) {
 // the local MCP package, with the website's encryption code beside it as npm ships it
 fs.cpSync(path.join(root, 'packages', 'sharesecure-mcp', 'src'), path.join(temp, 'pkg', 'src'), { recursive: true });
 fs.mkdirSync(path.join(temp, 'pkg', 'lib'));
-for (const f of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js', 'blindrsa.js', 'tokens.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'pkg', 'lib', f));
+for (const f of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js', 'blindrsa.js', 'tokens.js', 'kt.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'pkg', 'lib', f));
 fs.writeFileSync(path.join(temp, 'pkg', 'package.json'), '{"type":"module"}');
 const pkgLib = file => import(pathToFileURL(path.join(temp, 'pkg', 'src', file)).href);
 const load = file => import(pathToFileURL(path.join(temp, 'functions', file)).href);
@@ -34,7 +34,7 @@ db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT
 db.exec("INSERT INTO users (id, username, access_code) VALUES (1, 'alice', 'test'), (2, 'bob', 'test'), (3, 'mallory', 'test'), (4, 'zoe', 'test')");
 // a throwaway RSA key for the anonymous-token tests
 const issuerKey = require('node:crypto').generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
-const env = { TURSO_URL: 'https://audit.invalid', TURSO_TOKEN: 'test-only', TOKEN_SECRET: 'test-only-signing-secret', TAG_SECRET: 'test-only-tag-secret', ENCRYPTION_KEY: '42'.repeat(32), TOKEN_ISSUER_KEY: issuerKey };
+const env = { TURSO_URL: 'https://audit.invalid', TURSO_TOKEN: 'test-only', TOKEN_SECRET: 'test-only-signing-secret', TAG_SECRET: 'test-only-tag-secret', ENCRYPTION_KEY: '42'.repeat(32), TOKEN_ISSUER_KEY: issuerKey, KT_BLOCK: '4' };
 const realFetch = global.fetch;
 const sqlFailures = [];   // { match: RegExp, times: n } makes matching statements fail
 global.fetch = async (url, options) => {
@@ -778,6 +778,7 @@ function localFetch() {
     seen.push({ path: u.pathname, auth: request.headers.get('Authorization'), token: request.headers.get('X-ShareSecure-Token') });
     if (u.pathname.startsWith('/api/agent/')) return agentApi({ ...ctx, params: { path: u.pathname.slice('/api/agent/'.length).split('/') } });
     if (u.pathname === '/api/keys') return keysApi.onRequestGet({ ...ctx, params: {} });
+    if (u.pathname === '/api/transparency') return (await load('api/transparency.js')).onRequestGet({ ...ctx, params: {} });
     if (u.pathname === '/api/upload') return uploadHandler({ ...ctx, params: {} });
     const [, kind, id] = /^\/api\/(send|delete)\/([A-Za-z0-9]+)$/.exec(u.pathname) || [];
     if (kind === 'send') return sendHandler({ ...ctx, params: { shortId: id } });
@@ -1081,4 +1082,117 @@ test('works once, sent to someone: whoever opens it first erases every link to i
   assert.equal((await view(share.shortId)).status, 410);
   const news = await burnedApi([{ id: share.shortId, delete_token: share.deleteToken }]);
   assert.equal(news[0].attempts, 1);
+});
+
+// ── the public key log ────────────────────────────────────────────────────────
+
+const keyLookup = async username => (await keysApi.onRequestGet(context('/api/keys?username=' + username, { user: null, method: 'GET' }))).json();
+const logApi = async query => (await (await load('api/transparency.js')).onRequestGet(context('/api/transparency' + query, { user: null, method: 'GET' }))).json();
+const fetchConsistencyLocal = async (from, to) => (await logApi(`?from=${from}&to=${to}`)).path;
+
+test('key log: proofs match a tree built the slow way, for every size and position', async () => {
+  const kt = await publicLib('kt.js');
+  const leaves = [];
+  for (let i = 0; i < 33; i++) leaves.push(await kt.leafHash('label' + i, 'key', 'key' + i));
+  for (let n = 1; n <= 33; n++) {
+    const L = leaves.slice(0, n), range = (lo, hi) => kt.rootOf(L.slice(lo, hi)), root = await kt.rootOf(L);
+    for (let m = 0; m < n; m++) assert(await kt.verifyInclusion(L[m], m, n, await kt.inclusionProof(m, n, range), root), `inclusion ${m}/${n}`);
+    for (let m = 1; m <= n; m++) assert(await kt.verifyConsistency(m, await kt.rootOf(L.slice(0, m)), n, root, await kt.consistencyProof(m, n, range)), `consistency ${m}/${n}`);
+  }
+  // a wrong leaf, root or proof fails
+  const range = (lo, hi) => kt.rootOf(leaves.slice(lo, hi)), root = await kt.rootOf(leaves);
+  const proof = await kt.inclusionProof(5, 33, range);
+  assert(!(await kt.verifyInclusion(leaves[6], 5, 33, proof, root)));
+  assert(!(await kt.verifyInclusion(leaves[5], 5, 33, proof, leaves[0])));
+  assert(!(await kt.verifyConsistency(10, leaves[0], 33, root, await kt.consistencyProof(10, 33, range))));
+});
+
+test('key log: every key the server hands out is in the log, and the stored blocks agree with the slow way', async () => {
+  const kt = await publicLib('kt.js');
+  const bob = await keyLookup('bob');
+  assert.equal(bob.publicKey, keyPairs.bob.publicKey);
+  const checked = await kt.checkKey('bob', bob.publicKey, bob.transparency, null, fetchConsistencyLocal);
+  assert(checked.ok, checked.reason);
+  // the server's root is the root of its entries, worked out from scratch
+  const all = (await logApi('?start=0&count=1000')).entries;
+  const leaves = await Promise.all(all.map(e => kt.leafHash(e.label, e.kind, e.public_key)));
+  const head = await logApi('');
+  assert.equal(head.size, all.length);
+  assert.equal(await kt.rootOf(leaves), head.root);
+  // entries name accounts by a hash, never the username
+  assert(!JSON.stringify(all).includes('"bob"') && !JSON.stringify(all).includes('alice'));
+  // a key the log doesn't have fails, even with a real proof
+  assert(!(await kt.checkKey('bob', keyPairs.alice.publicKey, bob.transparency, null, fetchConsistencyLocal)).ok);
+  assert(!(await kt.checkKey('bob', bob.publicKey, null, null, fetchConsistencyLocal)).ok);
+});
+
+test('attack: a server that swaps in its own key for someone is caught by the log', async () => {
+  const kt = await publicLib('kt.js');
+  const known = (await kt.checkKey('bob', keyPairs.bob.publicKey, (await keyLookup('bob')).transparency, null, fetchConsistencyLocal)).head;
+  const real = db.prepare("SELECT public_key FROM users WHERE username = 'bob'").get().public_key;
+  const fake = (await sealed.makeKeyPair()).publicKey;
+  db.prepare("UPDATE users SET public_key = ? WHERE username = 'bob'").run(fake);
+  try {
+    // to hand out the fake key with a proof, the server has to publish it
+    const lookup = await keyLookup('bob');
+    assert.equal(lookup.publicKey, fake);
+    assert((await kt.checkKey('bob', fake, lookup.transparency, known, fetchConsistencyLocal)).ok);
+    // bob's own browser sees the log no longer shows his key…
+    assert.notEqual(lookup.publicKey, keyPairs.bob.publicKey);
+    // …and anyone checking the whole log sees bob's account got a second key without being deleted
+    const label = await kt.labelFor('bob');
+    const keys = (await logApi('?start=0&count=1000')).entries.filter(e => e.label === label);
+    const [before, after] = keys.slice(-2);
+    assert.equal(before.kind, 'key'); assert.equal(after.kind, 'key');
+    assert.equal(before.public_key, real); assert.equal(after.public_key, fake);
+  } finally {
+    db.prepare("UPDATE users SET public_key = ? WHERE username = 'bob'").run(real);
+  }
+});
+
+test('attack: a log rewritten after someone looked is caught', async () => {
+  const kt = await publicLib('kt.js');
+  const lookup = await keyLookup('alice');
+  const known = (await kt.checkKey('alice', keyPairs.alice.publicKey, lookup.transparency, null, fetchConsistencyLocal)).head;
+  // the server quietly changes an old entry (not alice's own, so her proof itself still adds up)
+  const first = db.prepare('SELECT idx, hash FROM kt_leaves WHERE label != ? ORDER BY idx LIMIT 1').get(await kt.labelFor('alice'));
+  const forged = await kt.leafHash('f'.repeat(64), 'key', 'forged');
+  db.prepare('UPDATE kt_leaves SET hash = ? WHERE idx = ?').run(forged, first.idx);
+  db.exec('DELETE FROM kt_nodes');
+  try {
+    // a new account makes the log grow, then alice is looked up again
+    await keysApi.onRequestPost(context('/api/keys', { user: 'mallory', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_key: (await sealed.makeKeyPair()).publicKey, private_key_box: await sealed.lockPrivateKey((await sealed.makeKeyPair()).privateKey, sealed.newFileKey()) }) }));
+    await keyLookup('mallory');
+    const again = await keyLookup('alice');
+    const checked = await kt.checkKey('alice', keyPairs.alice.publicKey, again.transparency, known, fetchConsistencyLocal);
+    assert.equal(checked.ok, false);
+    assert.match(checked.reason, /rewritten/);
+  } finally {
+    db.prepare('UPDATE kt_leaves SET hash = ? WHERE idx = ?').run(first.hash, first.idx);
+    db.exec('DELETE FROM kt_nodes');
+  }
+});
+
+test('key log: a deleted account is recorded, so the name can get a new key without looking like a swap', async () => {
+  const kt = await publicLib('kt.js');
+  const { register, signIn, prove, postWith } = await publicLib('opaque.js');
+  const post = async (url, body, headers = {}) => {
+    const name = { '/api/auth/register/start': 'auth/register/start.js', '/api/auth/register/finish': 'auth/register/finish.js', '/api/auth/login/start': 'auth/login/start.js', '/api/auth/login/finish': 'auth/login/finish.js', '/api/auth/delete-account': 'auth/delete-account.js' }[url];
+    const res = await (await load('api/' + name)).onRequestPost(context(url, { user: null, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) }));
+    return { status: res.status, data: await res.json().catch(() => ({})) };
+  };
+  const keys = async () => { const pair = await sealed.makeKeyPair(); return { public_key: pair.publicKey, private_key_box: await sealed.lockPrivateKey(pair.privateKey, sealed.newFileKey()) }; };
+  await register(post, 'quinn', 'quinn-password-1', keys);
+  const firstKey = (await keyLookup('quinn')).publicKey;
+  const session = await signIn(post, 'quinn', 'quinn-password-1');
+  const proven = await prove(post, 'quinn', 'quinn-password-1');
+  assert.equal((await post('/api/auth/delete-account', proven.proof, { Authorization: 'Bearer ' + session.token })).status, 200);
+  await register(post, 'quinn', 'quinn-password-2', keys);
+  const secondKey = (await keyLookup('quinn')).publicKey;
+  assert.notEqual(firstKey, secondKey);
+  const label = await kt.labelFor('quinn');
+  const history = (await logApi('?start=0&count=1000')).entries.filter(e => e.label === label);
+  assert.deepEqual(history.map(e => e.kind), ['key', 'gone', 'key']);
+  assert((await kt.checkKey('quinn', secondKey, (await keyLookup('quinn')).transparency, null, fetchConsistencyLocal)).ok);
 });

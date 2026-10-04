@@ -22,6 +22,7 @@ import {
 } from '../lib/sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR, TEXT_TYPES, contentMatches } from '../lib/filetypes.js';
 import { makeWallet } from './wallet.js';
+import { checkKey } from '../lib/kt.js';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const TEXT_MAX = 200000;
@@ -188,11 +189,17 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
 
   // ── sending ────────────────────────────────────────────────────────────────
 
-  // Someone's public key, checked against the one this computer saw before.
+  // Someone's public key, checked against the public key log (it must be in
+  // it, and the log must only have grown since this computer last looked) and
+  // against the key this computer saw for them before.
   async function sealFor(username, fileKey) {
-    const pub = await api.publicKey(username);
-    if (pub === undefined) return { reason: 'No user with that name' };
+    const found = await api.keyRecord(username);
+    if (found === undefined) return { reason: 'No user with that name' };
+    const pub = found.publicKey;
     if (!pub) return { reason: 'They haven’t signed in since end-to-end encryption was added, so there’s no key to seal it to yet. Ask them to sign in once.' };
+    const logged = await checkKey(username, pub, found.transparency, store.read('kt.json'), api.consistency).catch(err => ({ ok: false, reason: err.message }));
+    if (!logged.ok) return { reason: `Their key couldn’t be confirmed in the public key log, so nothing was sent. ${logged.reason}` };
+    store.write('kt.json', logged.head);
     const known = store.contact(username);
     if (known && known !== pub) {
       return { reason: `Their security code has changed, so nothing was sent. The user should check @${username}’s code with them, then run \`npx sharesecure-mcp trust ${username}\`.` };

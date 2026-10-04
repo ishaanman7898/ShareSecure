@@ -6,7 +6,7 @@ A local [MCP](https://modelcontextprotocol.io) server for [ShareSecure](https://
 - **Nothing ties what you share to you.** Uploads and sends go out with anonymous blind-signed tokens (picked up ahead of time), never your connection token, exactly like the website, so ShareSecure can't tell they came from you. Your connection token is only used for what's yours anyway: picking up tokens, your own sealed boxes, your inbox and file requests.
 - **The assistant never sees a key.** A share's link holds its key, so it goes to your clipboard and to *Your shares* on the website, not into the chat. An assistant tricked by something it read can make a share, but can't hand anyone the link.
 - **Sends to people not on your list wait for you.** Your list is sealed to your key and applied here; anyone else waits on the website until you approve it. The waiting send is sealed to your key too, and posted a few minutes later so its timing doesn't point back at the share.
-- **Swapped keys are caught.** Each person's key is remembered the first time, like the website does. If the server ever hands out a different one, nothing is sent.
+- **Swapped keys are caught.** Each person's key has to come with proof it's in ShareSecure's public key log, the log has to have only grown since this computer last looked, and the key is remembered the first time, like the website does. If any of that fails, nothing is sent.
 
 ## Set up
 

@@ -3,7 +3,7 @@ import {
   newPasscodeSalt, passcodeKey, sealText, openText
 } from './sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
-import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey } from './keys.js';
+import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey, checkLogged } from './keys.js';
 import { refill, takeToken, forgetTokens } from './tokens.js';
 import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
@@ -1354,6 +1354,24 @@ document.getElementById('burn-toggle')?.addEventListener('change', e => {
   updateAdvancedState();
 });
 
+// ── your own entry in the public key log ─────────────────────────────────────
+// Anyone sending you a file seals it to the key the log shows for you. If that
+// isn't the key in this browser, someone (the server included) may be trying
+// to read what's sent to you, so you're told, loudly.
+async function checkOwnKey() {
+  const me = await myKeys();
+  if (!me?.publicKey || selfHostMode) return;
+  try {
+    const res = await fetch(`/api/keys?username=${encodeURIComponent(me.username)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const logged = data.publicKey === me.publicKey ? await checkLogged(me.username, me.publicKey, data.transparency) : { ok: false, reason: 'It shows a key that isn’t yours.' };
+    if (!logged.ok) {
+      showToast(`Warning: the public key log doesn’t show your key for @${me.username}. Files sent to you might not be safe. ${logged.reason} Report it (footer → Report an issue).`, 'error', 60000);
+    }
+  } catch {}
+}
+
 // ── links that work once: hear when they're opened, and if anyone tries again ─
 // Each one's id and delete key stay in this browser for 30 days. The server
 // keeps a tombstone for a burned link, and answers only to its delete key.
@@ -1487,6 +1505,7 @@ function initAuth() {
     syncPasscodeField();
     // tokens are picked up a little after the page opens, not when they're used
     setTimeout(() => refill(username, authHeaders()), 4000 + Math.random() * 8000);
+    setTimeout(checkOwnKey, 2000 + Math.random() * 4000);
     updateDashboard();
     startInboxPolling();
   } else {

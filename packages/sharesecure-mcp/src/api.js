@@ -50,12 +50,18 @@ export function makeApi({ url, token, fetchImpl = globalThis.fetch }) {
 
     // someone's public key → string, null (no key yet) or undefined (no such user)
     async publicKey(username) {
+      const found = await this.keyRecord(username);
+      return found === undefined ? undefined : found.publicKey || null;
+    },
+    // → { publicKey, transparency } or undefined (no such user)
+    async keyRecord(username) {
       try {
-        return (await call('GET', `/api/keys?username=${encodeURIComponent(username)}`, { auth: false })).publicKey || null;
+        return await call('GET', `/api/keys?username=${encodeURIComponent(username)}`, { auth: false });
       } catch (err) {
         if (err.status === 404) return undefined;
         throw err;
       }
     },
+    consistency: async (from, to) => (await call('GET', `/api/transparency?from=${from}&to=${to}`, { auth: false })).path || [],
   };
 }

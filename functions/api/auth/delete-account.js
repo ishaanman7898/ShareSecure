@@ -7,6 +7,7 @@
 // It needs a fresh proof of the password, made the same way as signing in.
 import { verifyToken, getDb, getUserTag, checkAccessCode, deleteBranch } from '../../_turso.js';
 import { checkProof, readJson, fail } from '../../_auth.js';
+import { append } from '../../_kt.js';
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -47,6 +48,9 @@ export async function onRequestPost(context) {
     try { await db.execute({ sql, args: [arg] }); } catch {}
   }
   await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [auth.userId] });
+  // the public key log records that the username's key is gone, so whoever
+  // takes the name next can publish a new one without it looking like a swap
+  await append(env, auth.username, 'gone').catch(err => console.error('key log: deletion not recorded', err));
 
   return Response.json({ deleted: true });
 }
