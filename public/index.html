@@ -203,6 +203,11 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Let viewers download the file</span>
           </label>
+          <label class="switch hidden" id="burn-wrap" title="The file is erased the moment it's opened. If anyone tries the link after that, you're told: it may have been passed on.">
+            <input type="checkbox" id="burn-toggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Works once: erase it as soon as it’s opened</span>
+          </label>
           <label class="switch hidden" id="require-account-wrap">
             <input type="checkbox" id="require-account" />
             <span class="switch-track" aria-hidden="true"></span>
@@ -237,10 +242,15 @@
         <div id="inbox-section" class="inbox-section">
           <div class="list-header">
             <h2 class="panel-title" id="inbox-title" tabindex="-1">Sent to you</h2>
+            <button class="btn btn-ghost btn-small" id="ask-file-btn">Ask for a file</button>
           </div>
           <div id="inbox-requests" class="inbox-requests"></div>
           <div id="inbox-list" class="file-list">
             <p class="empty-msg">No files received.</p>
+          </div>
+          <div id="file-requests" class="file-requests hidden">
+            <p class="file-requests-title">Your file requests</p>
+            <div id="file-requests-list" class="file-list"></div>
           </div>
         </div>
       </aside>
@@ -362,6 +372,52 @@
   </div>
 
   <!-- delete account -->
+  <!-- ask someone for a file -->
+  <div class="modal hidden" id="ask-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="ask-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="ask-title">Ask for a file</h2>
+        <button class="btn-icon" data-close aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      </div>
+      <p class="modal-text">Make a link anyone can send you a file through, even without an account. Their browser encrypts it to your key, so only you can open it. It arrives in <strong>Sent to you</strong>.</p>
+      <form class="modal-block" id="ask-form" novalidate>
+        <div class="form-group">
+          <label for="ask-label">What do you need?</label>
+          <input type="text" id="ask-label" maxlength="300" autocomplete="off" placeholder="Your signed lease" />
+        </div>
+        <div class="ask-row">
+          <div class="form-group">
+            <label for="ask-hours">Link works for</label>
+            <select id="ask-hours">
+              <option value="24">1 day</option>
+              <option value="72" selected>3 days</option>
+              <option value="168">7 days</option>
+              <option value="720">30 days</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="ask-max">Files it takes</label>
+            <select id="ask-max">
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="5" selected>5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+            </select>
+          </div>
+        </div>
+        <p class="auth-error" id="ask-error" role="alert"></p>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary" id="ask-submit">Make the link</button>
+        </div>
+      </form>
+      <div class="modal-block hidden" id="ask-done">
+        <div class="code-box"><code id="ask-link"></code><button class="btn btn-ghost btn-copy" data-copy="ask-link">Copy</button></div>
+        <p class="field-hint">Send this link to whoever has the file. What you asked for is in the part after #, so ShareSecure never sees it, and so is your public key, so their browser locks the file to you and nobody can swap in another key.</p>
+      </div>
+    </div>
+  </div>
+
   <div class="modal hidden" id="code-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="code-title">
     <div class="modal-content">
       <div class="modal-header">

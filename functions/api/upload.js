@@ -93,6 +93,8 @@ export async function onRequestPost(context) {
   const hours = Math.min(Math.max(parseFloat(form.get('expires_hours')) || 1, 1 / 60), 240);
   const expiresAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
   const flag = name => form.get(name) === '1' ? 1 : 0;
+  // a link that works once can't also be downloaded or drawn on: either would be a second look
+  const once = flag('burn');
   const deleteToken = randomId(24);
 
   purgeExpired(env, context);
@@ -101,11 +103,11 @@ export async function onRequestPost(context) {
   await db.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token,
             user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download, require_account,
-            e2e, owner_key, passcode_salt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?)`,
+            e2e, owner_key, passcode_salt, max_views)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [shortId, row.name, row.type, row.size, row.data, expiresAt, deleteToken,
-      userTag, shortId, flag('allow_annotations'), flag('allow_download'), flag('require_account'),
-      e2e ? 1 : 0, row.ownerKey, row.salt]
+      userTag, shortId, once ? 0 : flag('allow_annotations'), once ? 0 : flag('allow_download'), flag('require_account'),
+      e2e ? 1 : 0, row.ownerKey, row.salt, once ? 1 : null]
   });
 
   // Count again now this one is in, so several uploads at once can't all slip
@@ -125,6 +127,7 @@ export async function onRequestPost(context) {
     expiresAt,
     deleteToken,
     e2e,
+    burn: Boolean(once),
     anonymous: Boolean(anonymous),
   });
 }

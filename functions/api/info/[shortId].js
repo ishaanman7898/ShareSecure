@@ -2,6 +2,7 @@
 // For an end-to-end encrypted file, `filename` is still sealed ("e2e:…") and
 // the viewer opens it with the key from the link.
 import { getDb, purgeExpired, decryptStr, ensureFileColumns, signInRequired, findLiveFile } from '../../_turso.js';
+import { noteTry } from '../../_burn.js';
 
 export async function onRequestGet(context) {
   const { params, env, request } = context;
@@ -10,8 +11,12 @@ export async function onRequestGet(context) {
   purgeExpired(env, context);
 
   const file = await findLiveFile(db, params.shortId,
-    'short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, parent_short_id, parent_key, allow_annotations, allow_download, require_account, recipient_user_tag, e2e, passcode_salt');
-  if (!file) return Response.json({ error: 'File not found' }, { status: 404 });
+    'short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, parent_short_id, parent_key, allow_annotations, allow_download, require_account, recipient_user_tag, e2e, passcode_salt, max_views');
+  if (!file) {
+    // a link that worked once: this try is counted, so its owner hears of it
+    if (await noteTry(db, params.shortId)) return Response.json({ error: 'This link worked once, and it has already been opened.', code: 'burned' }, { status: 410 });
+    return Response.json({ error: 'File not found' }, { status: 404 });
+  }
   if (file.expired) return Response.json({ error: 'Link expired' }, { status: 410 });
   const denied = await signInRequired(file, request, env);
   if (denied) return denied;
@@ -32,5 +37,7 @@ export async function onRequestGet(context) {
     recipientOnly: Boolean(file.recipient_user_tag),
     allowAnnotations: file.allow_annotations ?? 1,
     allowDownload: file.allow_download ?? 0,
+    // erased the moment it's opened, so the viewer asks first
+    burnAfterReading: Boolean(file.max_views),
   });
 }

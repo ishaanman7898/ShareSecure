@@ -53,7 +53,7 @@ global.fetch = async (url, options) => {
     return Response.json({ results: [{ type: 'error', error: { message: error.message } }] });
   }
 };
-let api, mcp, agent, agentApi, assistantApi, uploadHandler, sendHandler, inboxHandler, rawHandler, infoHandler, reshareHandler, keysApi, sealed;
+let api, mcp, agent, agentApi, assistantApi, requestsApi, uploadHandler, sendHandler, inboxHandler, rawHandler, infoHandler, reshareHandler, keysApi, sealed;
 const tokens = {};
 // each test starts with a fresh daily upload limit
 const freshDay = () => db.exec("UPDATE files SET uploaded_at = '2000-01-01 00:00:00'");
@@ -80,6 +80,7 @@ before(async () => {
   api = await load('_turso.js'); mcp = await load('_mcp.js'); agent = await load('_agent.js');
   agentApi = (await load('api/agent/[[path]].js')).onRequest;
   assistantApi = await load('api/auth/assistant.js');
+  requestsApi = (await load('api/requests/[[path]].js')).onRequest;
   uploadHandler = (await load('api/upload.js')).onRequestPost;
   sendHandler = (await load('api/send/[shortId].js')).onRequestPost;
   inboxHandler = (await load('api/inbox/[shortId].js')).onRequestPost;
@@ -866,4 +867,170 @@ test('local MCP speaks MCP over stdio framing', async () => {
   const called = await handle({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'share_text', arguments: {} } }, tools, '1.0.0');
   assert.equal(called.result.structuredContent.message, 'called share_text');
   assert.equal(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }, tools, '1.0.0'), null);
+});
+
+// ── file requests ─────────────────────────────────────────────────────────────
+
+const requestCall = (pathParts, { user = null, method = 'GET', body, headers = {} } = {}) => requestsApi({
+  env, waitUntil: p => p.catch(() => {}), params: { path: pathParts },
+  request: new Request('https://sharesecure.test/api/requests/' + pathParts.join('/'), { method, headers: { ...(user ? { Authorization: 'Bearer ' + tokens[user] } : {}), ...headers }, ...(body === undefined ? {} : { body }) }),
+});
+
+// what the uploader's browser does on /q/<id> (public/request.js), given the link
+async function sendThroughRequest(link, text, name = 'lease.txt', note = '') {
+  const id = /\/q\/([A-Za-z0-9]+)#/.exec(link)[1];
+  const hash = new URLSearchParams(link.split('#')[1]);
+  const ownerKey = hash.get('pk');
+  const key = sealed.newFileKey();
+  const form = new FormData();
+  form.append('file', new Blob([await sealed.lockFile(key, new TextEncoder().encode(text))]), 'sealed.bin');
+  form.append('meta', await sealed.lockMeta(key, { name, type: 'text/plain' }));
+  form.append('inbox_key', await sealed.sealKey(ownerKey, key));
+  if (note) form.append('note', await sealed.lockText(key, note, 'note'));
+  return requestCall([id, 'upload'], { method: 'POST', body: form });
+}
+
+test('file requests: anyone can send through the link, only the owner can open it, and the limits hold', async () => {
+  clearRequests();
+  // alice's browser seals what she asks for, and its key to herself
+  const key = sealed.newFileKey();
+  const made = await requestCall([], { user: 'alice', method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: await sealed.lockText(key, 'Your signed lease', 'request'), owner_box: await sealed.sealKey(keyPairs.alice.publicKey, key), max_files: 2, hours: 24 }) });
+  assert.equal(made.status, 200, await made.clone().text());
+  const { id } = await made.json();
+  const link = `https://sharesecure.test/q/${id}#r=${sealed.toB64url(key)}&pk=${keyPairs.alice.publicKey}`;
+
+  // a plain label is refused: the server must never be handed one
+  assert.equal((await requestCall([], { user: 'alice', method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: 'plain', owner_box: 'plain' }) })).status, 400);
+  // the page learns who's asking and opens the label with the key from the link
+  const info = await (await requestCall([id])).json();
+  assert.equal(info.username, 'alice'); assert.equal(info.remaining, 2); assert.equal(info.open, true);
+  assert.equal(await sealed.unlockText(key, info.label, 'request'), 'Your signed lease');
+
+  // a stranger sends a file without an account
+  const sent = await sendThroughRequest(link, 'Signed lease contents', 'lease.txt', 'from the tenant');
+  assert.equal(sent.status, 200, await sent.clone().text());
+  const stored = JSON.stringify(db.prepare('SELECT * FROM files').all()) + JSON.stringify(db.prepare('SELECT * FROM file_requests').all());
+  assert(!stored.includes('Signed lease') && !stored.includes('from the tenant') && !stored.includes('Your signed lease'));
+
+  // it waits in alice's inbox, marked as coming through her request, and only her key opens it
+  const inbox = await (await (await load('api/inbox/index.js')).onRequestGet(context('/api/inbox', { user: 'alice', method: 'GET' }))).json();
+  const row = inbox.files.find(f => f.via_request === id);
+  assert(row); assert.equal(row.status, 'pending');
+  const fileKey = await sealed.openKey(keyPairs.alice.privateKey, row.inbox_key);
+  assert.equal((await sealed.unlockMeta(fileKey, row.original_filename)).name, 'lease.txt');
+  assert.equal(await sealed.unlockText(fileKey, row.note, 'note'), 'from the tenant');
+  await assert.rejects(sealed.openKey(keyPairs.bob.privateKey, row.inbox_key));
+  const accept = await inboxHandler(context('/api/inbox/' + row.short_id, { user: 'alice', params: { shortId: row.short_id }, headers: { 'Content-Type': 'application/json' }, body: '{"action":"accept"}' }));
+  assert.equal(accept.status, 200);
+  const raw = await rawHandler(context('/api/raw/' + row.short_id, { user: 'alice', method: 'GET', params: { shortId: row.short_id } }));
+  assert.equal(new TextDecoder().decode(await sealed.unlockFile(fileKey, new Uint8Array(await raw.arrayBuffer()))), 'Signed lease contents');
+  // nobody else can fetch it, even by id
+  assert.equal((await rawHandler(context('/api/raw/' + row.short_id, { user: 'bob', method: 'GET', params: { shortId: row.short_id } }))).status, 403);
+
+  // unsealed uploads and cross-site posts are refused
+  const plain = new FormData(); plain.append('file', new File(['plain'], 'p.txt')); plain.append('meta', 'x'); plain.append('inbox_key', 'y');
+  assert.equal((await requestCall([id, 'upload'], { method: 'POST', body: plain })).status, 400);
+  assert.equal((await requestCall([id, 'upload'], { method: 'POST', headers: { Origin: 'https://attacker.invalid' }, body: plain })).status, 403);
+
+  // it takes two files, then it's full
+  assert.equal((await sendThroughRequest(link, 'second')).status, 200);
+  assert.equal((await sendThroughRequest(link, 'third')).status, 410);
+  assert.equal((await (await requestCall([id])).json()).open, false);
+
+  // bob can't see or close alice's requests; alice can, and then it takes nothing
+  assert.equal((await (await requestCall([], { user: 'bob' })).json()).requests.length, 0);
+  assert.equal((await requestCall([id], { user: 'bob', method: 'DELETE' })).status, 404);
+  const listed = (await (await requestCall([], { user: 'alice' })).json()).requests.find(r => r.id === id);
+  assert.equal(listed.received, 2);
+  assert.deepEqual(await sealed.openKey(keyPairs.alice.privateKey, listed.owner_box), key);
+  assert.equal((await requestCall([id], { user: 'alice', method: 'DELETE' })).status, 200);
+  assert.equal((await requestCall([id])).status, 404);
+});
+
+test('file requests from assistants: hosted and local both make a link sealed to the owner’s own key', async () => {
+  clearRequests();
+  const token = await mcp.createToken(1, env);
+  const out = await rpc(token, 'request_file', { label: 'Tax form W-2', max_files: 1 });
+  assert(!out.isError, JSON.stringify(out));
+  const link = out.structuredContent.url;
+  assert.equal(new URLSearchParams(link.split('#')[1]).get('pk'), keyPairs.alice.publicKey);
+  assert.equal((await sendThroughRequest(link, 'W-2 numbers')).status, 200);
+  const listed = await rpc(token, 'list_inbox');
+  assert(listed.structuredContent.files.some(f => f.via_request === out.structuredContent.id));
+
+  const alice = await localServer(1, 'alice');
+  const local = await alice.tools.call('request_file', { label: 'Signed NDA' });
+  const hash = new URLSearchParams(local.data.url.split('#')[1]);
+  assert.equal(hash.get('pk'), keyPairs.alice.publicKey);
+  const info = await (await requestCall([local.data.id])).json();
+  assert.equal(await sealed.unlockText(sealed.fromB64url(hash.get('r')), info.label, 'request'), 'Signed NDA');
+  assert.equal((await sendThroughRequest(local.data.url, 'NDA text', 'nda.txt')).status, 200);
+  const inbox = await alice.tools.call('list_inbox');
+  assert(inbox.data.files.some(f => f.name === 'nda.txt'));
+});
+
+// ── links that work once ──────────────────────────────────────────────────────
+
+async function uploadOnce(text = 'Read me once', user = 'alice') {
+  freshDay();
+  const form = new FormData(); form.set('file', new File([text], 'once.txt')); form.set('expires_hours', '24'); form.set('burn', '1'); form.set('allow_download', '1');
+  const res = await uploadHandler(context('/api/upload', { user, body: form }));
+  assert.equal(res.status, 200, await res.clone().text());
+  return res.json();
+}
+const view = (id, user = null) => rawHandler(context('/api/raw/' + id, { user, method: 'GET', params: { shortId: id } }));
+const burnedApi = async shares => (await (await (await load('api/burned.js')).onRequestPost(context('/api/burned', { user: null, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares }) }))).json()).burned;
+
+test('works once: the first view erases the file, and later tries reach only its owner', async () => {
+  const share = await uploadOnce();
+  assert.equal(share.burn, true);
+  const info = await (await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }))).json();
+  assert.equal(info.burnAfterReading, true);
+  // looking at the info doesn't use it up, downloads and reshares are refused
+  assert.equal(info.allowDownload, 0);
+  assert.equal((await reshareHandler(context('/api/reshare/' + share.shortId, { user: 'bob', params: { shortId: share.shortId } }))).status, 403);
+
+  const first = await view(share.shortId);
+  assert.equal(first.status, 200);
+  assert.equal(await first.text(), 'Read me once');
+  // the bytes are gone from the database, not just hidden
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE short_id = ?').get(share.shortId).n, 0);
+
+  const second = await view(share.shortId);
+  assert.equal(second.status, 410);
+  const third = await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }));
+  assert.equal(third.status, 410); assert.equal((await third.json()).code, 'burned');
+
+  // only the delete key hears about it, and tries are counted
+  assert.deepEqual(await burnedApi([{ id: share.shortId, delete_token: 'wrong-token-wrong-token!' }]), []);
+  const news = await burnedApi([{ id: share.shortId, delete_token: share.deleteToken }]);
+  assert.equal(news.length, 1); assert.equal(news[0].attempts, 2);
+  // the tombstone holds no name, no bytes and no account
+  const tomb = db.prepare('SELECT * FROM burned_links WHERE short_id = ?').get(share.shortId);
+  assert.deepEqual(Object.keys(tomb).sort(), ['attempts', 'burned_at', 'delete_hash', 'last_attempt', 'short_id']);
+  assert.notEqual(tomb.delete_hash, share.deleteToken);
+});
+
+test('attack: two views at the same moment still give the file out once', async () => {
+  const share = await uploadOnce('Race me');
+  const results = await Promise.all([view(share.shortId), view(share.shortId), view(share.shortId)]);
+  assert.deepEqual(results.map(r => r.status).sort(), [200, 410, 410]);
+});
+
+test('works once, sent to someone: whoever opens it first erases every link to it', async () => {
+  clearRequests();
+  const share = await uploadOnce('For bob only, once');
+  assert.equal((await send(share.shortId, 'bob', share.deleteToken)).status, 200);
+  const copy = db.prepare("SELECT short_id, max_views FROM files WHERE inbox_status = 'pending' ORDER BY rowid DESC LIMIT 1").get();
+  assert.equal(copy.max_views, 1);
+  const accept = await inboxHandler(context('/api/inbox/' + copy.short_id, { user: 'bob', params: { shortId: copy.short_id }, headers: { 'Content-Type': 'application/json' }, body: '{"action":"accept"}' }));
+  assert.equal(accept.status, 200);
+  const opened = await view(copy.short_id, 'bob');
+  assert.equal(await opened.text(), 'For bob only, once');
+  // the original went too, so no copy of the bytes is left
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE short_id IN (?, ?)').get(share.shortId, copy.short_id).n, 0);
+  assert.equal((await view(share.shortId)).status, 410);
+  const news = await burnedApi([{ id: share.shortId, delete_token: share.deleteToken }]);
+  assert.equal(news[0].attempts, 1);
 });

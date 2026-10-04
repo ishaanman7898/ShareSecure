@@ -31,6 +31,8 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **End-to-end encrypted.** On the website, files are locked in your browser before they're uploaded, and the key lives only in the link. ShareSecure can't read them. Add a passcode and the link alone isn't enough.
 - **Private by design.** Your password never leaves your browser, uploads and sends can't be tied to your account, and file sizes are padded. [How.](docs/SECURITY.md)
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
+- **Links that work once.** Turn on *Works once* and the file is erased the moment it's opened. If anyone tries the link after that, you're told: it was probably passed on.
+- **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
 - **View-only by default.** Choose per file whether people can download it or draw on it, and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Files sent to you arrive as requests you accept or decline, and they don't show who sent them. In the desktop app's “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**); sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
@@ -88,7 +90,7 @@ claude mcp add sharesecure-local --env SHARESECURE_TOKEN=ss_your_token -- npx -y
 npx -y sharesecure-mcp link   # once, so it can open files sent to you; asks for your password in the terminal
 ```
 
-Its tools: `share_file` (by path), `share_text`, `send_share` (by id: the key is resealed locally), `list_shares`, `delete_share`, `list_inbox`, `answer_request`, `open_inbox_file` (decrypts and saves a file someone sent you) and `security_code`. `SHARESECURE_LINKS=show` hands links to the assistant instead. See [its README](packages/sharesecure-mcp/README.md).
+Its tools: `share_file` (by path), `share_text`, `send_share` (by id: the key is resealed locally), `list_shares`, `delete_share`, `list_inbox`, `answer_request`, `open_inbox_file` (decrypts and saves a file someone sent you), `request_file` and `security_code`. `SHARESECURE_LINKS=show` hands links to the assistant instead. See [its README](packages/sharesecure-mcp/README.md).
 
 ### Sending to people: assistants ask first
 
@@ -109,6 +111,9 @@ In the desktop app's “this computer” mode and on self-hosted installs, the a
 | `delete_share` | Deletes a share so its link stops working. |
 | `list_inbox` | Lists files people sent you. Private ones show without their name or note, since only your key opens them. |
 | `answer_request` | Accepts or declines a file someone sent you. |
+| `request_file` | Makes a link someone can send you a file through, even without an account. |
+
+The share tools also take `burn_after_reading`, for a link that works once.
 
 Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*. In “this computer” mode, `send_to` and `send_share` need a linked ShareSecure account.
 

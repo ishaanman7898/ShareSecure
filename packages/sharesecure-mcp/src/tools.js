@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  newFileKey, lockFile, unlockFile, lockMeta, unlockMeta, lockText, unlockText, sealKey, openKey, linkWithKey, fingerprint,
+  newFileKey, lockFile, unlockFile, lockMeta, unlockMeta, lockText, unlockText, sealKey, openKey, linkWithKey, fingerprint, toB64url,
 } from '../lib/sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR, TEXT_TYPES, contentMatches } from '../lib/filetypes.js';
 
@@ -97,6 +97,7 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
     form.append('allow_download', args.allow_download ? '1' : '0');
     form.append('allow_annotations', '0');
     form.append('require_account', args.require_account ? '1' : '0');
+    if (args.burn_after_reading) form.append('burn', '1');
     const made = await api.upload(form);
 
     const sent = toRecipients(args.send_to).length ? await sendTo(made.id, key, args.send_to, args.note) : { sent_to: [], waiting_for_approval: [], not_sent: [] };
@@ -215,6 +216,22 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
     return out;
   }
 
+  // A link someone sends the user a file through. The label and its key are
+  // sealed here; the link carries the key and the user's public key.
+  async function requestFile(args) {
+    const label = String(args.label || '').trim().slice(0, 300);
+    if (!label) throw new Error('Say what you’re asking for, e.g. “Your signed lease”.');
+    const who = await me();
+    if (!who.publicKey) throw new Error('This account has no key yet. Sign in on the website once, then try again.');
+    const key = newFileKey();
+    const made = await api.request({
+      label: await lockText(key, label, 'request'),
+      owner_box: await sealKey(who.publicKey, key),
+      hours: args.hours, max_files: args.max_files,
+    });
+    return { id: made.id, expires_at: made.expires_at, url: `${api.base}/q/${made.id}#r=${toB64url(key)}&pk=${who.publicKey}` };
+  }
+
   // ── what the assistant reads ───────────────────────────────────────────────
 
   function shareText_(r) {
@@ -268,6 +285,10 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
         if (r.text !== undefined) lines.push(UNTRUSTED, `--- ${r.name}${r.truncated ? ` (first ${SHOWN_TEXT_MAX} characters)` : ''} ---`, r.text, '--- end ---');
         return { text: lines.join('\n'), data: r };
       }
+      case 'request_file': {
+        const r = await requestFile(args);
+        return { text: `Link: ${r.url}\nTakes files until: ${r.expires_at}\nGive the user the whole link to pass on. Files sent through it arrive in their inbox (list_inbox), encrypted so only they can open them.`, data: r };
+      }
       case 'security_code': {
         const who = await me();
         const them = args.username ? await api.publicKey(String(args.username)) : null;
@@ -292,6 +313,7 @@ const COMMON = {
   name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
   send_to: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'ShareSecure usernames to send it to. Only use it when the user says who it’s for. Someone an assistant hasn’t sent to before waits for the user to approve it on the website.' },
   note: { type: 'string', maxLength: 140, description: 'Short note for the people it’s sent to. Encrypted like the file.' },
+  burn_after_reading: { type: 'boolean', description: 'The link works once: the file is erased as soon as anyone opens it. Default false.' },
 };
 
 const SHARING = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
@@ -361,6 +383,21 @@ export const TOOLS = [
         id: { type: 'string' },
         folder: { type: 'string', description: 'Folder to save it in.' },
         include_text: { type: 'boolean', description: 'Also return the contents of a text file.' },
+      },
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: 'request_file',
+    title: 'Ask someone for a file',
+    description: 'Make a link someone can send the user a file through, even without a ShareSecure account. Their browser encrypts it to the user’s key; it arrives in list_inbox. The link is safe to show.',
+    inputSchema: {
+      type: 'object',
+      required: ['label'],
+      properties: {
+        label: { type: 'string', maxLength: 300, description: 'What the user is asking for, e.g. "Your signed lease".' },
+        hours: { type: 'number', description: 'How long the link takes files, 1 to 720 hours. Default 72.' },
+        max_files: { type: 'integer', minimum: 1, maximum: 20, description: 'How many files it takes. Default 5.' },
       },
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },

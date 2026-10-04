@@ -16,7 +16,7 @@ export async function onRequestGet(context) {
   await ensureFileColumns(db);
   const rows = (await db.execute({
     sql: `SELECT short_id, original_filename, mime_type, size_bytes, expires_at, delete_token,
-                 inbox_status, inbox_note, e2e, inbox_key
+                 inbox_status, inbox_note, e2e, inbox_key, via_request
           FROM files
           WHERE recipient_user_tag = ?
             AND (is_active = 1 OR inbox_status = 'pending')
@@ -40,6 +40,8 @@ export async function onRequestGet(context) {
       note: row.inbox_note ? await open(row.inbox_note, row.short_id) : null,
       e2e: Boolean(row.e2e),
       inbox_key: row.inbox_key || null,
+      // uploaded by someone through one of your file requests
+      via_request: row.via_request || null,
       // a waiting request can't be opened or deleted by link until it's accepted
       delete_token: pending ? null : row.delete_token,
     };

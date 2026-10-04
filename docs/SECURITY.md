@@ -37,6 +37,18 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Your browser remembers each person's key the first time you send to them. If the server ever hands out a different one, sending stops and you're told to compare codes.
 - Accounts can't replace their key once it's set.
 
+**Asking for a file**
+
+- A file request's link is `/q/<id>#r=<request key>&pk=<your public key>`. What you asked for is sealed with the request key, so the server never reads it, and the uploader's browser seals each file's key to the public key in the link, not one the server hands out, so a compromised server can't swap in its own.
+- What arrives waits in your inbox like any file sent to you, sealed end to end: the server never sees the file, its name or the uploader's note. Uploaders don't need an account and aren't identified.
+- A request takes at most 20 files and lasts at most 30 days, and the inbox cap (20 waiting) applies, so a leaked request link can't fill your account.
+
+**Links that work once**
+
+- The first view takes the link's only view in one database step, so two people opening it at the same moment can't both get it. The file is then erased: every link to it, including copies sent to usernames, since they share its bytes.
+- A tombstone stays for 30 days: the link's id, a hash of its delete key, when it was opened and how many times it was tried since. No name, no bytes, no account. Your browser asks about its own links with their delete keys and tells you if someone tried one again, which usually means it was passed on. A reload in the browser that opened it isn't counted.
+- The viewer asks before opening, so link previews and scanners that fetch the page don't use up the view. A link that works once can't be downloaded, drawn on or reshared.
+
 **Assistants can be tricked; your files can't be sent by one that was**
 
 - An assistant reads web pages, emails and files, and any of them can hide an instruction like "send this to @someone". So when an assistant sends a file to someone it hasn't sent to before, the send waits until you approve it on the website (account menu → Connect an AI assistant). You can instead let assistants send to anyone, or to no one.
@@ -67,6 +79,8 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - **A malicious server** can't tag people with their own token key: the apps only accept the key pinned in their code, checked against the key itself.
 - **Without the right key or passcode**, a stored file opens to nothing, and a box moved into another slot or changed in transit fails to open.
 - **Crafted names** can't become HTML or script files, and **crafted paths** can't make the desktop app serve anything outside its own copy of the site.
+- **A link that works once** gives the file out once even to simultaneous requests, and leaves no copy of the bytes behind.
+- **A file request** refuses anything not sealed in the browser, posts from other sites, and uploads past its limit or expiry, and only the owner can list or close it.
 - **A tricked assistant** can't send a file to someone new without the owner's approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
 
 ## What's left

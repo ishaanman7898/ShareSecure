@@ -123,14 +123,14 @@ export async function onRequestPost(context) {
             (short_id, original_filename, mime_type, size_bytes, file_data, data_ref, expires_at,
              delete_token, integrity_hash, cluster_id, parent_key, uploaded_at,
              compressed, allow_annotations, allow_download, require_account, recipient_user_tag,
-             is_active, inbox_status, inbox_note, sender_tag, e2e, inbox_key)
-          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, 1, ?, 0, 'pending', ?, ?, ?, ?)`,
+             is_active, inbox_status, inbox_note, sender_tag, e2e, inbox_key, max_views)
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, 1, ?, 0, 'pending', ?, ?, ?, ?, ?)`,
     args: [
       newId, await copy('original_filename'), await copy('mime_type'), file.size_bytes, branch.data_ref,
       file.expires_at, randomId(24), newId, branch.parent_key, now,
       file.allow_annotations ?? 1, file.allow_download ?? 0, recipientTag,
       !note ? null : isSealed(note) ? note : await encryptStr(note, null, env, newId),
-      senderTag, file.e2e ? 1 : 0, file.e2e ? sealedKey : null,
+      senderTag, file.e2e ? 1 : 0, file.e2e ? sealedKey : null, file.max_views ?? null,
     ]
   });
 

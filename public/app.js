@@ -1,5 +1,5 @@
 import {
-  newFileKey, lockFile, lockMeta, unlockText, linkWithKey, keyFromLink, sealKey, toB64url, fromB64url,
+  newFileKey, lockFile, lockMeta, lockText, unlockText, linkWithKey, keyFromLink, sealKey, openKey, toB64url, fromB64url,
   newPasscodeSalt, passcodeKey
 } from './sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
@@ -491,6 +491,7 @@ async function buildUploadForm() {
   form.append('allow_annotations', document.getElementById('allow-annotations')?.checked ? '1' : '0');
   form.append('allow_download', document.getElementById('allow-download').checked ? '1' : '0');
   form.append('require_account', document.getElementById('require-account').checked ? '1' : '0');
+  if (!selfHostMode && document.getElementById('burn-toggle')?.checked) form.append('burn', '1');
   const displayName = document.getElementById('display-name-input')?.value.trim() || '';
 
   if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
@@ -654,6 +655,7 @@ function showResult(data, file, delivery, built = {}) {
   };
   saveUploadToHistory(record);
   vaultChanged();
+  if (data.burn) watchBurn({ id: data.shortId, delete_token: data.deleteToken, name: usedName });
 
   // a new link opens in a new tab; one sent to people doesn't need to
   if (!delivery) window.open(data.shortUrl, '_blank', 'noopener,noreferrer');
@@ -1065,6 +1067,108 @@ document.getElementById('mcp-allowed').addEventListener('click', e => {
   saveAgentRules({ allowed: agentRules.allowed.filter(n => n !== btn.dataset.remove) });
 });
 
+// ── file requests: a link people send you files through ──────────────────────
+// The link is /q/<id>#r=<request key>&pk=<your public key>. What you ask for is
+// sealed with the request key, and each file that arrives is sealed to your
+// key in the sender's browser. Your browser keeps the request key sealed to
+// you on the server, so the link can be shown again later.
+const askModal = document.getElementById('ask-modal');
+const fileRequestLabels = new Map();
+
+const requestLinkFor = (id, key, publicKey) => `${location.origin}/q/${id}#r=${toB64url(key)}&pk=${publicKey}`;
+
+document.getElementById('ask-file-btn').addEventListener('click', async () => {
+  if (!(await myKeys())?.publicKey) { showToast('Sign out and in again to set up your key first.', 'warn'); return; }
+  document.getElementById('ask-form').classList.remove('hidden');
+  document.getElementById('ask-done').classList.add('hidden');
+  document.getElementById('ask-error').textContent = '';
+  document.getElementById('ask-label').value = '';
+  openModal(askModal);
+  document.getElementById('ask-label').focus();
+});
+
+document.getElementById('ask-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const error = document.getElementById('ask-error');
+  const label = document.getElementById('ask-label').value.trim();
+  if (!label) { error.textContent = 'Say what you need, so they know what to send.'; return; }
+  const submit = document.getElementById('ask-submit');
+  submit.disabled = true;
+  try {
+    const me = await myKeys();
+    const key = newFileKey();
+    const res = await fetch('/api/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({
+        label: await lockText(key, label, 'request'),
+        owner_box: await sealKey(me.publicKey, key),
+        hours: Number(document.getElementById('ask-hours').value),
+        max_files: Number(document.getElementById('ask-max').value),
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Couldn’t make the link. Try again.');
+    document.getElementById('ask-link').textContent = requestLinkFor(data.id, key, me.publicKey);
+    document.getElementById('ask-form').classList.add('hidden');
+    document.getElementById('ask-done').classList.remove('hidden');
+    updateFileRequests();
+  } catch (err) {
+    error.textContent = err.message;
+  }
+  submit.disabled = false;
+});
+
+// Your open requests, opened with your key. Also fills the labels the inbox shows.
+async function updateFileRequests() {
+  if (!userToken || selfHostMode) return;
+  const box = document.getElementById('file-requests');
+  try {
+    const res = await fetch('/api/requests', { headers: authHeaders() });
+    if (!res.ok) return;
+    const { requests = [] } = await res.json();
+    const me = await myKeys();
+    const opened = [];
+    for (const r of requests) {
+      try {
+        const key = await openKey(me.privateKey, r.owner_box);
+        const label = await unlockText(key, r.label, 'request');
+        fileRequestLabels.set(r.id, label);
+        opened.push({ ...r, label, link: requestLinkFor(r.id, key, me.publicKey) });
+      } catch {}
+    }
+    box.classList.toggle('hidden', !opened.length);
+    document.getElementById('file-requests-list').innerHTML = opened.map(r => `
+      <div class="file-item" data-request="${escapeHtml(r.id)}">
+        <div class="file-item-info">
+          <span class="file-item-name">${escapeHtml(r.label)}</span>
+          <span class="file-item-meta">${r.received} of ${r.max_files} received, closes in ${formatCountdown(new Date(r.expires_at) - Date.now())}</span>
+        </div>
+        <div class="file-item-actions">
+          <button class="btn btn-ghost btn-small" data-copy-link="${escapeHtml(r.link)}">Copy link</button>
+          <button class="btn btn-ghost btn-small" data-close-request="${escapeHtml(r.id)}">Close</button>
+        </div>
+      </div>`).join('');
+  } catch {}
+}
+
+document.getElementById('file-requests-list').addEventListener('click', async e => {
+  const copy = e.target.closest('[data-copy-link]');
+  if (copy) {
+    navigator.clipboard.writeText(copy.dataset.copyLink)
+      .then(() => showToast('Link copied.', 'success', 2000))
+      .catch(() => showToast('Couldn’t copy the link.', 'error'));
+    return;
+  }
+  const close = e.target.closest('[data-close-request]');
+  if (!close) return;
+  close.disabled = true;
+  const res = await fetch(`/api/requests/${encodeURIComponent(close.dataset.closeRequest)}`, { method: 'DELETE', headers: authHeaders() }).catch(() => null);
+  if (res?.ok) showToast('Closed. Files already sent stay in your inbox.', 'success', 3000);
+  else showToast('Couldn’t close it. Try again.', 'error');
+  updateFileRequests();
+});
+
 // a share's name, from Your shares (the server can't read private ones)
 function ownShareName(shortId) {
   return loadUploadHistory().find(f => f.short_id === shortId)?.original_filename || 'One of your private shares';
@@ -1183,14 +1287,71 @@ function updateAdvancedState() {
   const parts = [];
   if (!selfHostMode) parts.push(checked('e2e-toggle') ? 'End-to-end encrypted' : 'Encrypted on the server');
   if (!selfHostMode && checked('e2e-toggle') && document.getElementById('passcode-input')?.value) parts.push('passcode');
-  parts.push(checked('allow-download') ? 'downloads on' : 'view only');
-  if (checked('allow-annotations')) parts.push('annotations on');
+  const once = !selfHostMode && checked('burn-toggle');
+  if (once) parts.push('works once');
+  else {
+    parts.push(checked('allow-download') ? 'downloads on' : 'view only');
+    if (checked('allow-annotations')) parts.push('annotations on');
+  }
   if (!selfHostMode && checked('require-account')) parts.push('signed-in only');
   const state = document.getElementById('advanced-state');
   if (state) state.textContent = parts.join(' · ');
 }
 for (const id of ['allow-download', 'allow-annotations', 'require-account']) {
   document.getElementById(id)?.addEventListener('change', updateAdvancedState);
+}
+// a link that works once can't be downloaded or drawn on: either is a second look
+document.getElementById('burn-toggle')?.addEventListener('change', e => {
+  for (const id of ['allow-download', 'allow-annotations']) {
+    const box = document.getElementById(id);
+    if (!box) continue;
+    if (e.target.checked) box.checked = false;
+    box.disabled = e.target.checked;
+  }
+  updateAdvancedState();
+});
+
+// ── links that work once: hear when they're opened, and if anyone tries again ─
+// Each one's id and delete key stay in this browser for 30 days. The server
+// keeps a tombstone for a burned link, and answers only to its delete key.
+const BURN_KEEP_MS = 30 * 24 * 60 * 60 * 1000;
+const burnKey = () => historyKey() + ':once';
+function loadBurnWatch() {
+  try { return JSON.parse(localStorage.getItem(burnKey()) || '[]').filter(w => Date.now() - w.at < BURN_KEEP_MS); } catch { return []; }
+}
+function saveBurnWatch(list) {
+  try { localStorage.setItem(burnKey(), JSON.stringify(list.slice(0, 50))); } catch {}
+}
+function watchBurn({ id, delete_token, name }) {
+  if (!id || !delete_token) return;
+  saveBurnWatch([{ id, delete_token, name, at: Date.now(), opened: false, tries: 0 }, ...loadBurnWatch()]);
+}
+
+async function checkBurned() {
+  const watch = loadBurnWatch();
+  if (!watch.length) return;
+  try {
+    const res = await fetch('/api/burned', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shares: watch.map(w => ({ id: w.id, delete_token: w.delete_token })) }),
+    });
+    if (!res.ok) return;
+    const { burned = [] } = await res.json();
+    for (const b of burned) {
+      const w = watch.find(x => x.id === b.id);
+      if (!w) continue;
+      if (!w.opened) {
+        w.opened = true;
+        showToast(`“${w.name}” was opened, and it’s been erased.`, 'info', 6000);
+      }
+      if (b.attempts > w.tries) {
+        w.tries = b.attempts;
+        showToast(`Someone tried to open “${w.name}” again after it was opened${b.attempts > 1 ? ` (${b.attempts} times)` : ''}. The link may have been passed on.`, 'warn', 12000);
+      }
+    }
+    saveBurnWatch(watch);
+  } catch {}
 }
 document.getElementById('passcode-input')?.addEventListener('input', updateAdvancedState);
 
@@ -1278,6 +1439,7 @@ function initAuth() {
     // a self-hosted install has one account, so this only makes sense on the website
     document.getElementById('require-account-wrap')?.classList.remove('hidden');
     document.getElementById('e2e-wrap')?.classList.remove('hidden');
+    document.getElementById('burn-wrap')?.classList.remove('hidden');
     document.getElementById('menu-code')?.classList.remove('hidden');
     syncPasscodeField();
     // tokens are picked up a little after the page opens, not when they're used
@@ -1300,6 +1462,8 @@ function initAuth() {
 // ── self-hosted: the owner signs in; nobody else can upload ──────────────────
 function initSelfHost() {
   selfHostMode = true;
+  // file requests live on the website, where people can reach them
+  document.getElementById('ask-file-btn').classList.add('hidden');
   const username = userToken && tokenUsername();
   if (!username) { location.replace('/signin'); return; }
   updateAdvancedState();
@@ -1522,6 +1686,8 @@ async function updateInbox() {
     rememberSeen(seen);
 
     setPendingBadge(pending.length);
+    await updateFileRequests();
+    checkBurned();
     renderRequests(pending);
     renderInbox(files.filter(f => f.status !== 'pending'));
   } catch {}
@@ -1564,6 +1730,7 @@ function renderRequests(pending) {
           <span class="file-item-meta">${formatSize(f.size_bytes || 0)}, expires in ${formatCountdown(new Date(f.expires_at) - Date.now())}</span>
         </div>
       </div>
+      ${f.via_request ? `<p class="request-via">Sent through your file request${fileRequestLabels.get(f.via_request) ? ` “${escapeHtml(fileRequestLabels.get(f.via_request))}”` : ''}</p>` : ''}
       ${f.note ? `<p class="request-note">“${escapeHtml(f.note)}”</p>` : ''}
       <div class="request-actions">
         <button class="btn btn-ghost" data-action="decline">Decline</button>

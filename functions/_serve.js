@@ -1,6 +1,7 @@
 // Sends a link's file. Used by /api/raw (shown in the viewer) and
 // /api/download (saved as a file).
 import { getDb, purgeExpired, decryptStr, ensureFileColumns, loadFileBytes, signInRequired, findLiveFile } from './_turso.js';
+import { takeView, burn, noteTry } from './_burn.js';
 
 // RFC 6266: a plain ASCII name, plus the real one for browsers that read it
 function contentDisposition(type, filename) {
@@ -28,13 +29,22 @@ export async function serveFile(context, { disposition }) {
   purgeExpired(env, context);
 
   const file = await findLiveFile(db, params.shortId);
-  if (!file) return new Response('Not found', { status: 404 });
+  if (!file) {
+    // a link that worked once and was opened: count the try, so its owner hears of it
+    if (await noteTry(db, params.shortId)) return new Response('This link worked once, and it has already been opened', { status: 410 });
+    return new Response('Not found', { status: 404 });
+  }
   if (file.expired) return new Response('Expired', { status: 410 });
 
   const denied = await signInRequired(file, request, env);
   if (denied) return denied;
-  if (disposition === 'attachment' && !file.allow_download) {
+  if (disposition === 'attachment' && (!file.allow_download || file.max_views)) {
     return new Response('Downloads are turned off for this file', { status: 403 });
+  }
+  // a link that works once: take its view before reading the file
+  if (file.max_views && !(await takeView(db, params.shortId))) {
+    await noteTry(db, params.shortId);
+    return new Response('This link worked once, and it has already been opened', { status: 410 });
   }
 
   let loaded;
@@ -43,8 +53,11 @@ export async function serveFile(context, { disposition }) {
   }
   if (!loaded) return new Response('File data missing', { status: 404 });
 
-  // count views, not downloads
-  if (disposition === 'inline') {
+  // that was its last view: erase it now, keeping only a tombstone
+  if (file.max_views && Number(file.download_count) + 1 >= Number(file.max_views)) {
+    await burn(db, file, env);
+  } else if (disposition === 'inline') {
+    // count views, not downloads
     context.waitUntil(db.execute({
       sql: 'UPDATE files SET download_count = download_count + 1 WHERE short_id = ?', args: [params.shortId]
     }).catch(() => {}));

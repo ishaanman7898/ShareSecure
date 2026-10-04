@@ -16,6 +16,7 @@ function bundledFile(publicDir, pathname) {
   if (pathname === '/') return 'index.html';
   if (/^\/r\/[A-Za-z0-9]+$/.test(pathname)) return 'viewer.html';
   if (/^\/drop\/[A-Za-z0-9]+$/.test(pathname)) return 'drop.html';
+  if (/^\/q\/[A-Za-z0-9]+$/.test(pathname)) return 'request.html';
   let rel;
   try { rel = decodeURIComponent(pathname).replace(/^\/+/, ''); } catch { return null; }
   // no climbing out, no Windows paths, no drive letters, no hidden files

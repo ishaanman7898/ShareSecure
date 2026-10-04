@@ -442,6 +442,42 @@ function fileGone() {
   location.replace('/expired.html');
 }
 
+// ── links that work once ──────────────────────────────────────────────────────
+// This browser remembers the ones it opened, so reloading the page isn't
+// counted as someone else trying the link again.
+let openedOnce = false;
+const openedKey = () => 'opened_' + rawShortId;
+const openedHere = () => { try { return localStorage.getItem(openedKey()) === '1'; } catch { return false; } };
+
+function linkBurned() {
+  forgetFile();
+  document.body.innerHTML = '';
+  location.replace('/burned.html');
+}
+
+// Asks before opening, because opening is what erases it.
+function askOpenOnce() {
+  hide('loader');
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'delete-modal-backdrop';
+    backdrop.innerHTML = `
+      <div class="delete-modal-card">
+        <p class="delete-modal-title">This file can be opened once</p>
+        <p class="delete-modal-sub">As soon as it opens, it’s erased and this link stops working, for you and anyone else. You can read it until you close this page.</p>
+        <div class="delete-modal-actions">
+          <button class="delete-modal-confirm is-primary" id="open-once">Open it now</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.querySelector('#open-once').addEventListener('click', () => {
+      backdrop.remove();
+      show('loader');
+      resolve();
+    });
+  });
+}
+
 // ── countdown ─────────────────────────────────────────────────────────────────
 function startCountdown(expiresAt) {
   if (!expiresAt) return;
@@ -474,6 +510,7 @@ let fileInfo = null;
 async function loadMeta() {
   const res = await apiFetch(`/api/info/${myShortId}`);
   if (res.status === 401) { showSignInNeeded(); return null; }
+  if (res.status === 410 && (await res.clone().json().catch(() => ({}))).code === 'burned') { linkBurned(); return null; }
   if (!res.ok) { $('doc-title').textContent = 'File not found'; hide('loader'); return null; }
   return res.json();
 }
@@ -481,6 +518,8 @@ async function loadMeta() {
 // ── status polling ─────────────────────────────────────────────────────────────
 function startStatusPolling() {
   setInterval(async () => {
+    // a link that works once is gone the moment it's opened; the page keeps showing it
+    if (openedOnce) return;
     try {
       const res = await apiFetch(`/api/info/${myShortId}`);
       if (res.status === 404 || res.status === 410) fileGone();
@@ -1237,6 +1276,9 @@ function askPasscode(info) {
     }
   }
 
+  // this browser already opened this once-only link: say so, without counting a try
+  if (openedHere()) { linkBurned(); return; }
+
   if (!isOwner) {
     await assignFreshId();
   }
@@ -1269,7 +1311,9 @@ function askPasscode(info) {
   }
 
   const { filename, size, mimeType, expiresAt, allowDownload, allowAnnotations } = fileInfo;
-  if (fileInfo.recipientOnly) hide('share-btn');
+  if (fileInfo.recipientOnly || fileInfo.burnAfterReading) hide('share-btn');
+  // opening a link that works once erases it, so there's nothing left to delete
+  if (fileInfo.burnAfterReading) hide('delete-file-btn');
   document.title = filename + ' — ShareSecure';
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
@@ -1354,6 +1398,12 @@ function askPasscode(info) {
   });
 
   const rawUrl = `/api/raw/${myShortId}`;
+
+  if (fileInfo.burnAfterReading) {
+    await askOpenOnce();
+    openedOnce = true;
+    try { localStorage.setItem(openedKey(), '1'); } catch {}
+  }
 
   if (baseMime === 'application/pdf') {
     await loadPDF(rawUrl);

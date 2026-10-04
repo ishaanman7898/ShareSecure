@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Send a file — ShareSecure</title>
+  <link rel="icon" type="image/png" href="/app-icon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+  </header>
+
+  <main class="auth-main">
+    <section class="auth-panel drop-panel" aria-labelledby="req-title">
+      <div class="auth-head">
+        <h1 id="req-title">Send a file</h1>
+        <p class="auth-sub" id="req-sub">Loading…</p>
+      </div>
+
+      <form class="auth-form hidden" id="req-form" novalidate>
+        <p class="req-label hidden" id="req-label"></p>
+        <div class="drop-zone" id="req-zone" role="button" tabindex="0" aria-label="Choose a file to send">
+          <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
+          <p class="drop-label" id="req-file-label">Choose a file</p>
+          <p class="drop-limit">PDF, DOCX, PNG, JPG or text (.txt, .md, .csv), up to 10 MB</p>
+          <input type="file" id="req-input" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv" hidden />
+        </div>
+        <div class="field">
+          <label for="req-note">Note <span class="label-optional">optional</span></label>
+          <input type="text" id="req-note" class="text-input" maxlength="140" autocomplete="off" placeholder="Who it’s from, or anything they should know" />
+        </div>
+        <p class="auth-error" id="req-error" role="alert"></p>
+        <button type="submit" class="btn btn-primary btn-full btn-lg" id="req-submit" disabled>Send it</button>
+        <p class="auth-note">The file, its name and your note are encrypted in this browser, so only <span id="req-who">they</span> can open them. ShareSecure can’t. You don’t need an account.</p>
+        <details class="req-code">
+          <summary>Check their security code</summary>
+          <p class="field-hint">If you know them, ask them to read you the security code from their ShareSecure account menu. It should match:</p>
+          <p class="req-code-digits" id="req-code"></p>
+        </details>
+      </form>
+
+      <div class="drop-done hidden" id="req-done">
+        <p class="drop-done-title">Sent</p>
+        <p class="auth-note" id="req-done-note">It’s waiting in their inbox. Only they can open it.</p>
+        <button class="btn btn-ghost" id="req-another">Send another file</button>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/request.js"></script>
+</body>
+</html>

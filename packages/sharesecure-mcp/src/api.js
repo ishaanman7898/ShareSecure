@@ -31,6 +31,7 @@ export function makeApi({ url, token, fetchImpl = globalThis.fetch }) {
     inbox: async () => (await call('GET', '/api/agent/inbox')).files || [],
     answer: (id, action) => call('POST', `/api/agent/inbox/${id}`, { json: { action } }),
     file: id => call('GET', `/api/agent/file/${id}`, { raw: true }),
+    request: body => call('POST', '/api/agent/requests', { json: body }),
 
     // someone's public key → string, null (no key yet) or undefined (no such user)
     async publicKey(username) {

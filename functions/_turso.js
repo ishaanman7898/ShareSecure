@@ -93,6 +93,8 @@ const FILE_COLUMNS = [
   'ALTER TABLE files ADD COLUMN owner_key TEXT',             // file key sealed to the owner
   'ALTER TABLE files ADD COLUMN inbox_key TEXT',             // file key sealed to the recipient
   'ALTER TABLE files ADD COLUMN passcode_salt TEXT',         // set when the link also needs a passcode
+  'ALTER TABLE files ADD COLUMN via_request TEXT',           // the file request it was uploaded to
+  'ALTER TABLE files ADD COLUMN max_views INTEGER',          // 1 = erased once it's opened (see _burn.js)
   'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent_key ON files(parent_key)',
   'CREATE INDEX IF NOT EXISTS idx_files_cluster ON files(cluster_id)',
@@ -360,7 +362,7 @@ function parentKey(env, shortId) {
 }
 
 // Which row holds this link's bytes (older links store the id in plain).
-async function dataIdOf(file, env) {
+export async function dataIdOf(file, env) {
   if (file.file_data) return file.short_id;
   if (file.data_ref) return decryptStr(file.data_ref, null, env, file.short_id);
   return file.data_short_id || file.short_id;

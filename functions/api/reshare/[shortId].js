@@ -17,6 +17,9 @@ export async function onRequestPost(context) {
   if (file.recipient_user_tag) {
     return Response.json({ error: 'This file was sent privately. Ask the sender for a shareable link.', code: 'recipient_only' }, { status: 403 });
   }
+  if (file.max_views) {
+    return Response.json({ error: 'This link works once, so it can’t be shared on.', code: 'once' }, { status: 403 });
+  }
 
   const newId = randomId(8);
   const deleteToken = randomId(24);

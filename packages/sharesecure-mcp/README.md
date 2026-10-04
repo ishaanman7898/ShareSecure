@@ -44,7 +44,10 @@ It asks for your username and password, signs in without sending the password (O
 | `list_inbox` | Files people sent you, decrypted here. |
 | `answer_request` | Accept or decline one. |
 | `open_inbox_file` | Decrypt an accepted file and save it (to `Downloads/ShareSecure` by default); `include_text` returns a text file's contents too. |
+| `request_file` | A link someone can send you a file through, even without an account. The label and its key are sealed here. |
 | `security_code` | Your security code, and someone else's. |
+
+`share_file` and `share_text` also take `burn_after_reading`, for a link that works once.
 
 Everything that came from someone else is labelled as information, not instructions.
 

@@ -14,6 +14,7 @@
 //   GET    inbox              files sent to the account, still sealed
 //   POST   inbox/:id          { action: 'accept' | 'decline' }
 //   GET    file/:id           the sealed bytes of an own share or accepted file
+//   POST   requests           open a file request; label and key sealed here
 //
 // Sends follow the account's rules for assistants (see _agent.js).
 import { getDb, ensureUserColumns } from '../../_turso.js';
@@ -22,6 +23,7 @@ import { onRequestPost as uploadHandler } from '../upload.js';
 import { onRequestGet as sharesHandler } from '../auth/user/files.js';
 import { serveFile } from '../../_serve.js';
 import { isSealed } from '../../../public/sealed.js';
+import { openRequest } from '../../_requests.js';
 
 const fail = (error, status) => Response.json({ error }, { status });
 const ID = /^[A-Za-z0-9]{4,32}$/;
@@ -103,6 +105,13 @@ export async function onRequest(context) {
       const { action } = await request.json().catch(() => ({}));
       const out = await answerRequest(user, id, action, context);
       return out.error ? fail(out.error, 400) : Response.json({ done: true, message: out.text });
+    }
+
+    if (route === 'requests' && method === 'POST' && !id) {
+      const body = await request.json().catch(() => null);
+      if (!body) return fail('Send JSON.', 400);
+      const out = await openRequest(user.userId, body, env);
+      return out.error ? fail(out.error, out.status) : Response.json(out);
     }
 
     if (route === 'file' && method === 'GET' && id) {
