@@ -1,6 +1,6 @@
 {
   "name": "sharesecure",
-  "version": "1.11.1",
+  "version": "1.12.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "desktop/main.js",
   "type": "commonjs",

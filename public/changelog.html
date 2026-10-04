@@ -39,12 +39,48 @@
 
     <div class="timeline">
 
-      <!-- v1.11.1 -->
+      <!-- v1.12.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.12.0</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>New</h3>
+          <ul class="change-list">
+            <li><strong>Ask for a file</strong> — Make a link anyone can send you a file through, even without an account (Sent to you → Ask for a file). Their browser encrypts it to your key, so only you can open it, and ShareSecure never sees what you asked for.</li>
+            <li><strong>Links that work once</strong> — Turn on Works once and the file is erased the moment it’s opened. If anyone tries the link after that, you’re told: it was probably passed on.</li>
+            <li><strong>Assistants on your own computer</strong> — <code>npx sharesecure-mcp</code> lets Claude Code, Codex and other assistants share, send and receive files with everything encrypted on your computer. Links go to your clipboard instead of the chat, so the assistant never sees a key.</li>
+            <li><strong>Assistants ask before sending</strong> — When an assistant sends a file to someone not on your list, it waits in Waiting for your OK until you approve it, so one tricked by a web page or email can’t send your files to a stranger.</li>
+            <li><strong>Assistant inbox</strong> — Assistants can list, accept and (on your computer) open files people send you, and make file request links.</li>
+            <li><strong>Clearer forms</strong> — Fields you have to fill in have a red star.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Privacy</h3>
+          <ul class="change-list">
+            <li><strong>Assistant shares can’t be tied to you</strong> — The assistant on your computer, and the desktop app’s assistant, upload and send with anonymous tokens, like the website does.</li>
+            <li><strong>Your rules stay yours</strong> — Who your assistants may send to, and the sends waiting for your OK, are locked to your own key. Approved sends go out from your browser anonymously, so ShareSecure can’t see who you send to.</li>
+            <li><strong>Check the site yourself</strong> — <code>npm run verify-site</code> compares every file the website runs with this release’s code, and a public check runs it after every deploy and every day.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>Sends that fail say why</strong> — A send that hits a passing server error is retried once, and one that keeps failing gives the reason instead of “Couldn’t send it”.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.11.1 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.11.1</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
