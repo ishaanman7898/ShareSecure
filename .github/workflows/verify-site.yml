@@ -1,0 +1,29 @@
+# Checks, in public, that the live website serves exactly the code in this
+# repository: after every push to main (once the deploy has rolled out), every
+# day, and on demand. Each run's log lists the SHA-256 of every file the
+# browser runs, so anyone can compare it with their own checkout.
+name: Verify the live site
+
+on:
+  push:
+    branches: [main]
+    paths: ['public/**']
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # a push waits up to 15 minutes for the new deploy; the daily check doesn't wait
+      - run: node scripts/verify-site.mjs --wait ${{ github.event_name == 'push' && '900' || '0' }}

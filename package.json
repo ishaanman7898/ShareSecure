@@ -8,6 +8,7 @@
     "start": "node server/launcher.js",
     "dev": "nodemon server/index.js",
     "test": "node --test tests/*.test.cjs",
+    "verify-site": "node scripts/verify-site.mjs",
     "desktop": "electron-builder install-app-deps && electron .",
     "postdesktop": "npm rebuild better-sqlite3",
     "dist": "electron-builder --publish never",

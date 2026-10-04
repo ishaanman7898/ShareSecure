@@ -60,6 +60,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 - Every script, pdf.js and mammoth included, is served from this site, and the Content-Security-Policy allows no others. mammoth is also pinned with an integrity hash.
 - The desktop app, signed in to an account, runs the website's code from its own copy instead of downloading it, so a compromised server can't change the code that encrypts your files.
+- **Anyone can check the website serves exactly this repository's code.** `npm run verify-site` fetches every file the browser runs from the live site and compares it byte for byte with your checkout, printing each file's SHA-256. A public [GitHub Action](../.github/workflows/verify-site.yml) runs the same check after every deploy and every day, so a changed page would show up there.
 
 **Everything else**
 
@@ -88,6 +89,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 - **Anyone with the whole link** (and the passcode, if there is one) can open the file until it expires. For anything that matters, add a passcode, send it to a username, or turn on "Only people signed in".
 - **The local MCP server keeps your private key on disk** once you run `link` (in `~/.sharesecure`, readable by you only on macOS and Linux; on Windows it relies on your user folder's permissions). Run `npx sharesecure-mcp unlink` to remove it.
+- **The site check proves what the server sends to whoever checks**, not that it sends everyone the same page: a server targeting one person could still give them different code. The desktop app avoids that (it runs its own copy), and a browser-side check (like WEBCAT) is the next step.
 - **The website itself is still served by the server.** In a browser, you trust the page you load. The desktop app doesn't have this problem.
 - **The server knows who a file was sent to, and when.** It doesn't know who sent it.
 - **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
