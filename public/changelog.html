@@ -18,7 +18,7 @@
 
   <header class="topbar">
     <a class="topbar-brand" href="/">
-      <img src="/rosette.svg" alt="" width="26" height="26" />
+      <img src="/app-icon.png" alt="" width="26" height="26" />
       ShareSecure
     </a>
     <a class="topbar-back" href="/">
@@ -34,7 +34,7 @@
 
     <header>
       <h1 class="page-title">Changelog</h1>
-      <p class="page-subtitle">Every release, every change — documented publicly.</p>
+      <p class="page-subtitle">What changed in each release of the website, desktop app and self-hosted server.</p>
     </header>
 
     <div class="timeline">
@@ -44,32 +44,34 @@
         <div class="release-header">
           <span class="release-version">v1.13.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge badge-done">Latest</span>
+          <span class="status-badge">Latest</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Security</h3>
-          <ul class="change-list">
-            <li><strong>Public key log</strong> — Every account’s key is recorded in an append-only log anyone can audit. Every key you’re given comes with proof it’s in the log, and your browser checks the log shows your own key, so ShareSecure can’t quietly hand someone a key of its own for you. A public check keeps a daily record of the log.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>Public key log</strong> Every account’s key is recorded in an append-only log anyone can audit. Every key you’re given comes with proof it’s in the log, and your browser checks the log shows your own key, so ShareSecure can’t quietly hand someone a key of its own for you. A public check keeps a daily record of the log.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>No more double shares from assistants</strong> — If sending a share to people failed after the file was uploaded, the assistant was told the whole thing failed and shared it again. Now it gets the link, is told who it didn’t reach, and resends instead of making another copy.</li>
-            <li><strong>Deleted shares stay gone</strong> — Shares you’d just deleted could flash back for a moment when you came back to the tab.</li>
-            <li><strong>ShareSecure’s icon in apps</strong> — Apps like Claude showed another icon next to the ShareSecure connector. They now show ShareSecure’s.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>No more double shares from assistants</strong> If sending a share to people failed after the file was uploaded, the assistant was told the whole thing failed and shared it again. Now it gets the link, is told who it didn’t reach, and resends instead of making another copy.</li>
+              <li><strong>Deleted shares stay gone</strong> Shares you’d just deleted could flash back for a moment when you came back to the tab.</li>
+              <li><strong>ShareSecure’s icon in apps</strong> Apps like Claude showed another icon next to the ShareSecure connector. They now show ShareSecure’s.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Changes</h3>
-          <ul class="change-list">
-            <li><strong>Simpler forms</strong> — Sign-in no longer shows a big logo, the share form drops two long hints, and Privacy and Terms moved out of the account menu (they’re in the footer, and the desktop app’s tray menu).</li>
-            <li><strong>Same file checks everywhere</strong> — The desktop app and self-hosted installs check uploads with exactly the website’s code.</li>
-            <li><strong>Old ChatGPT actions removed</strong> — The custom-GPT actions (<code>/openapi.json</code>) are gone. ChatGPT connects as a plugin instead: account menu → Connect an AI assistant.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Changes</h3>
+            <ul class="change-list">
+              <li><strong>Simpler forms</strong> Sign-in no longer shows a big logo, the share form drops two long hints, and Privacy and Terms moved out of the account menu (they’re in the footer, and the desktop app’s tray menu).</li>
+              <li><strong>Same file checks everywhere</strong> The desktop app and self-hosted installs check uploads with exactly the website’s code.</li>
+              <li><strong>Old ChatGPT actions removed</strong> The custom-GPT actions (<code>/openapi.json</code>) are gone. ChatGPT connects as a plugin instead: account menu → Connect an AI assistant.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -79,33 +81,35 @@
           <span class="release-version">v1.12.0</span>
           <span class="release-date">October 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>New</h3>
-          <ul class="change-list">
-            <li><strong>Ask for a file</strong> — Make a link anyone can send you a file through, even without an account (Sent to you → Ask for a file). Their browser encrypts it to your key, so only you can open it, and ShareSecure never sees what you asked for.</li>
-            <li><strong>Links that work once</strong> — Turn on Works once and the file is erased the moment it’s opened. If anyone tries the link after that, you’re told: it was probably passed on.</li>
-            <li><strong>Assistants on your own computer</strong> — <code>npx sharesecure-mcp</code> lets Claude Code, Codex and other assistants share, send and receive files with everything encrypted on your computer. Links go to your clipboard instead of the chat, so the assistant never sees a key.</li>
-            <li><strong>Assistants ask before sending</strong> — When an assistant sends a file to someone not on your list, it waits in Waiting for your OK until you approve it, so one tricked by a web page or email can’t send your files to a stranger.</li>
-            <li><strong>Assistant inbox</strong> — Assistants can list, accept and (on your computer) open files people send you, and make file request links.</li>
-            <li><strong>Clearer forms</strong> — Fields you have to fill in have a red star.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>Ask for a file</strong> Make a link anyone can send you a file through, even without an account (Sent to you → Ask for a file). Their browser encrypts it to your key, so only you can open it, and ShareSecure never sees what you asked for.</li>
+              <li><strong>Links that work once</strong> Turn on Works once and the file is erased the moment it’s opened. If anyone tries the link after that, you’re told: it was probably passed on.</li>
+              <li><strong>Assistants on your own computer</strong> <code>npx sharesecure-mcp</code> lets Claude Code, Codex and other assistants share, send and receive files with everything encrypted on your computer. Links go to your clipboard instead of the chat, so the assistant never sees a key.</li>
+              <li><strong>Assistants ask before sending</strong> When an assistant sends a file to someone not on your list, it waits in Waiting for your OK until you approve it, so one tricked by a web page or email can’t send your files to a stranger.</li>
+              <li><strong>Assistant inbox</strong> Assistants can list, accept and (on your computer) open files people send you, and make file request links.</li>
+              <li><strong>Clearer forms</strong> Fields you have to fill in have a red star.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Privacy</h3>
-          <ul class="change-list">
-            <li><strong>Assistant shares can’t be tied to you</strong> — The assistant on your computer, and the desktop app’s assistant, upload and send with anonymous tokens, like the website does.</li>
-            <li><strong>Your rules stay yours</strong> — Who your assistants may send to, and the sends waiting for your OK, are locked to your own key. Approved sends go out from your browser anonymously, so ShareSecure can’t see who you send to.</li>
-            <li><strong>Check the site yourself</strong> — <code>npm run verify-site</code> compares every file the website runs with this release’s code, and a public check runs it after every deploy and every day.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Privacy</h3>
+            <ul class="change-list">
+              <li><strong>Assistant shares can’t be tied to you</strong> The assistant on your computer, and the desktop app’s assistant, upload and send with anonymous tokens, like the website does.</li>
+              <li><strong>Your rules stay yours</strong> Who your assistants may send to, and the sends waiting for your OK, are locked to your own key. Approved sends go out from your browser anonymously, so ShareSecure can’t see who you send to.</li>
+              <li><strong>Check the site yourself</strong> <code>npm run verify-site</code> compares every file the website runs with this release’s code, and a public check runs it after every deploy and every day.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Sends that fail say why</strong> — A send that hits a passing server error is retried once, and one that keeps failing gives the reason instead of “Couldn’t send it”.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Sends that fail say why</strong> A send that hits a passing server error is retried once, and one that keeps failing gives the reason instead of “Couldn’t send it”.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -115,23 +119,25 @@
           <span class="release-version">v1.11.1</span>
           <span class="release-date">October 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Changes</h3>
-          <ul class="change-list">
-            <li><strong>Advanced options</strong> — Sharing shows just the name, who it’s for and when it expires. Encryption, the passcode, downloads and the rest are under Advanced, which says what they’re set to without opening it. End-to-end encryption stays on by default.</li>
-            <li><strong>Quieter loading</strong> — The loading screens are just the turning rosette.</li>
-            <li><strong>Security codes</strong> read as two even rows.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Changes</h3>
+            <ul class="change-list">
+              <li><strong>Advanced options</strong> Sharing shows just the name, who it’s for and when it expires. Encryption, the passcode, downloads and the rest are under Advanced, which says what they’re set to without opening it. End-to-end encryption stays on by default.</li>
+              <li><strong>Quieter loading</strong> The loading screens are just the turning rosette.</li>
+              <li><strong>Security codes</strong> They read as two even rows.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Security</h3>
-          <ul class="change-list">
-            <li><strong>Stolen sessions can do less</strong> — Moving an older account to the new sign-in needs its password, and setting up an account’s encryption keys needs a recent sign-in, so a stolen session can’t take over an account or receive its files.</li>
-            <li><strong>Pinned token key</strong> — The website and the desktop app only accept ShareSecure’s one published key for anonymous tokens, so the server can’t give anyone a key of their own to recognise them by.</li>
-            <li><strong>Attack tests</strong> — Each of these, and other ways of trying to break in, now runs as a test with every change.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>Stolen sessions can do less</strong> Moving an older account to the new sign-in needs its password, and setting up an account’s encryption keys needs a recent sign-in, so a stolen session can’t take over an account or receive its files.</li>
+              <li><strong>Pinned token key</strong> The website and the desktop app only accept ShareSecure’s one published key for anonymous tokens, so the server can’t give anyone a key of their own to recognise them by.</li>
+              <li><strong>Attack tests</strong> Each of these, and other ways of trying to break in, now runs as a test with every change.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -141,35 +147,37 @@
           <span class="release-version">v1.11.0</span>
           <span class="release-date">October 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>New</h3>
-          <ul class="change-list">
-            <li><strong>End-to-end encryption</strong> — On by default. Your browser locks the file, its name, notes and drawings before uploading, and the key lives only in the link. ShareSecure can’t read what you share.</li>
-            <li><strong>Passcodes</strong> — Add one and the link alone isn’t enough to open the file. Tell people the passcode separately.</li>
-            <li><strong>Security codes</strong> — Every account has one (account menu → Security code). Compare codes with the people you send to, and you’re warned if someone’s key ever changes.</li>
-            <li><strong>New logo</strong> — The rosette from the home page, now in the header, the loading screen and the app.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>End-to-end encryption</strong> On by default. Your browser locks the file, its name, notes and drawings before uploading, and the key lives only in the link. ShareSecure can’t read what you share.</li>
+              <li><strong>Passcodes</strong> Add one and the link alone isn’t enough to open the file. Tell people the passcode separately.</li>
+              <li><strong>Security codes</strong> Every account has one (account menu → Security code). Compare codes with the people you send to, and you’re warned if someone’s key ever changes.</li>
+              <li><strong>New logo</strong> The rosette from the home page, now in the header, the loading screen and the app.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Privacy</h3>
-          <ul class="change-list">
-            <li><strong>Your password never leaves your device</strong> — Signing in proves you know it without sending it. Existing accounts switch over the next time they sign in.</li>
-            <li><strong>Shares can’t be tied to you</strong> — End-to-end uploads and sends use anonymous tokens instead of your sign-in, so ShareSecure can keep daily limits without knowing who shared what.</li>
-            <li><strong>Sizes are hidden</strong> — Files are padded to standard sizes.</li>
-            <li><strong>Sending from the desktop app</strong> — Files the app sends to usernames are encrypted on your computer and sent anonymously too.</li>
-            <li><strong>AI assistants</strong> — Their shares are end-to-end encrypted by default and come back as structured data.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Privacy</h3>
+            <ul class="change-list">
+              <li><strong>Your password never leaves your device</strong> Signing in proves you know it without sending it. Existing accounts switch over the next time they sign in.</li>
+              <li><strong>Shares can’t be tied to you</strong> End-to-end uploads and sends use anonymous tokens instead of your sign-in, so ShareSecure can keep daily limits without knowing who shared what.</li>
+              <li><strong>Sizes are hidden</strong> Files are padded to standard sizes.</li>
+              <li><strong>Sending from the desktop app</strong> Files the app sends to usernames are encrypted on your computer and sent anonymously too.</li>
+              <li><strong>AI assistants</strong> Their shares are end-to-end encrypted by default and come back as structured data.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Security</h3>
-          <ul class="change-list">
-            <li><strong>No outside code</strong> — The PDF and Word viewers are served from ShareSecure itself, and the desktop app runs the website’s code from its own copy, so a compromised server can’t change it.</li>
-            <li><strong>Stronger passwords</strong> — New passwords need at least 10 characters and can’t be one of the most common ones.</li>
-            <li><strong>Zero-knowledge uploads removed</strong> — The old experimental proof code is gone; anonymous tokens do its job properly.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>No outside code</strong> The PDF and Word viewers are served from ShareSecure itself, and the desktop app runs the website’s code from its own copy, so a compromised server can’t change it.</li>
+              <li><strong>Stronger passwords</strong> New passwords need at least 10 characters and can’t be one of the most common ones.</li>
+              <li><strong>Zero-knowledge uploads removed</strong> The old experimental proof code is gone; anonymous tokens do its job properly.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -179,35 +187,37 @@
           <span class="release-version">v1.10.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>New</h3>
-          <ul class="change-list">
-            <li><strong>Send to usernames everywhere</strong> — Type <em>@username</em> in Send to and the button becomes Send. Afterwards you see who got it and who didn’t. Every share can also be sent later: use Send in Your shares, or Send to someone else in the share’s window, next to the link and QR code.</li>
-            <li><strong>Sending from the desktop app</strong> — When ShareSecure runs on your computer, link your ShareSecure account (account menu → ShareSecure account) to send to usernames. An encrypted copy goes to ShareSecure’s servers so people can get it while your computer is off.</li>
-            <li><strong>AI assistants do the whole job</strong> — Assistants can share text they wrote, files they pass in the call, and files from a link, and deliver them to usernames, without asking you to upload anything.</li>
-            <li><strong>Text files</strong> — Share .txt, Markdown and CSV files, as well as PDF, DOCX and images.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>Send to usernames everywhere</strong> Type <em>@username</em> in Send to and the button becomes Send. Afterwards you see who got it and who didn’t. Every share can also be sent later: use Send in Your shares, or Send to someone else in the share’s window, next to the link and QR code.</li>
+              <li><strong>Sending from the desktop app</strong> When ShareSecure runs on your computer, link your ShareSecure account (account menu → ShareSecure account) to send to usernames. An encrypted copy goes to ShareSecure’s servers so people can get it while your computer is off.</li>
+              <li><strong>AI assistants do the whole job</strong> Assistants can share text they wrote, files they pass in the call, and files from a link, and deliver them to usernames, without asking you to upload anything.</li>
+              <li><strong>Text files</strong> Share .txt, Markdown and CSV files, as well as PDF, DOCX and images.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Changes</h3>
-          <ul class="change-list">
-            <li><strong>Receiving page removed</strong> — The desktop app’s Receiving files page, where people typed your username to send you a file, is gone. People send to your username instead. Requests already waiting can still be accepted or declined.</li>
-            <li><strong>No footer in the desktop app</strong> — Privacy and Terms are in the account menu and the tray menu. The website keeps its footer, which now shows the version.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Changes</h3>
+            <ul class="change-list">
+              <li><strong>Receiving page removed</strong> The desktop app’s Receiving files page, where people typed your username to send you a file, is gone. People send to your username instead. Requests already waiting can still be accepted or declined.</li>
+              <li><strong>No footer in the desktop app</strong> Privacy and Terms are in the account menu and the tray menu. The website keeps its footer, which now shows the version.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Security</h3>
-          <ul class="change-list">
-            <li><strong>Sign-ins expire</strong> after 30 days.</li>
-            <li><strong>Passwords</strong> are stored salted, and repeated wrong passwords are slowed down.</li>
-            <li><strong>Tighter rules</strong> — A stricter content policy for pages, only a file’s owner can turn on annotations, and uploads without an account are closed off.</li>
-            <li><strong>Sending limits</strong> — You can only send files you shared, one person can have at most 5 of your files waiting, and each account can send up to 60 a day.</li>
-            <li><strong>Private uploads turned off</strong> — The experimental zero-knowledge uploads are off, because their checker could be fooled with a forged proof. Uploads now always use your normal sign-in.</li>
-            <li><strong>Files sent to you stay private</strong> — A file someone sends to your username can’t be turned into a public link.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>Sign-ins expire</strong> After 30 days.</li>
+              <li><strong>Salted passwords</strong> Passwords are stored salted, and repeated wrong passwords are slowed down.</li>
+              <li><strong>Tighter rules</strong> A stricter content policy for pages, only a file’s owner can turn on annotations, and uploads without an account are closed off.</li>
+              <li><strong>Sending limits</strong> You can only send files you shared, one person can have at most 5 of your files waiting, and each account can send up to 60 a day.</li>
+              <li><strong>Private uploads turned off</strong> The experimental zero-knowledge uploads are off, because their checker could be fooled with a forged proof. Uploads now always use your normal sign-in.</li>
+              <li><strong>Files sent to you stay private</strong> A file someone sends to your username can’t be turned into a public link.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -217,23 +227,25 @@
           <span class="release-version">v1.9.2</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Bigger files</strong> — Uploads over about half a megabyte could fail on the website, and opening a link sometimes said the file couldn’t be displayed until you reloaded. Uploading, opening and resharing now do far less work, and the viewer retries once if something goes wrong.</li>
-            <li><strong>Deleting a reshared link</strong> — Deleting a link someone reshared used to be able to delete the original too. Now deleting a link removes it and the links shared onward from it, and nothing else. Deleting the original still removes every link.</li>
-            <li><strong>Downloads</strong> — Files set to view-only can no longer be downloaded directly.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Bigger files</strong> Uploads over about half a megabyte could fail on the website, and opening a link sometimes said the file couldn’t be displayed until you reloaded. Uploading, opening and resharing now do far less work, and the viewer retries once if something goes wrong.</li>
+              <li><strong>Deleting a reshared link</strong> Deleting a link someone reshared used to be able to delete the original too. Now deleting a link removes it and the links shared onward from it, and nothing else. Deleting the original still removes every link.</li>
+              <li><strong>Downloads</strong> Files set to view-only can no longer be downloaded directly.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>New</h3>
-          <ul class="change-list">
-            <li><strong>Claude and ChatGPT apps</strong> — Add ShareSecure to Claude as a custom connector, or make a ShareSecure GPT in ChatGPT that shares files you attach. Connect an AI assistant in the account menu has the steps. Assistants that can’t reach your files give you a one-time page to pick the file.</li>
-            <li><strong>Desktop sign-up</strong> — The desktop app’s welcome screen now has Sign in and Create an account, and it no longer shows links to download or host ShareSecure.</li>
-            <li><strong>Choose who can open a link</strong> — Anyone with the link, as before, or only people signed in to ShareSecure. Someone who isn’t signed in is asked to sign in, then taken straight back to the file.</li>
-          </ul>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>Claude and ChatGPT apps</strong> Add ShareSecure to Claude as a custom connector, or make a ShareSecure GPT in ChatGPT that shares files you attach. Connect an AI assistant in the account menu has the steps. Assistants that can’t reach your files give you a one-time page to pick the file.</li>
+              <li><strong>Desktop sign-up</strong> The desktop app’s welcome screen now has Sign in and Create an account, and it no longer shows links to download or host ShareSecure.</li>
+              <li><strong>Choose who can open a link</strong> Anyone with the link, as before, or only people signed in to ShareSecure. Someone who isn’t signed in is asked to sign in, then taken straight back to the file.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -243,23 +255,25 @@
           <span class="release-version">v1.9.1</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Mac app “is damaged”</strong> — The Mac app is now signed, so it opens instead of being reported as damaged. The first time, open it, then choose Open Anyway in System Settings → Privacy &amp; Security.</li>
-            <li><strong>Link created</strong> — The link gets its own full-width line instead of being squeezed next to the Copy button, with Copy link and Open underneath. The upload form resets for your next file.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Mac app “is damaged”</strong> The Mac app is now signed, so it opens instead of being reported as damaged. The first time, open it, then choose Open Anyway in System Settings → Privacy &amp; Security.</li>
+              <li><strong>Link created</strong> The link gets its own full-width line instead of being squeezed next to the Copy button, with Copy link and Open underneath. The upload form resets for your next file.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Changes</h3>
-          <ul class="change-list">
-            <li><strong>Send to several people</strong> — Enter usernames separated by commas, or ask your AI assistant to share with a list of people. Each gets their own copy to accept.</li>
-            <li><strong>Tidier desktop app</strong> — Receiving files and Updates moved into the account menu.</li>
-            <li><strong>No upload counter</strong> — The daily counter next to Your shares is gone. The limit still applies and you’ll be told if you reach it.</li>
-            <li><strong>Faster</strong> — Fonts load from ShareSecure itself instead of Google, the browser keeps the site’s code and fonts between visits, the encryption tools load only when you upload, and uploads make fewer database round trips.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Changes</h3>
+            <ul class="change-list">
+              <li><strong>Send to several people</strong> Enter usernames separated by commas, or ask your AI assistant to share with a list of people. Each gets their own copy to accept.</li>
+              <li><strong>Tidier desktop app</strong> Receiving files and Updates moved into the account menu.</li>
+              <li><strong>No upload counter</strong> The daily counter next to Your shares is gone. The limit still applies and you’ll be told if you reach it.</li>
+              <li><strong>Faster</strong> Fonts load from ShareSecure itself instead of Google, the browser keeps the site’s code and fonts between visits, the encryption tools load only when you upload, and uploads make fewer database round trips.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -269,29 +283,31 @@
           <span class="release-version">v1.9.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>AI assistants</h3>
-          <ul class="change-list">
-            <li><strong>Share files from Claude Code, Codex and other MCP clients</strong> — Choose Connect an AI assistant in the account menu to get a token and the setup command. Then ask your assistant to share a file and it gives you the link.</li>
-            <li><strong>Desktop</strong> — The desktop app runs its own MCP server on this computer, so assistants can share files straight from their path.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>AI assistants</h3>
+            <ul class="change-list">
+              <li><strong>Share files from Claude Code, Codex and other MCP clients</strong> Choose Connect an AI assistant in the account menu to get a token and the setup command. Then ask your assistant to share a file and it gives you the link.</li>
+              <li><strong>Desktop</strong> The desktop app runs its own MCP server on this computer, so assistants can share files straight from their path.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Accounts</h3>
-          <ul class="change-list">
-            <li><strong>Delete your account</strong> — From the account menu on the website, on your phone and in the desktop app. It erases the account and every file shared from it right away.</li>
-            <li><strong>Sign in from the desktop app</strong> — On first launch, choose to sign in to your ShareSecure account or run ShareSecure privately on your computer. You can switch later from the tray icon.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Accounts</h3>
+            <ul class="change-list">
+              <li><strong>Delete your account</strong> From the account menu on the website, on your phone and in the desktop app. It erases the account and every file shared from it right away.</li>
+              <li><strong>Sign in from the desktop app</strong> On first launch, choose to sign in to your ShareSecure account or run ShareSecure privately on your computer. You can switch later from the tray icon.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Signed out when creating a link</strong> — Accounts created recently were signed out the moment they uploaded, because their private sign-in key was never saved. That's fixed, and affected accounts repair themselves the next time you sign in.</li>
-            <li><strong>File types</strong> — The website now checks that uploads really are PDF, Word, PNG or JPG files.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Signed out when creating a link</strong> Accounts created recently were signed out the moment they uploaded, because their private sign-in key was never saved. That's fixed, and affected accounts repair themselves the next time you sign in.</li>
+              <li><strong>File types</strong> The website now checks that uploads really are PDF, Word, PNG or JPG files.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -301,33 +317,35 @@
           <span class="release-version">v1.8.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Desktop app</h3>
-          <ul class="change-list">
-            <li><strong>A real app</strong> — Download ShareSecure for Windows, Mac or Linux from the Host it yourself page. It opens in its own window instead of your browser.</li>
-            <li><strong>Runs in the tray</strong> — Closing the window keeps it running, so your links keep working. Quit from the tray icon.</li>
-            <li><strong>Updates itself</strong> — New versions download in the background and install the next time you quit.</li>
-            <li><strong>New icon</strong> — A vault dial with a timer ring, so you can find it in Start and Spotlight.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Desktop app</h3>
+            <ul class="change-list">
+              <li><strong>A real app</strong> Download ShareSecure for Windows, Mac or Linux from the Host it yourself page. It opens in its own window instead of your browser.</li>
+              <li><strong>Runs in the tray</strong> Closing the window keeps it running, so your links keep working. Quit from the tray icon.</li>
+              <li><strong>Updates itself</strong> New versions download in the background and install the next time you quit.</li>
+              <li><strong>New icon</strong> A vault dial with a timer ring, so you can find it in Start and Spotlight.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Look and feel</h3>
-          <ul class="change-list">
-            <li><strong>Moving rosette</strong> — On the home page, circle your cursor around the rosette and its rings turn with you.</li>
-            <li><strong>Account menu</strong> — Your name, files sent to you, notifications and sign out now live in one menu at the top right.</li>
-            <li><strong>Time left at a glance</strong> — Each share shows a bar for how much of its life is left, and it turns red near the end.</li>
-            <li><strong>Phones</strong> — Bigger tap targets, no zooming when you type, and “Tap to choose a file” on touch screens.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Look and feel</h3>
+            <ul class="change-list">
+              <li><strong>Moving rosette</strong> On the home page, circle your cursor around the rosette and its rings turn with you.</li>
+              <li><strong>Account menu</strong> Your name, files sent to you, notifications and sign out now live in one menu at the top right.</li>
+              <li><strong>Time left at a glance</strong> Each share shows a bar for how much of its life is left, and it turns red near the end.</li>
+              <li><strong>Phones</strong> Bigger tap targets, no zooming when you type, and “Tap to choose a file” on touch screens.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Upload counter</strong> — “Your shares” now counts every upload today. It used to stay at 0.</li>
-            <li><strong>Daily limit</strong> — The 5-a-day limit now covers both ways of uploading, so it can’t be doubled.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Upload counter</strong> “Your shares” now counts every upload today. It used to stay at 0.</li>
+              <li><strong>Daily limit</strong> The 5-a-day limit now covers both ways of uploading, so it can’t be doubled.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -337,16 +355,18 @@
           <span class="release-version">v1.7.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>File requests</h3>
-          <ul class="change-list">
-            <li><strong>Accept or decline</strong> — Files sent to your username arrive as requests. You see the name, type, size and an optional note, and nothing can be opened until you accept it. Declining erases the file.</li>
-            <li><strong>Notifications</strong> — A bell with a count, a toast when a request arrives, the count in the tab title, and optional system notifications that don’t show file names.</li>
-            <li><strong>Send while uploading</strong> — The web version’s upload form has an optional “Send to a user” field.</li>
-            <li><strong>Receiving on the desktop version</strong> — Turn on “Let people send me files” to share a /send page where people enter your username to send you a file. It’s off until you turn it on, and at most 20 requests can wait at once.</li>
-            <li><strong>Honest file names</strong> — A file’s shown name always ends in its real type, so a PDF can’t arrive looking like an .exe.</li>
-          </ul>
+          <div class="change-group">
+            <h3>File requests</h3>
+            <ul class="change-list">
+              <li><strong>Accept or decline</strong> Files sent to your username arrive as requests. You see the name, type, size and an optional note, and nothing can be opened until you accept it. Declining erases the file.</li>
+              <li><strong>Notifications</strong> A bell with a count, a toast when a request arrives, the count in the tab title, and optional system notifications that don’t show file names.</li>
+              <li><strong>Send while uploading</strong> The web version’s upload form has an optional “Send to a user” field.</li>
+              <li><strong>Receiving on the desktop version</strong> Turn on “Let people send me files” to share a /send page where people enter your username to send you a file. It’s off until you turn it on, and at most 20 requests can wait at once.</li>
+              <li><strong>Honest file names</strong> A file’s shown name always ends in its real type, so a PDF can’t arrive looking like an .exe.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -356,12 +376,14 @@
           <span class="release-version">v1.6.1</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>In-app updates on Windows</strong> — Updates no longer fail when Git for Windows’ <code>tar</code> comes first on the PATH.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>In-app updates on Windows</strong> Updates no longer fail when Git for Windows’ <code>tar</code> comes first on the PATH.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -371,38 +393,40 @@
           <span class="release-version">v1.6.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Sign in</h3>
-          <ul class="change-list">
-            <li><strong>Sign-in page</strong> — A proper page for signing in and creating an account replaces the pop-up.</li>
-            <li><strong>Self-hosted owner account</strong> — The desktop version asks you to create an owner account on first run. Only the owner can upload and manage files. Passwords use salted scrypt, sessions are signed and expire, and repeated wrong passwords lock sign-in.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Sign in</h3>
+            <ul class="change-list">
+              <li><strong>Sign-in page</strong> A proper page for signing in and creating an account replaces the pop-up.</li>
+              <li><strong>Self-hosted owner account</strong> The desktop version asks you to create an owner account on first run. Only the owner can upload and manage files. Passwords use salted scrypt, sessions are signed and expire, and repeated wrong passwords lock sign-in.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Nothing left behind</h3>
-          <ul class="change-list">
-            <li><strong>Erased on expiry</strong> — Self-hosted files are erased within 30 seconds of expiring, or immediately when someone opens the dead link. The database uses <code>secure_delete</code>, which destroys each file’s own key, and the stored file is overwritten before it’s removed.</li>
-            <li><strong>Expiry fix</strong> — Links that expired earlier the same day were sometimes kept until the next day. Fixed on both versions.</li>
-            <li><strong>Browser cleanup</strong> — Expired shares disappear from your list and your browser’s storage on their own.</li>
-            <li><strong>Your data folder</strong> — Self-hosted data now lives in your user app-data folder, apart from the program and out of OneDrive.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Nothing left behind</h3>
+            <ul class="change-list">
+              <li><strong>Erased on expiry</strong> Self-hosted files are erased within 30 seconds of expiring, or immediately when someone opens the dead link. The database uses <code>secure_delete</code>, which destroys each file’s own key, and the stored file is overwritten before it’s removed.</li>
+              <li><strong>Expiry fix</strong> Links that expired earlier the same day were sometimes kept until the next day. Fixed on both versions.</li>
+              <li><strong>Browser cleanup</strong> Expired shares disappear from your list and your browser’s storage on their own.</li>
+              <li><strong>Your data folder</strong> Self-hosted data now lives in your user app-data folder, apart from the program and out of OneDrive.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Updates</h3>
-          <ul class="change-list">
-            <li><strong>In-app updates</strong> — The desktop version shows when a new release is out. Install it with one click, or turn on automatic updates. ShareSecure restarts itself on the new version.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Updates</h3>
+            <ul class="change-list">
+              <li><strong>In-app updates</strong> The desktop version shows when a new release is out. Install it with one click, or turn on automatic updates. ShareSecure restarts itself on the new version.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Viewer and security</h3>
-          <ul class="change-list">
-            <li><strong>Simpler viewer</strong> — Removed rotate, theme, fullscreen, the badge and the footer. Five pen colours instead of ten; sending to a user moved into the share panel.</li>
-            <li><strong>ZK proof checks</strong> — The UniGroth verifier now recomputes its checks itself and binds every opened value to its position and the public inputs.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Viewer and security</h3>
+            <ul class="change-list">
+              <li><strong>Simpler viewer</strong> Removed rotate, theme, fullscreen, the badge and the footer. Five pen colours instead of ten; sending to a user moved into the share panel.</li>
+              <li><strong>ZK proof checks</strong> The UniGroth verifier now recomputes its checks itself and binds every opened value to its position and the public inputs.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -412,23 +436,25 @@
           <span class="release-version">v1.5.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Self-hosting</h3>
-          <ul class="change-list">
-            <li><strong>New self-host page</strong> — One-command install for macOS, Linux, Windows and Docker, with the right command picked for your system. Linked from the home page.</li>
-            <li><strong>Docker support</strong> — Added a Dockerfile and compose file. The image builds straight from GitHub, and the encryption key lives in the data volume so it survives updates.</li>
-            <li><strong>Installer fixes</strong> — Re-running the Windows installer without Git no longer deletes your files, errors no longer close the PowerShell window, and the “start now?” prompt works under <code>curl | bash</code>.</li>
-            <li><strong>Correct share links</strong> — Links follow your <code>PORT</code> setting instead of always pointing at port 3000.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Self-hosting</h3>
+            <ul class="change-list">
+              <li><strong>New self-host page</strong> One-command install for macOS, Linux, Windows and Docker, with the right command picked for your system. Linked from the home page.</li>
+              <li><strong>Docker support</strong> Added a Dockerfile and compose file. The image builds straight from GitHub, and the encryption key lives in the data volume so it survives updates.</li>
+              <li><strong>Installer fixes</strong> Re-running the Windows installer without Git no longer deletes your files, errors no longer close the PowerShell window, and the “start now?” prompt works under <code>curl | bash</code>.</li>
+              <li><strong>Correct share links</strong> Links follow your <code>PORT</code> setting instead of always pointing at port 3000.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Design</h3>
-          <ul class="change-list">
-            <li><strong>Black and white</strong> — The app, docs and viewer are now pure monochrome.</li>
-            <li><strong>One-screen home page</strong> — The landing page fits the window without scrolling on desktop and phones.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Design</h3>
+            <ul class="change-list">
+              <li><strong>Black and white</strong> The app, docs and viewer are now pure monochrome.</li>
+              <li><strong>One-screen home page</strong> The landing page fits the window without scrolling on desktop and phones.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -438,23 +464,25 @@
           <span class="release-version">v1.4.0</span>
           <span class="release-date">September 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Redesign</h3>
-          <ul class="change-list">
-            <li><strong>New look</strong> — Rebuilt interface with a new rosette mark and a single typeface across the app, docs and viewer.</li>
-            <li><strong>Light and dark mode</strong> — The app and docs pages follow your system setting.</li>
-            <li><strong>Cleaner upload flow</strong> — Simpler form with switches for annotations and downloads, a calmer file list and a redesigned link modal.</li>
-            <li><strong>Accessibility</strong> — Keyboard-operable drop zone, Escape closes dialogs, visible focus rings and labelled controls.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Redesign</h3>
+            <ul class="change-list">
+              <li><strong>New look</strong> Rebuilt interface with a new rosette mark and a single typeface across the app, docs and viewer.</li>
+              <li><strong>Light and dark mode</strong> The app and docs pages follow your system setting.</li>
+              <li><strong>Cleaner upload flow</strong> Simpler form with switches for annotations and downloads, a calmer file list and a redesigned link modal.</li>
+              <li><strong>Accessibility</strong> Keyboard-operable drop zone, Escape closes dialogs, visible focus rings and labelled controls.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Filename escaping</strong> — File and user names are now HTML-escaped in the dashboard and inbox.</li>
-            <li><strong>Custom expiry message</strong> — The warning now states the correct 10-day limit.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Filename escaping</strong> File and user names are now HTML-escaped in the dashboard and inbox.</li>
+              <li><strong>Custom expiry message</strong> The warning now states the correct 10-day limit.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -464,37 +492,39 @@
           <span class="release-version">v1.2.0</span>
           <span class="release-date">May 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>New Features</h3>
-          <ul class="change-list">
-            <li><strong>Image uploads</strong> — PNG and JPEG files now accepted alongside PDF and DOCX. Magic byte validation ensures content integrity.</li>
-            <li><strong>Annotation system restored</strong> — Per-document drawing toolbar with pen, highlighter, eraser, cursor and 10 colours. Annotations saved server-side, per-link isolated.</li>
-            <li><strong>Annotation keyboard shortcuts</strong> — C=cursor, P=pen, H=highlight, E=eraser, Z=undo, X=clear page, 1–0 cycle colours.</li>
-            <li><strong>Two-column dashboard layout</strong> — Upload form and file dashboard shown side-by-side after login on desktop.</li>
-            <li><strong>Upload result modal</strong> — Success state shown as a popup overlay with link, QR code and actions. Upload form stays accessible behind it.</li>
-            <li><strong>Anonymous file inbox</strong> — Send files to registered users without revealing your identity.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>Image uploads</strong> PNG and JPEG files now accepted alongside PDF and DOCX. Magic byte validation ensures content integrity.</li>
+              <li><strong>Annotation system restored</strong> Per-document drawing toolbar with pen, highlighter, eraser, cursor and 10 colours. Annotations saved server-side, per-link isolated.</li>
+              <li><strong>Annotation keyboard shortcuts</strong> C=cursor, P=pen, H=highlight, E=eraser, Z=undo, X=clear page, 1–0 cycle colours.</li>
+              <li><strong>Two-column dashboard layout</strong> Upload form and file dashboard shown side-by-side after login on desktop.</li>
+              <li><strong>Upload result modal</strong> Success state shown as a popup overlay with link, QR code and actions. Upload form stays accessible behind it.</li>
+              <li><strong>Anonymous file inbox</strong> Send files to registered users without revealing your identity.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Privacy &amp; Security</h3>
-          <ul class="change-list">
-            <li><strong>Session-only auth</strong> — Auth token moved to <code>sessionStorage</code>. Sessions no longer persist across browser restarts.</li>
-            <li><strong>10-day expiry cap</strong> — Maximum link lifetime reduced to 10 days. Expiry options cleaned up (removed 1 min, 5 min, 14-day, 30-day).</li>
-            <li><strong>No user-file association</strong> — Server never stores a user ID next to a file. Dashboard data lives in <code>localStorage</code> only.</li>
-            <li><strong>ZK anonymous uploads</strong> — Groth16 zero-knowledge proofs used for rate-limit enforcement without revealing identity.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Security and privacy</h3>
+            <ul class="change-list">
+              <li><strong>Session-only auth</strong> Auth token moved to <code>sessionStorage</code>. Sessions no longer persist across browser restarts.</li>
+              <li><strong>10-day expiry cap</strong> Maximum link lifetime reduced to 10 days. Expiry options cleaned up (removed 1 min, 5 min, 14-day, 30-day).</li>
+              <li><strong>No user-file association</strong> Server never stores a user ID next to a file. Dashboard data lives in <code>localStorage</code> only.</li>
+              <li><strong>ZK anonymous uploads</strong> Groth16 zero-knowledge proofs used for rate-limit enforcement without revealing identity.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Viewer Polish</h3>
-          <ul class="change-list">
-            <li><strong>Search removed</strong> — PDF text search removed to prevent content extraction via search queries.</li>
-            <li><strong>Compact countdown</strong> — Timer now shows "4d 2h" / "3h 45m" / "12m 30s" instead of verbose "70h 23m 14s".</li>
-            <li><strong>Fit-to-width icon</strong> — Fixed duplicate fullscreen/fit icon. Fit button now uses a distinct expand-diagonal icon.</li>
-            <li><strong>Title truncation</strong> — Document title truncated more aggressively to prevent overlap with the countdown timer.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Viewer</h3>
+            <ul class="change-list">
+              <li><strong>Search removed</strong> PDF text search removed to prevent content extraction via search queries.</li>
+              <li><strong>Compact countdown</strong> Timer now shows "4d 2h" / "3h 45m" / "12m 30s" instead of verbose "70h 23m 14s".</li>
+              <li><strong>Fit-to-width icon</strong> Fixed duplicate fullscreen/fit icon. Fit button now uses a distinct expand-diagonal icon.</li>
+              <li><strong>Title truncation</strong> Document title truncated more aggressively to prevent overlap with the countdown timer.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -504,24 +534,26 @@
           <span class="release-version">v1.1.0</span>
           <span class="release-date">March 2026</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Security &amp; Privacy</h3>
-          <ul class="change-list">
-            <li><strong>In-file metadata stripping</strong> — Automatic scrubbing of PDF and DOCX metadata (Author, computer, revision info).</li>
-            <li><strong>HMAC integrity hashes</strong> — HMAC-SHA256 keyed with a secret salt prevents correlation with public file databases.</li>
-            <li><strong>Security headers</strong> — Full suite of Referrer-Policy, nosniff, Frame-Options, and Permissions-Policy.</li>
-            <li><strong>Reduced database footprint</strong> — Removed <code>short_id</code> from upload logs to break user→file association.</li>
-          </ul>
-        </div>
+          <div class="change-group">
+            <h3>Security and privacy</h3>
+            <ul class="change-list">
+              <li><strong>In-file metadata stripping</strong> Automatic scrubbing of PDF and DOCX metadata (Author, computer, revision info).</li>
+              <li><strong>HMAC integrity hashes</strong> HMAC-SHA256 keyed with a secret salt prevents correlation with public file databases.</li>
+              <li><strong>Security headers</strong> Full suite of Referrer-Policy, nosniff, Frame-Options, and Permissions-Policy.</li>
+              <li><strong>Reduced database footprint</strong> Removed <code>short_id</code> from upload logs to break user→file association.</li>
+            </ul>
+          </div>
 
-        <div class="change-group">
-          <h3>Bug Fixes</h3>
-          <ul class="change-list">
-            <li><strong>Upload quota bypass closed</strong> — Quotas now persist even if a file is immediately deleted.</li>
-            <li><strong>DOCX Viewer</strong> — Fixed rendering of Word documents using Mammoth.js for client-side HTML conversion.</li>
-            <li><strong>Memory leaks</strong> — Resolved various <code>TypeError</code> crashes related to DOM replacement.</li>
-          </ul>
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Upload quota bypass closed</strong> Quotas now persist even if a file is immediately deleted.</li>
+              <li><strong>DOCX Viewer</strong> Fixed rendering of Word documents using Mammoth.js for client-side HTML conversion.</li>
+              <li><strong>Memory leaks</strong> Resolved various <code>TypeError</code> crashes related to DOM replacement.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -530,17 +562,18 @@
         <div class="release-header">
           <span class="release-version">v1.0.x</span>
           <span class="release-date">March 2026</span>
-          <span class="status-badge badge-plan">Patches</span>
         </div>
+        <div class="release-body">
 
-        <div class="change-group">
-          <h3>Features</h3>
-          <ul class="change-list">
-            <li><strong>Self-host Admin Mode</strong> — Automatic detection and exposure of admin UI for local deployments.</li>
-            <li><strong>Document Rename</strong> — Uploaders can set custom display names for their files.</li>
-            <li><strong>Forward Secrecy</strong> — Per-file key wrapping for stored content.</li>
-            <li><strong>Screenshot Protection</strong> — Blackout behaviors on tab blur or visibility change.</li>
-          </ul>
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>Self-host Admin Mode</strong> Automatic detection and exposure of admin UI for local deployments.</li>
+              <li><strong>Document Rename</strong> Uploaders can set custom display names for their files.</li>
+              <li><strong>Forward Secrecy</strong> Per-file key wrapping for stored content.</li>
+              <li><strong>Screenshot Protection</strong> Blackout behaviors on tab blur or visibility change.</li>
+            </ul>
+          </div>
         </div>
       </section>
 
@@ -548,18 +581,12 @@
 
     <footer class="footer">
       <div class="footer-nav">
-        <a href="/">App Home</a>
+        <a href="/">ShareSecure</a>
         <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
         <a href="/security">Security</a>
-        <a href="/terms">Terms & Conditions</a>
-        <a href="https://github.com/ishaanman7898/ShareSecure/issues">Report Issue</a>
+        <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
       </div>
-      <p class="footer-legal">
-        ShareSecure is an open-source project. Every change is documented here for maximum transparency.
-      </p>
-      <p class="footer-copyright">
-        &copy; 2026 <strong>ShareSecure</strong>. Privacy by Design. MIT Licensed.
-      </p>
       <p class="footer-version"><span data-version="ShareSecure " hidden></span></p>
     </footer>
 

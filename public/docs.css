@@ -328,89 +328,85 @@ h2 .section-num {
   height: 100%;
 }
 
-.status-badge {
-  display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 99px;
-  margin-bottom: 12px;
-}
-
-.badge-done { background: var(--accent-soft); color: var(--success); }
-.badge-plan { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
-
-/* Timeline (Changelog) */
-.timeline {
-  position: relative;
-  padding-left: 32px;
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  left: 7px;
-  top: 8px;
-  bottom: 0;
-  width: 2px;
-  background: var(--border);
-}
+/* ── Changelog: each release is the version on the left, its changes on the right ── */
+.timeline { margin-top: 48px; }
 
 .release {
-  position: relative;
-  margin-bottom: 96px;
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  column-gap: 48px;
+  align-items: baseline;
+  padding: 40px 0 44px;
+  border-top: 1px solid var(--border);
 }
-
-.release::before {
-  content: '';
-  position: absolute;
-  left: -32px;
-  top: 8px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--bg);
-  border: 4px solid var(--accent);
-  box-shadow: 0 0 0 4px var(--bg);
-  z-index: 2;
-}
-
-.release.latest::before { border-color: var(--success); }
 
 .release-header {
+  position: sticky;
+  top: 88px;
   display: flex;
-  align-items: baseline;
-  gap: 16px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
-.release-version { font-size: 2rem; color: var(--heading); }
+.release-version {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--heading);
+}
+
 .release-date { color: var(--text-muted); font-size: 0.9rem; }
 
-.change-group {
-  margin-bottom: 40px;
+.status-badge {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border: 1px solid var(--border-bright);
+  border-radius: 99px;
+  color: var(--heading);
 }
 
+.change-group + .change-group { margin-top: 32px; }
+
 .change-group h3 {
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 16px;
-  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+  color: var(--heading);
 }
 
 .change-list {
+  list-style: none;
   display: grid;
   gap: 16px;
-  list-style: none;
 }
 
 .change-list li {
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  position: relative;
+  padding-left: 20px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* a short rule level with the title, instead of a bullet */
+.change-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.8em;
+  width: 8px;
+  height: 1px;
+  background: var(--text-muted);
+}
+
+.change-list strong {
+  display: block;
+  font-weight: 600;
+  color: var(--heading);
 }
 
 /* ── Footer ── */
@@ -464,7 +460,9 @@ h2 .section-num {
   .topbar { padding: 12px 20px; }
   .card { padding: 24px; }
   .toc ol { grid-template-columns: 1fr; }
-  .release-header { flex-direction: column; gap: 4px; }
+  .release { grid-template-columns: 1fr; padding: 32px 0 36px; }
+  .release-header { position: static; flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 12px; margin-bottom: 20px; }
+  .status-badge { margin-top: 0; }
 }
 
 /* ── Legal pages: plain, readable documents ── */
