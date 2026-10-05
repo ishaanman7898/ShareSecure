@@ -27,9 +27,15 @@
     <div class="modal-content tc-modal-content">
       <img class="tc-mark" src="/rosette.svg" alt="" width="40" height="40" />
       <h2 id="tc-title">Before you continue</h2>
-      <div class="tc-content">
+      <div class="tc-content" id="tc-website">
         <p>ShareSecure is a free project run by one person. By selecting “I accept”, you agree to the <a href="/terms" target="_blank">terms of use</a> and <a href="/privacy" target="_blank">privacy policy</a>.</p>
         <p>You’re responsible for what you share and for having the right to share it. Don’t share anything illegal, and don’t use anything here to train AI.</p>
+      </div>
+      <!-- a ShareSecure running on your own computer: you run it, so the website's terms don't apply -->
+      <div class="tc-content hidden" id="tc-local">
+        <p>This ShareSecure runs on your own computer. Your account and files stay here, and nobody else runs it for you, so you decide who can use it and what’s shared from it.</p>
+        <p>It’s free, open-source software under the <a href="https://github.com/ishaanman7898/ShareSecure/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>, provided as it is, with no warranty. Keep your own copy of anything important.</p>
+        <p>If you link a ShareSecure account to send files to usernames, the copies that go to ShareSecure’s servers follow its <a href="https://sharesecure-du8.pages.dev/terms" target="_blank" rel="noopener noreferrer">terms of use</a> and <a href="https://sharesecure-du8.pages.dev/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.</p>
       </div>
       <button id="accept-tc-btn" class="btn btn-primary btn-full">I accept</button>
     </div>

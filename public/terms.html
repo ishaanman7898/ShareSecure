@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Terms of use — ShareSecure</title>
+  <title>Terms of use | ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
@@ -17,17 +17,11 @@
 <body>
 
   <header class="topbar">
-    <a class="topbar-brand" href="/">
-      <img src="/app-icon.png" alt="" width="26" height="26" />
-      ShareSecure
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
     </a>
-    <a class="topbar-back" href="/">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-      Back to ShareSecure
-    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
   </header>
 
   <main class="wrapper legal">
@@ -35,7 +29,7 @@
     <header>
       <h1 class="page-title">Terms of use</h1>
       <div class="page-meta">
-        <span>Last updated September 23, 2026</span>
+        <span>Last updated October 4, 2026</span>
       </div>
     </header>
 
@@ -60,14 +54,15 @@
     <section id="account">
       <h2>2. Your account</h2>
       <p>You sign up with a username and password. We don't ask for your email, so we can't reset a forgotten password or contact you. Keep your password somewhere safe.</p>
-      <p>You're responsible for what happens under your account. Don't share it with anyone or use someone else's. If you connect an AI assistant, anything it shares with your token counts as shared by you.</p>
+      <p>You're responsible for what happens under your account. Don't share it with anyone or use someone else's. If you connect an AI assistant, anything it shares or sends with your token counts as shared or sent by you.</p>
       <p>You can delete your account at any time from the account menu.</p>
     </section>
 
     <section id="files">
       <h2>3. Your files</h2>
       <p>You keep all rights to what you upload. You give us permission only to store it and to show it to people who open your link, until the link expires or you delete it.</p>
-      <p>Anyone with the link can open the file until it expires, unless you choose to let only people signed in to ShareSecure open it. People who open your link can share it onward; deleting your link also deletes the links shared from it.</p>
+      <p>Anyone with the link can open the file until it expires, unless you choose to let only people signed in to ShareSecure open it, or make it work once. People who open your link can share it onward; deleting your link also deletes the links shared from it.</p>
+      <p>If you make a file request, anyone with that link can send you files through it, and these terms apply to what they send. Files sent to you wait for you to accept them; declining erases them.</p>
     </section>
 
     <section id="rules">
@@ -91,8 +86,9 @@
     <section id="limits">
       <h2>6. Limits</h2>
       <ul>
-        <li>Files can be PDF, DOCX, PNG or JPG, up to 10 MB each.</li>
-        <li>You can upload up to 5 files in any 24 hours.</li>
+        <li>Files can be PDF, DOCX, PNG, JPG or text (.txt, .md, .csv), up to 10 MB each.</li>
+        <li>You can upload up to 5 files and send up to 60 a day.</li>
+        <li>You can have up to 10 file requests open, each taking up to 20 files.</li>
         <li>Links expire after 1 hour to 10 days, whichever you choose. After that the file is erased.</li>
       </ul>
       <p>We may change these limits. The current limits are always shown in the app.</p>
@@ -125,17 +121,18 @@
       <p>Questions about these terms: <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a>. For bugs, <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">open an issue on GitHub</a>.</p>
     </section>
 
-    <footer class="footer">
-      <div class="footer-nav">
-        <a href="/">ShareSecure</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/security">Security</a>
-        <a href="/changelog">Changelog</a>
-      </div>
-      <p class="footer-version"><span data-version="ShareSecure " hidden></span></p>
-    </footer>
-
   </main>
+
+  <footer class="app-footer web-only">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/security">Security</a>
+      <a href="/changelog">Changelog</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+  </footer>
   <script src="/footer.js" defer></script>
 </body>
 

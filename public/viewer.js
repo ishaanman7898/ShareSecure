@@ -1314,7 +1314,7 @@ function askPasscode(info) {
   if (fileInfo.recipientOnly || fileInfo.burnAfterReading) hide('share-btn');
   // opening a link that works once erases it, so there's nothing left to delete
   if (fileInfo.burnAfterReading) hide('delete-file-btn');
-  document.title = filename + ' — ShareSecure';
+  document.title = filename + ' | ShareSecure';
 
   if (isOwner && allowDownload) show('download-btn'); else hide('download-btn');
 

@@ -8,6 +8,7 @@ import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, 
 import { refill, takeToken, forgetTokens } from './tokens.js';
 import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
+import { confirmAction } from './confirm.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
@@ -2030,7 +2031,13 @@ cloudForm.addEventListener('submit', async e => {
 });
 
 document.getElementById('cloud-unlink').addEventListener('click', async () => {
-  if (!confirm('Unlink this account? Files you sent to usernames from here will be taken back from the people who got them.')) return;
+  const unlink = await confirmAction({
+    title: 'Unlink this account?',
+    text: 'Files you sent to usernames from here will be taken back from the people who got them.',
+    confirm: 'Unlink',
+    danger: true,
+  });
+  if (!unlink) return;
   try {
     const res = await fetch('/api/cloud', { method: 'DELETE', headers: authHeaders() });
     if (!res.ok) throw new Error();
@@ -2114,9 +2121,15 @@ function renderFileList(files) {
 
   fileList.querySelectorAll('.delete-file-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('Delete this file for everyone? This can’t be undone.')) return;
       const shortId = btn.dataset.id;
       const record = files.find(f => f.short_id === shortId);
+      const sure = await confirmAction({
+        title: record?.original_filename ? `Delete “${record.original_filename}”?` : 'Delete this file?',
+        text: 'Its link stops working for everyone, along with any links shared on from it. This can’t be undone.',
+        confirm: 'Delete',
+        danger: true,
+      });
+      if (!sure) return;
       const deleteToken = record?.delete_token || localStorage.getItem('owner_' + shortId);
       btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>`;
       btn.disabled = true;
@@ -2320,8 +2333,7 @@ async function detectSelfHostMode() {
   return false;
 }
 
-async function startApp() {
-  const isSelfHost = await detectSelfHostMode();
+function startApp(isSelfHost) {
   if (isSelfHost) {
     initSelfHost();
   } else {
@@ -2330,24 +2342,35 @@ async function startApp() {
   document.dispatchEvent(new Event('sharesecure:ready'));
 }
 
-function initApp() {
-  if (localStorage.getItem('tc_accepted') !== 'true') {
+// The website's terms, or the shorter ones for a ShareSecure you run yourself,
+// each accepted once.
+let selfHostStart = false;
+const termsKey = () => selfHostStart ? 'tc_accepted_local' : 'tc_accepted';
+
+async function initApp() {
+  selfHostStart = await detectSelfHostMode();
+  if (selfHostStart) {
+    document.getElementById('tc-website').classList.add('hidden');
+    document.getElementById('tc-local').classList.remove('hidden');
+    document.getElementById('tc-title').textContent = 'Running on this computer';
+  }
+  if (localStorage.getItem(termsKey()) !== 'true') {
     tcModal.classList.remove('hidden');
     landingPage.classList.add('hidden');
     dashboardCard.classList.add('hidden');
     uploadCard.classList.add('hidden');
     document.dispatchEvent(new Event('sharesecure:ready'));
   } else {
-    startApp();
+    startApp(selfHostStart);
   }
 }
 
 acceptTcBtn?.addEventListener('click', () => {
-  localStorage.setItem('tc_accepted', 'true');
+  localStorage.setItem(termsKey(), 'true');
   tcModal.classList.add('hidden');
   dashboardCard.classList.remove('hidden');
   uploadCard.classList.remove('hidden');
-  startApp();
+  startApp(selfHostStart);
 });
 
 initApp();

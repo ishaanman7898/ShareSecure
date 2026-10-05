@@ -1159,10 +1159,10 @@ select:focus,
 .menu-item:focus-visible { background: var(--sunken); box-shadow: none; }
 .menu-item:disabled { color: var(--muted); cursor: default; }
 .menu-item[aria-checked="true"] svg { color: var(--ink); }
+.menu-item-danger,
+.menu-item-danger svg { color: var(--danger); }
 .menu-item-danger:hover,
-.menu-item-danger:focus-visible { color: var(--danger); background: var(--danger-soft) !important; }
-.menu-item-danger:hover svg,
-.menu-item-danger:focus-visible svg { color: var(--danger); }
+.menu-item-danger:focus-visible { background: var(--danger-soft) !important; }
 a.menu-item { text-decoration: none; }
 
 .menu-count {
@@ -1388,3 +1388,63 @@ a.menu-item { text-decoration: none; }
 .advanced-title { font-weight: 600; }
 .advanced-state { color: var(--muted); font-size: 0.85rem; }
 .advanced-body { display: grid; gap: 14px; padding: 4px 14px 14px; }
+
+/* ── in-app confirmation (confirm.js): a card, or a sheet on phones, that can be swiped ── */
+.confirm-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0);
+  transition: background-color 0.2s ease;
+}
+.confirm-layer.is-open { background: rgba(0, 0, 0, 0.55); }
+
+.confirm-card {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-modal);
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.26s cubic-bezier(0.3, 0.7, 0.4, 1), opacity 0.2s ease;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.confirm-layer.is-open .confirm-card { opacity: 1; transform: none; }
+.confirm-layer.is-closing .confirm-card { opacity: 0; }
+.confirm-card.is-dragging { transition: none; }
+
+.confirm-card h2 { position: relative; font-size: 1.15rem; letter-spacing: -0.02em; }
+.confirm-card p { position: relative; margin-top: 8px; color: var(--ink-2); font-size: 0.93rem; line-height: 1.55; }
+.confirm-actions { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 22px; }
+
+/* the card fills with the colour of the choice it's being swiped towards */
+.confirm-tint { position: absolute; inset: 0; pointer-events: none; }
+.confirm-tint-yes { background: var(--accent-soft); opacity: var(--yes, 0); }
+.confirm-danger .confirm-tint-yes { background: var(--danger-soft); }
+.confirm-tint-no { background: var(--sunken); opacity: var(--no, 0); }
+
+.confirm-card .confirm-hint { display: none; justify-content: space-between; margin-top: 14px; font-size: 0.78rem; color: var(--muted); }
+@media (hover: none) and (pointer: coarse) { .confirm-card .confirm-hint { display: flex; } }
+
+@media (max-width: 560px) {
+  .confirm-layer { align-items: flex-end; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .confirm-card { max-width: none; transform: translateY(110%); }
+  .confirm-layer.is-open .confirm-card { transform: none; }
+  .confirm-actions .btn { min-height: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-layer, .confirm-card { transition: none; }
+}

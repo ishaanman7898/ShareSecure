@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Privacy policy — ShareSecure</title>
+  <title>Privacy policy | ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
@@ -17,17 +17,11 @@
 <body>
 
   <header class="topbar">
-    <a class="topbar-brand" href="/">
-      <img src="/app-icon.png" alt="" width="26" height="26" />
-      ShareSecure
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
     </a>
-    <a class="topbar-back" href="/">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-      Back to ShareSecure
-    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
   </header>
 
   <main class="wrapper legal">
@@ -35,7 +29,7 @@
     <header>
       <h1 class="page-title">Privacy policy</h1>
       <div class="page-meta">
-        <span>Last updated September 24, 2026</span>
+        <span>Last updated October 4, 2026</span>
       </div>
     </header>
 
@@ -45,6 +39,7 @@
         <li>We only ask for a username and password. No email, no real name.</li>
         <li>Files, their names and notes are stored encrypted, and erased after they expire.</li>
         <li>No analytics, no ads, no tracking cookies. We don't log IP addresses.</li>
+        <li>Your public key goes in a public log so nobody can swap it. Someone who guesses your username can see it has an account.</li>
         <li>The companies that host the site can see your IP address, like any website host.</li>
       </ul>
     </div>
@@ -54,15 +49,24 @@
     <section id="collect">
       <h2>1. What we store</h2>
       <h3>Your account</h3>
-      <p>Your username, a hash of your password (never the password itself), and when you signed up. If you connect an AI assistant, we also keep a hash of its token.</p>
+      <p>Your username, what's needed to check your password without ever having it (never the password itself), and when you signed up. Your public key, and your private key locked with a key only your browser has. If you connect an AI assistant, we also keep a hash of its token, and your rule for what it may send.</p>
+      <h3>The public key log</h3>
+      <p>Your public key is also added to a public, append-only log, so nobody (us included) can quietly swap it. Each entry names the account by a hash of its username, not the username itself, but someone who guesses a username can hash it and see that it has an account. The log can't be edited, so entries stay after you delete your account; the log then records that the account was deleted.</p>
       <h3>Files you share</h3>
       <p>The file, its name and its type, all encrypted with AES-256-GCM. Alongside them we keep the file's size, when it was uploaded, when it expires, and how many times it's been opened. Notes and drawings people add to a file are encrypted too. Links reshared from yours point at the same encrypted file rather than making another copy. Which link a reshare came from is stored only as a keyed code and an encrypted pointer, so the database alone can’t show who shared with whom.</p>
       <h3>Who uploaded what</h3>
-      <p>Each file you upload is tagged with a code derived from your account using a secret key. It isn't your username or account number. Files an AI assistant shares for you are tagged the same way. The one-time upload link an assistant gets is erased once it's used, or after 30 minutes.</p>
-      <h3>Your daily upload count</h3>
-      <p>To enforce 5 uploads a day, we count the files tagged to your account in the last 24 hours. There's no separate record.</p>
+      <p>End-to-end encrypted files you share or send from the website, the desktop app or the assistant on your own computer go up with anonymous tokens, so nothing ties them to your account. Files shared another way (end-to-end encryption off, or by an assistant connected through our servers) are tagged with a code derived from your account using a secret key, not your username or account number. The one-time upload link an assistant may get is erased once it's used, or after 30 minutes.</p>
+      <p>So you can see your shares on your other devices, your browser keeps a list of them on our servers, sealed to your own key. We can't read it.</p>
+      <h3>Daily limits</h3>
+      <p>To enforce the daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code, not your username), and the files tagged to your account in the last 24 hours. Spent tokens are remembered for two days, so none can be used twice.</p>
       <h3>Files sent to you</h3>
-      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. To enforce the sending limits, we also keep a code derived from the sender's account using a secret key (not their username or account number): on the copy until you accept it, and in a log of sends that's erased after 24 hours. Until then, the server can link a copy to the account that sent it.</p>
+      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, we keep a code derived from the sender's account using a secret key (not their username or account number): on the copy until you accept it, and in a log of sends that's erased after 24 hours. Until then, the server can link that copy to the account that sent it.</p>
+      <h3>File requests</h3>
+      <p>When you make a link for someone to send you a file, we store it under your account with what you asked for sealed so we can't read it, how many files it takes, and when it expires. Files sent through it arrive sealed to your key, like any end-to-end encrypted file.</p>
+      <h3>Sends waiting for your OK</h3>
+      <p>When an assistant sends a file to someone not on your list, the send waits, sealed to your own key, for up to a week. Your list of people is sealed the same way. We can't read either.</p>
+      <h3>Links that work once</h3>
+      <p>After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
     </section>
 
     <section id="not-collected">
@@ -76,7 +80,7 @@
         <li><strong>Cloudflare</strong> hosts the site and handles every request. Like any web host it sees your IP address and basic request details, under <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">its privacy policy</a>.</li>
         <li><strong>Turso</strong> stores the database, including the encrypted files.</li>
         <li><strong>GitHub</strong> hosts the source code and desktop app downloads.</li>
-        <li><strong>AI assistants you connect</strong>, like Claude or ChatGPT, see the links, file names and share details they handle for you, under their own privacy policies. When you use a ShareSecure GPT, ChatGPT gives us a temporary link to each file you attach, and we download it from OpenAI to share it.</li>
+        <li><strong>AI assistants you connect</strong>, like Claude or ChatGPT, see the links, file names and share details they handle for you, under their own privacy policies. If an assistant gives us a public link to a file, we download it from there to share it. The assistant on your own computer keeps links out of the chat.</li>
       </ul>
       <p>We don't sell or share your data with anyone else.</p>
     </section>
@@ -85,20 +89,21 @@
       <h2>4. How long we keep it</h2>
       <ul>
         <li>A file's link stops working the moment it expires. The file and everything stored about it are erased the next time cleanup runs, which happens every time anyone uploads.</li>
-        <li>If you delete a file, or decline one sent to you, it's erased straight away.</li>
+        <li>If you delete a file, or decline one sent to you, it's erased straight away. A Works once file is erased the moment it's opened.</li>
+        <li>File requests are erased when they expire (after at most 30 days) or when you close them.</li>
         <li>Your account stays until you delete it. Deleting it from the account menu erases it and every file you've shared from it right away.</li>
       </ul>
     </section>
 
     <section id="browser">
       <h2>5. What's stored in your browser</h2>
-      <p>Your sign-in lasts until you close the browser. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days. It also remembers that you accepted the terms and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
+      <p>Your sign-in lasts until you close the browser. While you're signed in, your private key is kept in the browser in a form it can use but never read out, and it's deleted when you sign out. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days, along with the shares you deleted so they don't come back. It also keeps a few anonymous tokens, the public keys of people you've sent to, the last state of the key log it checked, that you accepted the terms, and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
     </section>
 
     <section id="security">
       <h2>6. How your files are protected</h2>
       <p>By default, files are end-to-end encrypted: your browser encrypts the file, its name, any note and any drawings before they're uploaded, and the key is only in the link (after the <code>#</code>, the part browsers never send to a server). We store files we can't read. Files are padded to standard sizes, so we only know roughly how big they are. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it, and your account's private key is stored locked with a key only your browser has.</p>
-      <p>If you turn end-to-end encryption off, each file is encrypted on the server with its own key derived from a master key we hold. That protects files if the database is copied, but whoever controls the server could decrypt them while they exist. End-to-end encrypted files you share or send from the website use anonymous tokens, so we can't tell which account shared or sent them. (Files an AI assistant shares for you are tied to your account, so it can list and delete them.) We do see who a file was sent to, and when. If that matters, run ShareSecure yourself.</p>
+      <p>If you turn end-to-end encryption off, each file is encrypted on the server with its own key derived from a master key we hold. That protects files if the database is copied, but whoever controls the server could decrypt them while they exist. End-to-end encrypted files you share or send from the website use anonymous tokens, so we can't tell which account shared or sent them. (Files an assistant connected through our servers shares for you are tied to your account, so it can list and delete them.) We do see who a file was sent to, and when. If that matters, run ShareSecure yourself.</p>
       <p>See the <a href="/security">security page</a> for how to report a problem.</p>
     </section>
 
@@ -128,17 +133,18 @@
       <p>If we change this policy, we'll update this page and the date at the top.</p>
     </section>
 
-    <footer class="footer">
-      <div class="footer-nav">
-        <a href="/">ShareSecure</a>
-        <a href="/terms">Terms</a>
-        <a href="/security">Security</a>
-        <a href="/changelog">Changelog</a>
-      </div>
-      <p class="footer-version"><span data-version="ShareSecure " hidden></span></p>
-    </footer>
-
   </main>
+
+  <footer class="app-footer web-only">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/security">Security</a>
+      <a href="/changelog">Changelog</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+  </footer>
   <script src="/footer.js" defer></script>
 </body>
 

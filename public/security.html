@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="no-referrer" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Security — ShareSecure</title>
+  <title>Security | ShareSecure</title>
   <link rel="icon" type="image/png" href="/app-icon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
@@ -17,17 +17,11 @@
 <body>
 
   <header class="topbar">
-    <a class="topbar-brand" href="/">
-      <img src="/app-icon.png" alt="" width="26" height="26" />
-      ShareSecure
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
     </a>
-    <a class="topbar-back" href="/">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-        stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-      Back to ShareSecure
-    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
   </header>
 
   <main class="wrapper legal">
@@ -35,7 +29,7 @@
     <header>
       <h1 class="page-title">Security</h1>
       <div class="page-meta">
-        <span>Last updated September 23, 2026</span>
+        <span>Last updated October 4, 2026</span>
       </div>
     </header>
 
@@ -52,10 +46,15 @@
         <li><strong>Your password stays with you.</strong> Signing in proves you know your password without sending it (based on OPAQUE). Your private key is locked with a key only your browser gets from signing in.</li>
         <li><strong>Uploads and sends that can’t be tied to you.</strong> Your browser spends anonymous, blind-signed tokens instead of your sign-in, so the server limits how much each account shares without knowing which shares are whose.</li>
         <li><strong>Security codes.</strong> Every account has one (account menu → Security code). Compare them with people you send to; your browser also warns you if someone’s key ever changes.</li>
+        <li><strong>A public key log.</strong> Every account’s key is recorded in an append-only log anyone can download and audit. Every key your browser is given has to come with proof it’s in the log, and your browser checks the log shows your own key. To read files meant for someone, a server would have to publish a second key for them where everyone can see it.</li>
+        <li><strong>Links that work once.</strong> Turn on Works once and the file is erased the moment it’s opened. If anyone tries the link after that, you’re told: it was probably passed on.</li>
+        <li><strong>File requests.</strong> A link you hand someone so they can send you a file. Their browser encrypts it to your key, which comes from the link itself, not the server, so the server can’t swap in a key of its own. It never sees the file, its name or what you asked for.</li>
+        <li><strong>AI assistants ask before sending.</strong> An assistant can be tricked by something it reads into sending your files to a stranger, so a send to anyone not on your list waits for your OK. The list and the waiting sends are sealed to your own key. The assistant that runs on your computer (<code>npx sharesecure-mcp</code>) encrypts files there and keeps links out of the chat.</li>
         <li><strong>No third-party code.</strong> Every script is served from this site. The desktop app runs the site’s code from its own copy, so not even a compromised server can change it.</li>
+        <li><strong>Check the site yourself.</strong> <code>npm run verify-site</code> compares every file this site serves with the published code, byte for byte. A public check runs it after every change and every day.</li>
         <li><strong>Encrypted storage.</strong> If you turn end-to-end encryption off, files are still encrypted on the server, each with its own key derived from a server master key.</li>
         <li><strong>Links that expire.</strong> You pick 1 hour to 10 days. After that the link stops working and the file is erased.</li>
-                <li><strong>Not indexed.</strong> Pages tell search engines not to index or cache them, can't be embedded in other sites, and aren't cached by your browser.</li>
+        <li><strong>Not indexed.</strong> Pages tell search engines not to index or cache them, can't be embedded in other sites, and aren't cached by your browser.</li>
         <li><strong>No tracking.</strong> No analytics or third-party scripts, and ShareSecure's code doesn't log IP addresses.</li>
       </ul>
     </section>
@@ -63,7 +62,9 @@
     <section id="limits">
       <h2>What it doesn't protect against</h2>
       <ul>
-        <li><strong>The page you load.</strong> In a browser you trust the page the server sends. The desktop app runs its own copy instead. The server also knows who a file was sent to and when, but not who sent it.</li>
+        <li><strong>The page you load.</strong> In a browser you trust the page the server sends each time. The public check catches a changed page for everyone, but not one sent only to you. The desktop app runs its own copy instead.</li>
+        <li><strong>Who you send to.</strong> The server knows who a file was sent to and when, but not who sent it.</li>
+        <li><strong>Whether a username exists.</strong> The key log names accounts by a hash of the username, so someone who guesses a username can check whether it has an account.</li>
         <li><strong>Anyone with the whole link.</strong> Without a passcode, a link is all it takes to open a file until it expires. Add a passcode, send to a username, and pick the shortest expiry that works.</li>
         <li><strong>Your network.</strong> Your internet provider and the hosting company can see that you connected. Use Tor or a VPN if you need to hide that.</li>
         <li><strong>The person you share with.</strong> They can screenshot or photograph a file even when downloads are turned off.</li>
@@ -73,23 +74,25 @@
     <section id="tips">
       <h2>Good habits</h2>
       <ul>
-        <li>Use the shortest expiry you can.</li>
+        <li>Use the shortest expiry you can, or Works once.</li>
         <li>Delete a share from Your shares as soon as it's been opened.</li>
         <li>Send links through private messages, not public channels.</li>
+        <li>Compare security codes with the people you send to most.</li>
       </ul>
     </section>
 
-    <footer class="footer">
-      <div class="footer-nav">
-        <a href="/">ShareSecure</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/changelog">Changelog</a>
-      </div>
-      <p class="footer-version"><span data-version="ShareSecure " hidden></span></p>
-    </footer>
-
   </main>
+
+  <footer class="app-footer web-only">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/security">Security</a>
+      <a href="/changelog">Changelog</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+  </footer>
   <script src="/footer.js" defer></script>
 </body>
 

@@ -62,7 +62,7 @@ const COPY = {
 function render() {
   const c = COPY[mode];
   const creating = mode === 'signup' || mode === 'setup';
-  document.title = `${c.title} — ShareSecure`;
+  document.title = `${c.title} | ShareSecure`;
   $('auth-title').textContent = c.title;
   $('auth-sub').textContent = c.sub;
   submit.textContent = c.submit;
