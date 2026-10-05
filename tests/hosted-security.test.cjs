@@ -11,18 +11,17 @@ const root = path.resolve(__dirname, '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'sharesecure-audit-'));
 fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module","version":"0.0.0-test"}');
 fs.cpSync(path.join(root, 'functions'), path.join(temp, 'functions'), { recursive: true });
-// the API shares a few modules with the browser
+// the API and the local MCP package share these modules with the browser
+const SHARED = ['sealed.js', 'filetypes.js', 'mcp-common.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js'];
 fs.mkdirSync(path.join(temp, 'public'));
-for (const f of ['sealed.js', 'filetypes.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
+for (const f of SHARED) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
 // Cloudflare's bundler reads package.json on its own; Node needs to be told it's JSON
-for (const f of ['_mcp.js']) {
-  const p = path.join(temp, 'functions', f);
-  fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace(/from '\.\.\/package\.json';/, "from '../package.json' with { type: 'json' };"));
-}
+const mcpFile = path.join(temp, 'functions', '_mcp.js');
+fs.writeFileSync(mcpFile, fs.readFileSync(mcpFile, 'utf8').replace(/from '\.\.\/package\.json';/, "from '../package.json' with { type: 'json' };"));
 // the local MCP package, with the website's encryption code beside it as npm ships it
 fs.cpSync(path.join(root, 'packages', 'sharesecure-mcp', 'src'), path.join(temp, 'pkg', 'src'), { recursive: true });
 fs.mkdirSync(path.join(temp, 'pkg', 'lib'));
-for (const f of ['sealed.js', 'opaque.js', 'p256.js', 'filetypes.js', 'blindrsa.js', 'tokens.js', 'kt.js']) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'pkg', 'lib', f));
+for (const f of SHARED) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'pkg', 'lib', f));
 fs.writeFileSync(path.join(temp, 'pkg', 'package.json'), '{"type":"module"}');
 const pkgLib = file => import(pathToFileURL(path.join(temp, 'pkg', 'src', file)).href);
 const load = file => import(pathToFileURL(path.join(temp, 'functions', file)).href);
@@ -770,9 +769,11 @@ test('MCP inbox tools: list what was sent, without opening private files, and an
 // The local package, talking to the real handlers through an in-process fetch.
 // every request the local server makes, to check which ones carry the account
 const seen = [];
+const failingPaths = new Set();   // requests the local MCP makes that throw, like a dropped connection
 function localFetch() {
   return async (url, init = {}) => {
     const u = new URL(url);
+    if (failingPaths.has(u.pathname)) throw new Error('synthetic network error');
     const request = new Request(u.href, init);
     const ctx = { env, request, waitUntil: promise => promise.catch(() => {}) };
     seen.push({ path: u.pathname, auth: request.headers.get('Authorization'), token: request.headers.get('X-ShareSecure-Token') });
@@ -1195,4 +1196,34 @@ test('key log: a deleted account is recorded, so the name can get a new key with
   const history = (await logApi('?start=0&count=1000')).entries.filter(e => e.label === label);
   assert.deepEqual(history.map(e => e.kind), ['key', 'gone', 'key']);
   assert((await kt.checkKey('quinn', secondKey, (await keyLookup('quinn')).transparency, null, fetchConsistencyLocal)).ok);
+});
+
+// An assistant that's told a share failed shares it again, so once a share
+// exists, a failure after it must come back as that share with "not sent".
+test('a send that fails after the upload still returns the share, so the assistant doesn’t share it twice', async () => {
+  freshDay();
+  await agent.setAgentRules(1, env, { mode: 'anyone' });
+  const token = await mcp.createToken(1, env);
+  const count = () => db.prepare('SELECT COUNT(*) n FROM files WHERE inbox_status IS NULL').get().n;
+  const before = count();
+  sqlFailures.push({ match: /FROM agent_settings/, times: 1 });
+  const out = await rpc(token, 'share_text', { title: 'Once', text: 'Only one copy', send_to: ['bob'] });
+  sqlFailures.length = 0;
+  assert(!out.isError, JSON.stringify(out));
+  assert.match(out.structuredContent.url, /#k=/);
+  assert.match(out.structuredContent.not_sent[0].reason, /synthetic outage/);
+  assert.match(out.content[0].text, /don’t share the file again/);
+  assert.equal(count(), before + 1);
+
+  const alice = await localServer(1, 'alice');
+  await alice.tools.start();
+  failingPaths.add('/api/keys');
+  try {
+    const local = await alice.tools.call('share_text', { title: 'Once here', text: 'Only one copy', send_to: ['bob'] });
+    assert(local.data.id && alice.copied.length === 1);
+    assert.match(local.data.not_sent[0].reason, /synthetic network error/);
+    assert.match(local.text, /don’t share the file again/);
+  } finally {
+    failingPaths.clear();
+  }
 });

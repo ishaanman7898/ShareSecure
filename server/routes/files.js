@@ -7,14 +7,11 @@ const multer = require('multer');
 
 const { db, UPLOADS_DIR } = require('../db');
 const {
-  generateId, sha256hex, hmacHex, compress, decompress,
-  getEncKey, encryptBuffer, decryptBuffer,
-  encryptString, decryptString, decodeToken,
-  quantizeToHour, padSize, randomHex, getUserTag,
-  encryptWithPerFileKey, decryptWithPerFileKey,
+  generateId, hmacHex, compress, decompress, getEncKey, encryptString, decryptString,
+  quantizeToHour, padSize, randomHex, encryptWithPerFileKey, decryptWithPerFileKey,
   stripDocxMetadata, stripPdfMetadata,
 } = require('../utils');
-const { requireOwner } = require('../session');
+const { requireOwner, verifyToken } = require('../session');
 const { purgeExpired, purgeLink } = require('../purge');
 
 const isExpired = file => Boolean(file.expires_at && file.expires_at <= new Date().toISOString());
@@ -35,84 +32,13 @@ function goneIfExpired(file, res, asJson = true) {
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
-// ── magic byte detection ──────────────────────────────────────────────────────
-// Returns { type: 'pdf'|'docx', mime: string } or null if not a permitted type.
-// Validates actual file content, not user-supplied headers.
-
-/**
- * Scan ZIP local file headers looking for the 'word/document.xml' entry.
- * A real DOCX must contain this path; a generic ZIP that is not a Word document
- * will not.  This closes the gap where any valid ZIP passed the magic byte check.
- */
-function isValidDocxZip(buf) {
-  const LOCAL_HEADER_SIG = 0x504B0304;
-  let offset = 0;
-  while (offset + 30 <= buf.length) {
-    if (buf.readUInt32LE(offset) !== LOCAL_HEADER_SIG) break;
-    const flags          = buf.readUInt16LE(offset + 6);
-    const compressedSize = buf.readUInt32LE(offset + 18);
-    const filenameLen    = buf.readUInt16LE(offset + 26);
-    const extraLen       = buf.readUInt16LE(offset + 28);
-    const nameEnd        = offset + 30 + filenameLen;
-    if (nameEnd > buf.length) break;
-    const name = buf.slice(offset + 30, nameEnd).toString('utf8');
-    if (name === 'word/document.xml') return true;
-    // If the data descriptor bit is set and sizes are zero we cannot safely skip
-    if ((flags & 0x08) && compressedSize === 0) break;
-    offset += 30 + filenameLen + extraLen + compressedSize;
-  }
-  return false;
-}
-
-// ── text files ────────────────────────────────────────────────────────────────
-// Text has no magic bytes, so it's allowed by its name (or the type the
-// uploader gave) and then checked: valid UTF-8 with no control characters
-// except tab, newlines and form feed. It's only ever served as plain text.
-const TEXT_TYPES = { '.txt': 'text/plain', '.md': 'text/markdown', '.markdown': 'text/markdown', '.csv': 'text/csv' };
-const TEXT_EXT = { 'text/plain': '.txt', 'text/markdown': '.md', 'text/csv': '.csv' };
-const isTextMime = mime => Object.prototype.hasOwnProperty.call(TEXT_EXT, String(mime || '').split(';')[0].trim().toLowerCase());
-
-function isCleanText(buf) {
-  let text;
-  try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { return false; }
-  return !/[\x00-\x08\x0B\x0E-\x1F\x7F]/.test(text);
-}
-
-function textTypeFor(name, claimedType) {
-  const ext = (String(name || '').toLowerCase().match(/\.[a-z0-9]+$/) || [''])[0];
-  if (TEXT_TYPES[ext]) return TEXT_TYPES[ext];
-  const claimed = String(claimedType || '').split(';')[0].trim().toLowerCase();
-  return isTextMime(claimed) ? claimed : null;
-}
-
-// name and claimedType only matter for text; everything else goes by its bytes
-function detectFileType(buf, name = '', claimedType = '') {
-  if (!buf || !buf.length) return null;
-  if (buf.length < 4) {
-    const mime = textTypeFor(name, claimedType);
-    return mime && isCleanText(buf) ? { type: 'text', mime } : null;
-  }
-  // PDF: %PDF = 0x25 0x50 0x44 0x46
-  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
-    return { type: 'pdf', mime: 'application/pdf' };
-  }
-  // DOCX: ZIP magic bytes AND internal word/document.xml entry required
-  if (buf[0] === 0x50 && buf[1] === 0x4B && buf[2] === 0x03 && buf[3] === 0x04) {
-    if (!isValidDocxZip(buf)) return null; // valid ZIP but not a Word document
-    return { type: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
-  }
-  // PNG: 0x89 0x50 0x4E 0x47
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
-    return { type: 'image', mime: 'image/png' };
-  }
-  // JPEG: 0xFF 0xD8 0xFF
-  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
-    return { type: 'image', mime: 'image/jpeg' };
-  }
-  const mime = textTypeFor(name, claimedType);
-  if (mime && isCleanText(buf)) return { type: 'text', mime };
-  return null;
-}
+// ── file types ───────────────────────────────────────────────────────────────
+// The website's own checks (public/filetypes.js), from the bytes, never the name.
+// It's an ES module, so it's loaded once and awaited where it's used.
+let types;
+const typesReady = import('../../public/filetypes.js').then(m => { types = m; });
+const TEXT_MIMES = ['text/plain', 'text/markdown', 'text/csv'];
+const isTextMime = mime => TEXT_MIMES.includes(String(mime || '').split(';')[0].trim().toLowerCase());
 
 // Memory storage — we process (compress/encrypt) before writing to disk
 const upload = multer({
@@ -120,30 +46,13 @@ const upload = multer({
   limits: { fileSize: MAX_BYTES },
 });
 
-const UNSUPPORTED_TYPE = 'Only PDF (.pdf), Word (.docx), PNG (.png), JPEG (.jpg/.jpeg) and text (.txt, .md, .csv) files are accepted. Files are checked by their content, not just their name.';
-
-// The shown name always ends in the extension of the file's real type, so a PDF
-// can't arrive looking like "invoice.exe".
-function cleanDisplayName(requested, detected, originalName) {
-  let name = (requested || '').toString().trim() || String(originalName || 'file');
-  const ext = detected.type === 'pdf' ? '.pdf'
-    : detected.type === 'docx' ? '.docx'
-    : detected.type === 'text' ? TEXT_EXT[detected.mime]
-    : detected.mime === 'image/png' ? '.png' : '.jpg';
-  // Strip any extension the user typed so we always enforce the correct one
-  name = name.replace(/\.[^.]+$/, '') + ext;
-  // Remove filesystem-unsafe characters
-  name = name.replace(/[<>:"/\|?*\x00-\x1f]/g, '').trim();
-  if (name.length > 200) name = name.substring(0, 197) + ext;
-  return name === ext ? 'file' + ext : name;
-}
-
 // Validate, strip metadata, compress, encrypt and store an uploaded file.
 // Used for the owner's uploads and for files people send to the owner
 // (`incoming`), which are stored inactive until the owner accepts them.
-function storeFile(file, body, { incoming = false, note = null } = {}) {
-  const detected = detectFileType(file.buffer, file.originalname, file.mimetype);
-  if (!detected) return { error: UNSUPPORTED_TYPE, status: 415 };
+async function storeFile(file, body, { incoming = false, note = null } = {}) {
+  await typesReady;
+  const mimeType = types.detectType(file.buffer, file.originalname, file.mimetype);   // never the client's claim
+  if (!mimeType || mimeType === types.NOT_UTF8) return { error: mimeType ? types.ENCODING_ERROR : types.TYPES_ERROR, status: 415 };
 
   const rawHours = parseFloat(body.expires_hours) || 1;
   const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
@@ -151,17 +60,16 @@ function storeFile(file, body, { incoming = false, note = null } = {}) {
 
   const allow_annotations = body.allow_annotations === '1' ? 1 : 0;
   const allow_download    = body.allow_download    === '1' ? 1 : 0;
-  const displayName = cleanDisplayName(body.display_name, detected, file.originalname);
+  const displayName = types.nameFor(body.display_name, file.originalname, mimeType);
 
   const shortId     = generateId(8);
   const deleteToken = generateId(24);
-  const mimeType    = detected.mime; // content-derived MIME, never the client's claim
 
   // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
   // (text has none to strip)
   let rawBuffer = file.buffer;
-  if (detected.type === 'docx') rawBuffer = stripDocxMetadata(rawBuffer);
-  if (detected.type === 'pdf')  rawBuffer = stripPdfMetadata(rawBuffer);
+  if (mimeType === types.DOCX) rawBuffer = stripDocxMetadata(rawBuffer);
+  if (mimeType === 'application/pdf') rawBuffer = stripPdfMetadata(rawBuffer);
 
   // HMAC-SHA256 integrity hash (keyed — not searchable in public hash databases)
   const integrity_hash = hmacHex(rawBuffer);
@@ -208,10 +116,10 @@ function storeFile(file, body, { incoming = false, note = null } = {}) {
 // ── POST /api/upload ──────────────────────────────────────────────────────────
 // Only the signed-in owner can upload to a self-hosted instance, so there is
 // no daily limit and no upload log.
-router.post('/upload', requireOwner, upload.single('file'), (req, res) => {
+router.post('/upload', requireOwner, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
-  const stored = storeFile(req.file, req.body);
+  const stored = await storeFile(req.file, req.body);
   if (stored.error) return res.status(stored.status).json({ error: stored.error });
 
   const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
@@ -339,7 +247,7 @@ router.post('/alive', (req, res) => {
 });
 
 router.post('/delete/:shortId', (req, res) => {
-  const auth         = decodeToken(req.headers.authorization);
+  const auth         = verifyToken(req.headers.authorization);
   const deleteToken  = req.body && req.body.deleteToken;
   const short_id     = req.params.shortId;
 

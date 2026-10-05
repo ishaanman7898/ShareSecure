@@ -1,18 +1,12 @@
-// The public key log ("key transparency"): an append-only list of which
-// public key each username has, so the server can't quietly hand out a key of
-// its own for someone (which is how a compromised server would try to read
-// files sent to them).
+// The public key log ("key transparency"): an append-only record of each
+// username's public key, so the server can't quietly hand out a key of its own
+// for someone.
 //
-// Each time an account sets its key, or is deleted, an entry is added. The
-// entries form a Merkle tree (RFC 6962 / RFC 9162, the same scheme Certificate
-// Transparency uses), so:
-//   - with a short proof, anyone can check a key they were given is in the log;
-//   - with another short proof, anyone can check the log only ever grew since
-//     they last looked, never rewrote what was there;
-//   - anyone can download the whole log and check no username has two keys.
-// Entries name accounts by a hash of the username, not the name itself.
-//
-// This one file runs in the browser, on Cloudflare and in Node 20+.
+// Entries (a key set, or an account deleted, named by a hash of the username)
+// form a Merkle tree, as in Certificate Transparency (RFC 6962 / 9162). Short
+// proofs show a key is in the log and that the log only ever grew; anyone can
+// download all of it and check no username has two keys.
+// Runs in the browser, on Cloudflare and in Node 20+.
 
 const subtle = globalThis.crypto.subtle;
 const utf8 = new TextEncoder();

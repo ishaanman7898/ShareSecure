@@ -1,16 +1,11 @@
-// File requests: a link you hand someone so they can send you a file, even
-// without a ShareSecure account ("send me your W-2 here").
+// File requests: a link someone can send you a file through, even without an
+// account ("send me your W-2 here").
 //
-// The link is /q/<id>#r=<request key>&pk=<your public key>. Both halves after
-// "#" stay in the browser:
-//   - the request key unlocks what you asked for (the label), so the server
-//     never reads it;
-//   - your public key is what the uploader's browser seals each file's key to.
-//     It comes from the link, not the server, so a compromised server can't
-//     swap in a key of its own.
-// What arrives lands in your inbox as a request to accept or decline, sealed
-// like any end-to-end encrypted file. The server never sees a file, its name,
-// the uploader's note or what you asked for.
+// The link is /q/<id>#r=<request key>&pk=<your public key>, and the part after
+// "#" never reaches the server. The request key unlocks the label (what you
+// asked for); the public key is what the uploader's browser seals each file
+// to, taken from the link so a compromised server can't swap it. Files land in
+// your inbox sealed, so the server never sees a file, its name, the note or the label.
 import { getDb, migrateOnce, getUserTag, ensureFileColumns, randomId, bufToB64, findUser } from './_turso.js';
 import { isSealed, MAX_SEALED_FILE, BOX_OVERHEAD, newFileKey, lockText, sealKey, toB64url } from '../public/sealed.js';
 

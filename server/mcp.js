@@ -26,14 +26,15 @@ const { sendToCloud } = require('./routes/cloud');
 
 const router = express.Router();
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
-const MAX_BYTES = 10 * 1024 * 1024;      // same as the upload endpoint
-const INLINE_MAX = 2 * 1024 * 1024;      // content_base64, decoded
-const CHUNK_SIZE = 512 * 1024;           // upload_chunk, decoded
-const TEXT_MAX = 200000;                 // share_text, characters
 const UPLOAD_TTL_MS = 30 * 60 * 1000;
 const MAX_OPEN_UPLOADS = 3;
 const MAX_BATCH = 10;
 const VERSION = require('../package.json').version;
+
+// what all three MCP servers share (public/mcp-common.js); it's an ES module, so
+// it's loaded before the first request is handled
+let common, TOOLS;
+const commonReady = import('../public/mcp-common.js').then(m => { common = m; TOOLS = toolsFrom(m); });
 
 const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
@@ -79,22 +80,16 @@ function shareOptions(args = {}) {
     expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
     allow_download: Boolean(args.allow_download),
     name: args.name ? String(args.name).slice(0, 200) : null,
-    send_to: toRecipients(args.send_to),
+    send_to: common.toRecipients(args.send_to),
     note: args.note ? String(args.note).trim().slice(0, 140) : '',
   };
-}
-
-// "alice, bob", "@alice bob" or ["alice", "bob"] → ["alice", "bob"], at most 20
-function toRecipients(value) {
-  const list = Array.isArray(value) ? value : String(value || '').split(/[\s,;]+/);
-  return [...new Set(list.map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
 }
 
 // ── storing and sending ──────────────────────────────────────────────────────
 // file: { buffer, originalname, mimetype? } → result or { error }
 async function share(file, opts) {
   if (file.error) return { error: file.error };
-  const stored = storeFile(
+  const stored = await storeFile(
     { buffer: file.buffer, originalname: file.originalname, mimetype: file.mimetype, size: file.buffer.length },
     {
       expires_hours: String(opts.expires_hours),
@@ -105,7 +100,10 @@ async function share(file, opts) {
   );
   if (stored.error) return { error: stored.error };
   const result = { url: `${baseUrl()}/r/${stored.shortId}`, name: stored.displayName || opts.name || file.originalname, expires_at: stored.expires_at, id: stored.shortId };
-  return { ...result, ...await sendOn(stored.shortId, opts.send_to, opts.note) };
+  // the share exists now, so a failed send is reported, never thrown
+  let sent;
+  try { sent = await sendOn(stored.shortId, opts.send_to, opts.note); } catch (err) { sent = common.sendFailed(opts.send_to, err); }
+  return { ...result, ...sent };
 }
 
 // Usernames live on the ShareSecure website, so sending goes through the
@@ -143,68 +141,19 @@ function resultText(r) {
     if (waiting.length) lines.push(`Waiting for the user to approve it on the ShareSecure website (an assistant hasn’t sent to them before; there’s nothing more for you to do): ${waiting.join(', ')}`);
     if (notSent.length) lines.push(`Not sent: ${notSent.map(x => `${x.username} (${x.reason})`).join('; ')}`);
     if (unsent.length) lines.push(`Not sent: ${unsent.join(', ')}. ${cloudHelp(r.cloud_error, r.id)}`);
+    if (notSent.length && r.id) lines.push(common.retryLine(`id ${r.id}`));
   }
   lines.push('The link works while ShareSecure is running on the owner’s computer.');
   return lines.join('\n');
 }
 
 // ── turning what the assistant gave into a file ──────────────────────────────
-const SIGNATURES = [
-  { ext: 'pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
-  { ext: 'png', bytes: [0x89, 0x50, 0x4E, 0x47] },
-  { ext: 'jpg', bytes: [0xFF, 0xD8, 0xFF] },
-  { ext: 'docx', bytes: [0x50, 0x4B, 0x03, 0x04] },
-];
-
-// just the name: no folders, no characters file systems choke on
-function cleanName(name) {
-  return String(name || '').split(/[\\/]/).pop().replace(/[\x00-\x1F\x7F<>:"|?*]/g, '').trim().slice(0, 150);
-}
-
-// names that promise a file which is never text, so text under them is a mistake
-// (usually a web page or error page downloaded instead of the real file)
-const BINARY_EXT = /\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|heic|zip)$/i;
-const looksLikeHtml = buffer => /^\s*<(!doctype html|html|head|body)\b/i.test(buffer.subarray(0, 512).toString('utf8'));
-
-// A file named to match what its bytes are ("chart" + PNG bytes → "chart.png").
-// Anything that isn't PDF, PNG, JPG or DOCX is offered as text; storeFile
-// checks it really is. Returns { error } when the name says PDF (or another
-// non-text type) but the bytes aren't one.
-function fileFor(buffer, filename, fallback = 'file') {
-  let name = cleanName(filename) || fallback;
-  const sig = SIGNATURES.find(s => s.bytes.every((b, i) => buffer[i] === b));
-  if (sig) {
-    const ok = sig.ext === 'jpg' ? /\.jpe?g$/i : new RegExp(`\\.${sig.ext}$`, 'i');
-    if (!ok.test(name)) name = `${name.replace(/\.(pdf|docx|png|jpe?g|txt|md|markdown|csv)$/i, '')}.${sig.ext}`;
-    return { buffer, originalname: name };
-  }
-  const binary = BINARY_EXT.exec(name);
-  if (binary) {
-    const kind = binary[1].toUpperCase();
-    return {
-      error: looksLikeHtml(buffer)
-        ? `That isn’t a real ${kind}: it’s a web page (often a preview or sign-in page). Use the file’s direct download link, or its actual bytes.`
-        : `That isn’t a real ${kind}: its contents don’t match the name. ShareSecure can share PDF, DOCX, PNG, JPG and text.`
-    };
-  }
-  if (!/\.[a-z0-9]{1,10}$/i.test(name)) name += '.txt';
-  return { buffer, originalname: name, mimetype: 'text/plain' };
-}
-
-// Base64 from a tool call → bytes. The size and characters are checked before
-// decoding; a data: prefix, whitespace and url-safe base64 are all fine.
-function decodeBase64(input, maxBytes) {
-  const raw = String(input || '');
-  const maxChars = Math.ceil(maxBytes / 3) * 4;
-  const tooBig = { error: `That’s over ${maxBytes >= 1024 * 1024 ? `${maxBytes / 1024 / 1024} MB` : `${maxBytes / 1024} KB`} once decoded.` };
-  if (raw.length > maxChars * 2 + 256) return tooBig;
-  const s = raw.replace(/^data:[^,]{0,200},/, '').replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-  if (!s) return { error: 'The base64 is empty.' };
-  if (s.length > maxChars) return tooBig;
-  if (!/^[A-Za-z0-9+/]+$/.test(s) || s.length % 4 === 1) return { error: 'That isn’t valid base64.' };
-  const bytes = Buffer.from(s, 'base64');
-  if (bytes.length > maxBytes) return tooBig;
-  return { bytes };
+// { buffer, originalname, mimetype? } named to match its bytes, or { error } (see nameForBytes)
+function fileFor(bytes, filename, fallback = 'file') {
+  const got = common.nameForBytes(bytes, filename, fallback);
+  if (got.error) return got;
+  const buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes.buffer, bytes.byteOffset, bytes.length);
+  return { buffer, originalname: got.name, ...(got.text ? { mimetype: 'text/plain' } : {}) };
 }
 
 // ── downloading a file from a link ───────────────────────────────────────────
@@ -334,11 +283,11 @@ async function fetchFile(rawUrl) {
         res.resume();
         return { error: `The link answered ${res.statusCode}, so it couldn’t be downloaded. It has to work without signing in.` };
       }
-      if (Number(res.headers['content-length']) > MAX_BYTES) {
+      if (Number(res.headers['content-length']) > common.MAX_BYTES) {
         res.destroy();
         return { error: 'That file is over 10 MB.' };
       }
-      const bytes = await readCapped(res, MAX_BYTES);
+      const bytes = await readCapped(res, common.MAX_BYTES);
       if (!bytes) return { error: 'That file is over 10 MB.' };
       if (!bytes.length) return { error: 'That link gave back an empty file.' };
       return { bytes, filename: nameFromResponse(res, url) };
@@ -370,10 +319,10 @@ const NO_UPLOAD = { error: 'No open upload with that upload_id. It may have expi
 function beginUpload(args) {
   dropExpiredUploads();
   const size = Number(args.size);
-  if (!Number.isInteger(size) || size < 1 || size > MAX_BYTES) {
-    return { error: `size must be the file’s size in bytes, from 1 to ${MAX_BYTES} (10 MB).` };
+  if (!Number.isInteger(size) || size < 1 || size > common.MAX_BYTES) {
+    return { error: `size must be the file’s size in bytes, from 1 to ${common.MAX_BYTES} (10 MB).` };
   }
-  const filename = cleanName(args.filename);
+  const filename = common.cleanName(args.filename);
   if (!filename) return { error: 'filename is required, e.g. "report.pdf".' };
   const sha = args.sha256 ? String(args.sha256).trim().toLowerCase() : '';
   if (sha && !/^[0-9a-f]{64}$/.test(sha)) return { error: 'sha256 must be 64 hex characters.' };
@@ -383,11 +332,11 @@ function beginUpload(args) {
 
   const uploadId = 'up_' + crypto.randomBytes(24).toString('base64url');
   uploads.set(uploadId, { filename, sha256: sha, opts: shareOptions(args), size, parts: [], received: 0, next: 0, expires: Date.now() + UPLOAD_TTL_MS });
-  const chunks = Math.ceil(size / CHUNK_SIZE);
+  const chunks = Math.ceil(size / common.CHUNK_SIZE);
   return {
     text: [
       `upload_id: ${uploadId}`,
-      `chunk_size: ${CHUNK_SIZE} bytes`,
+      `chunk_size: ${common.CHUNK_SIZE} bytes`,
       `chunks: ${chunks} (index 0${chunks > 1 ? ` to ${chunks - 1}` : ''})`,
       'Send each chunk with upload_chunk, in order, then call finish_upload. The upload expires in 30 minutes.',
     ].join('\n'),
@@ -402,7 +351,7 @@ function uploadChunk(args) {
   if (!Number.isInteger(index) || index < 0 || (index !== up.next && !retry)) {
     return { error: `Send chunk ${up.next} next${up.next ? ` (or ${up.next - 1} again)` : ''}.` };
   }
-  const decoded = decodeBase64(args.data_base64, CHUNK_SIZE);
+  const decoded = common.decodeBase64(args.data_base64, common.CHUNK_SIZE);
   if (decoded.error) return decoded;
   const bytes = decoded.bytes;
   if (args.sha256 && sha256(bytes) !== String(args.sha256).trim().toLowerCase()) {
@@ -446,7 +395,7 @@ const liveShare = id => db.prepare(`
 async function sendShare(args) {
   const id = String(args.id || '').trim();
   if (!id) return { error: 'id is required: the share id from list_shares or a share tool.' };
-  const recipients = toRecipients(args.send_to);
+  const recipients = common.toRecipients(args.send_to);
   if (!recipients.length) return { error: 'send_to needs at least one ShareSecure username.' };
   const file = liveShare(id);
   if (!file) return { error: `No live share with id ${id}.` };
@@ -457,139 +406,75 @@ async function sendShare(args) {
 }
 
 // Text the assistant wrote → a .md, .txt or .csv share
-const TEXT_FORMATS = { markdown: '.md', plain: '.txt', csv: '.csv' };
 function shareWrittenText(args) {
-  // only tab, newlines and form feed survive of the control characters
-  const text = String(args.text ?? '').replace(/[\x00-\x08\x0B\x0E-\x1F\x7F]/g, '');
-  if (!text.trim()) return { error: 'text is empty. Pass the full content to share.' };
-  if (text.length > TEXT_MAX) return { error: 'text is over 200,000 characters. Split it into parts and share each one.' };
-  const ext = TEXT_FORMATS[args.format] || TEXT_FORMATS.markdown;
-  // a title isn't a path, so "Q3 / Q4" keeps both halves
-  const title = cleanName(String(args.title || '').replace(/[\\/]/g, '-')).replace(/\.(md|markdown|txt|csv)$/i, '') || 'Shared text';
-  return share({ buffer: Buffer.from(text, 'utf8'), originalname: title + ext, mimetype: 'text/plain' }, shareOptions(args));
+  const got = common.writtenText(args);
+  if (got.error) return got;
+  return share({ buffer: Buffer.from(got.text, 'utf8'), originalname: got.name, mimetype: 'text/plain' }, shareOptions(args));
 }
 
 // ── tools ────────────────────────────────────────────────────────────────────
-const COMMON = {
-  expires_hours: { type: 'number', description: 'Hours until the link stops working, 1 to 240. Default 24.' },
-  allow_download: { type: 'boolean', description: 'Let people who open the link download the file. Default false (view only).' },
-  name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
-  send_to: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'ShareSecure usernames to send it to, e.g. ["alice", "bob"]. Each gets their own copy in their inbox to accept or decline. Use this whenever the user says who it’s for. Up to 20. Needs a ShareSecure account linked in the app; if none is linked, the link is still made and you’re told what the user needs to do.' },
-  note: { type: 'string', maxLength: 140, description: 'Short note shown to the people it’s sent to. Up to 140 characters.' },
-};
-
-const SHARING = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
-const UPLOADING = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
-
-const TOOLS = [
-  {
-    name: 'share_text',
-    title: 'Share text as a document',
-    description: 'Share something you wrote or have in the conversation (a report, notes, a summary, an email draft, code, a table as CSV) as a private ShareSecure document with a link that expires, and optionally send it straight to ShareSecure usernames. Use this for anything you wrote or have in the conversation, and do it yourself: never ask the user to copy, save or upload it. Pass the full text; it’s shown exactly as written.',
-    inputSchema: {
-      type: 'object',
-      required: ['text', 'title'],
-      properties: {
-        text: { type: 'string', maxLength: TEXT_MAX, description: 'The full content to share. Up to 200,000 characters.' },
-        title: { type: 'string', description: 'Title, used as the file name, e.g. "Q3 summary".' },
-        format: { type: 'string', enum: ['markdown', 'plain', 'csv'], description: 'markdown (.md, the default), plain (.txt) or csv (.csv).' },
-        ...COMMON,
+// built once the shared module has loaded (see commonReady)
+function toolsFrom(c) {
+  const COMMON = {
+    expires_hours: c.FIELDS.expires_hours,
+    allow_download: c.FIELDS.allow_download,
+    name: c.FIELDS.name,
+    send_to: c.sendTo('ShareSecure usernames to send it to, e.g. ["alice", "bob"]. Each gets their own copy in their inbox to accept or decline. Use this whenever the user says who it’s for. Up to 20. Needs a ShareSecure account linked in the app; if none is linked, the link is still made and you’re told what the user needs to do.'),
+    note: c.FIELDS.note,
+  };
+  return [
+    {
+      name: 'share_text',
+      title: 'Share text as a document',
+      description: 'Share something you wrote or have in the conversation (a report, notes, a summary, an email draft, code, a table as CSV) as a private ShareSecure document with a link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: never ask the user to copy, save or upload it. Pass the full text; it’s shown exactly as written.',
+      inputSchema: c.textInput(COMMON),
+      annotations: c.SHARING,
+    },
+    {
+      name: 'share_file',
+      title: 'Share a file',
+      description: [
+        'Share a file (PDF, DOCX, PNG, JPG, or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
+        '1. content_base64 + filename: the file’s bytes, when you can read them. For a file you made or opened in a code sandbox, base64 it there and pass the result. Up to 2 MB, but base64 costs many tokens, so it’s best under about 100 KB.',
+        '2. source_url: a public https link to the file; ShareSecure downloads it.',
+        '3. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',
+        '4. path: a file on the computer ShareSecure runs on. Only works when you run on that same computer (for example Claude Code or Codex there), not through the public link.',
+        'For text you wrote, use share_text instead. For a file the user attached in a chat app (such as claude.ai): if you can run code, it’s usually already in your sandbox (look through its files), so read it and base64 it there. Otherwise it reaches you as text or images, not the file itself, so share its content with share_text.',
+      ].join('\n'),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          content_base64: { type: 'string', description: 'The file’s bytes as base64 (standard or url-safe; a data: prefix is fine). At most 2 MB once decoded.' },
+          filename: { type: 'string', description: 'The file’s name with its extension, e.g. "chart.png". Use it with content_base64.' },
+          source_url: { type: 'string', description: 'A public https link to download the file from.' },
+          path: { type: 'string', description: 'Absolute path to a file on the computer ShareSecure runs on. Only for assistants running on that computer.' },
+          ...COMMON,
+        },
       },
+      annotations: c.SHARING,
     },
-    annotations: SHARING,
-  },
-  {
-    name: 'share_file',
-    title: 'Share a file',
-    description: [
-      'Share a file (PDF, DOCX, PNG, JPG, or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
-      '1. content_base64 + filename: the file’s bytes, when you can read them. For a file you made or opened in a code sandbox, base64 it there and pass the result. Up to 2 MB, but base64 costs many tokens, so it’s best under about 100 KB.',
-      '2. source_url: a public https link to the file; ShareSecure downloads it.',
-      '3. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',
-      '4. path: a file on the computer ShareSecure runs on. Only works when you run on that same computer (for example Claude Code or Codex there), not through the public link.',
-      'For text you wrote, use share_text instead. For a file the user attached in a chat app (such as claude.ai): if you can run code, it’s usually already in your sandbox (look through its files), so read it and base64 it there. Otherwise it reaches you as text or images, not the file itself, so share its content with share_text.',
-    ].join('\n'),
-    inputSchema: {
-      type: 'object',
-      properties: {
-        content_base64: { type: 'string', description: 'The file’s bytes as base64 (standard or url-safe; a data: prefix is fine). At most 2 MB once decoded.' },
-        filename: { type: 'string', description: 'The file’s name with its extension, e.g. "chart.png". Use it with content_base64.' },
-        source_url: { type: 'string', description: 'A public https link to download the file from.' },
-        path: { type: 'string', description: 'Absolute path to a file on the computer ShareSecure runs on. Only for assistants running on that computer.' },
-        ...COMMON,
+    ...c.chunkTools(COMMON),
+    {
+      name: 'send_share',
+      title: 'Send a share to people',
+      description: 'Send one of the existing shares here (the id from list_shares or a share tool) to ShareSecure usernames. Each gets their own copy in their inbox to accept or decline. Needs a ShareSecure account linked in the app; if none is linked, you’re told what the user needs to do.',
+      inputSchema: {
+        type: 'object',
+        required: ['id', 'send_to'],
+        properties: { id: { type: 'string', description: 'The share id.' }, send_to: COMMON.send_to, note: COMMON.note },
       },
+      annotations: c.SHARING,
     },
-    annotations: SHARING,
-  },
-  {
-    name: 'begin_upload',
-    title: 'Start a chunked upload',
-    description: 'Start uploading a file of up to 10 MB in chunks, for clients that can compute base64 in code (for example a script in your sandbox that prints each chunk). Every chunk you pass costs output tokens (about 1 per 3 base64 characters), so don’t use this to copy out a large file by hand. Returns upload_id and chunk_size; then call upload_chunk for index 0, 1, 2… and finally finish_upload. Uploads expire after 30 minutes, and at most 3 can be open at once.',
-    inputSchema: {
-      type: 'object',
-      required: ['filename', 'size'],
-      properties: {
-        filename: { type: 'string', description: 'The file’s name with its extension, e.g. "report.pdf".' },
-        size: { type: 'integer', minimum: 1, maximum: MAX_BYTES, description: 'The file’s size in bytes.' },
-        sha256: { type: 'string', description: 'Optional SHA-256 of the whole file in hex, checked when it’s finished.' },
-        ...COMMON,
-      },
+    {
+      name: 'list_shares',
+      title: 'List shares',
+      description: 'List files shared from this ShareSecure that are still live, with their links and time left.',
+      inputSchema: { type: 'object', properties: {} },
+      annotations: c.READING,
     },
-    annotations: UPLOADING,
-  },
-  {
-    name: 'upload_chunk',
-    title: 'Send one chunk',
-    description: 'Send one chunk of a chunked upload: the bytes from index × chunk_size, as base64, at most 512 KB once decoded. Send them in order starting at 0; sending the last one again is safe.',
-    inputSchema: {
-      type: 'object',
-      required: ['upload_id', 'index', 'data_base64'],
-      properties: {
-        upload_id: { type: 'string', description: 'From begin_upload.' },
-        index: { type: 'integer', minimum: 0, description: 'Which chunk this is, from 0.' },
-        data_base64: { type: 'string', description: 'The chunk’s bytes as base64.' },
-        sha256: { type: 'string', description: 'Optional SHA-256 of this chunk’s bytes in hex, to catch copying mistakes.' },
-      },
-    },
-    annotations: UPLOADING,
-  },
-  {
-    name: 'finish_upload',
-    title: 'Finish a chunked upload',
-    description: 'Finish a chunked upload once every chunk is in. Creates the link, and sends it to the send_to given to begin_upload.',
-    inputSchema: {
-      type: 'object',
-      required: ['upload_id'],
-      properties: { upload_id: { type: 'string', description: 'From begin_upload.' } },
-    },
-    annotations: SHARING,
-  },
-  {
-    name: 'send_share',
-    title: 'Send a share to people',
-    description: 'Send one of the existing shares here (the id from list_shares or a share tool) to ShareSecure usernames. Each gets their own copy in their inbox to accept or decline. Needs a ShareSecure account linked in the app; if none is linked, you’re told what the user needs to do.',
-    inputSchema: {
-      type: 'object',
-      required: ['id', 'send_to'],
-      properties: { id: { type: 'string', description: 'The share id.' }, send_to: COMMON.send_to, note: COMMON.note },
-    },
-    annotations: SHARING,
-  },
-  {
-    name: 'list_shares',
-    title: 'List shares',
-    description: 'List files shared from this ShareSecure that are still live, with their links and time left.',
-    inputSchema: { type: 'object', properties: {} },
-    annotations: { readOnlyHint: true, openWorldHint: false },
-  },
-  {
-    name: 'delete_share',
-    title: 'Delete a share',
-    description: 'Delete a shared file now, so its link stops working. Use the id from list_shares or a share tool.',
-    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'The share id.' } }, required: ['id'] },
-    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-  },
-];
+    c.deleteTool('Delete a shared file now, so its link stops working. Use the id from list_shares or a share tool.'),
+  ];
+}
 
 const NO_FILE = 'No file was given, so nothing was shared. Share it yourself: pass content_base64 + filename if you can read the file (for example in your code sandbox), source_url if it’s at a public https link, begin_upload for bigger files, or path if you run on the computer ShareSecure runs on. For text you wrote or have in the conversation, use share_text.';
 
@@ -604,7 +489,7 @@ async function callTool(name, args, req) {
   if (name === 'share_file') {
     const opts = shareOptions(args);
     if (args.content_base64) {
-      const decoded = decodeBase64(args.content_base64, INLINE_MAX);
+      const decoded = common.decodeBase64(args.content_base64, common.INLINE_MAX);
       if (decoded.error) return decoded;
       return shared(await share(fileFor(decoded.bytes, args.filename || args.name), opts));
     }
@@ -620,7 +505,7 @@ async function callTool(name, args, req) {
     let stat;
     try { stat = fs.statSync(filePath); } catch { return { error: `No file at ${filePath}` }; }
     if (!stat.isFile()) return { error: `${filePath} isn't a file.` };
-    if (stat.size > MAX_BYTES) return { error: 'That file is over 10 MB.' };
+    if (stat.size > common.MAX_BYTES) return { error: 'That file is over 10 MB.' };
     return shared(await share(fileFor(fs.readFileSync(filePath), path.basename(filePath)), opts));
   }
 
@@ -680,8 +565,8 @@ async function handleMessage(msg, req) {
       return reply({
         protocolVersion: PROTOCOL_VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : PROTOCOL_VERSIONS[0],
         capabilities: { tools: {} },
-        serverInfo: { name: 'sharesecure', title: 'ShareSecure', version: VERSION },
-        instructions: INSTRUCTIONS,
+        serverInfo: { name: 'sharesecure', title: 'ShareSecure', version: VERSION, icons: common.serverIcons(baseUrl()) },
+        instructions: `${INSTRUCTIONS}\n${common.NO_DUPLICATES}`,
       });
     case 'ping':
       return reply({});
@@ -696,7 +581,7 @@ async function handleMessage(msg, req) {
           : { content: [{ type: 'text', text: out.text }], ...(out.data ? { structuredContent: { ...out.data, message: out.text } } : {}) });
       } catch (err) {
         console.error('[mcp] tool failed:', params.name, err);
-        return reply({ content: [{ type: 'text', text: 'Something went wrong. Try again.' }], isError: true });
+        return reply({ content: [{ type: 'text', text: common.TOOL_FAILED }], isError: true });
       }
     }
     default:
@@ -727,6 +612,7 @@ function guard(tokenFrom = null) {
 const body = express.json({ limit: '4mb' });
 
 async function handle(req, res) {
+  await commonReady;
   const msg = req.body;
   if (Array.isArray(msg)) {
     if (msg.length > MAX_BATCH) return rpcError(res, 400, -32600, `Too many messages in one batch (at most ${MAX_BATCH}).`);

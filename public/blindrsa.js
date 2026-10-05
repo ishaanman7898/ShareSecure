@@ -1,15 +1,12 @@
 // Blind RSA signatures (RFC 9474, RSABSSA-SHA384-PSS-Deterministic), the
-// scheme behind Privacy Pass tokens (RFC 9578).
+// scheme behind Privacy Pass (RFC 9578).
 //
-// What it's for: once a day your browser gets a few "tokens" from ShareSecure
-// while signed in, then spends them on uploads and sends without signing in.
-// The server signs each token without seeing it (it's "blinded" with a random
-// number only the browser knows), so when a token is spent the server can
-// check its own signature but can't tell which account it gave it to. That's
-// how uploads and sends can be limited per account without being tied to one.
-//
-// The browser does the blinding here. The final signature is checked with
-// WebCrypto's own RSA-PSS, so a mistake anywhere in this file fails loudly.
+// Once a day the signed-in browser gets a few tokens, signed by the server
+// without it seeing them, and later spends them on uploads and sends without
+// signing in. The server can check its own signature but not which account it
+// gave the token to, so limits apply per account without tying anything to one.
+// The final signature is checked with WebCrypto's RSA-PSS, so a mistake here
+// fails loudly.
 
 const subtle = globalThis.crypto.subtle;
 

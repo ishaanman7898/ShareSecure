@@ -1,6 +1,6 @@
 {
   "name": "sharesecure-mcp",
-  "version": "1.13.0",
+  "version": "1.13.1",
   "description": "Local MCP server for ShareSecure: assistants share and receive files end to end encrypted on your own computer, without the file or its key passing through the AI or the server",
   "type": "module",
   "bin": {

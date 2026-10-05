@@ -1,17 +1,12 @@
 'use strict';
-// Sending to ShareSecure usernames from a private ShareSecure.
+// Sending to ShareSecure usernames from a self-hosted ShareSecure.
 //
-// Usernames only exist on the ShareSecure website, so the owner links their
-// ShareSecure account here. Sending a share to someone uploads a copy to the
-// website (once per share, however many people get it) and asks the website to
-// deliver it. That way the recipient can open it even when this computer is off.
-// The copy expires when the share here does.
-//
-// The copy is end-to-end encrypted exactly like the website's own uploads
-// (public/sealed.js): sealed here, padded, with its key sealed to each person
-// it's sent to, so ShareSecure can't read it. Uploads and sends spend anonymous
-// tokens (public/blindrsa.js) that this computer picks up in the background, so
-// ShareSecure can't tell they came from this account either.
+// Usernames only exist on the website, so the owner links their account here.
+// Sending uploads one copy of the share to the website, sealed end to end like
+// the website's own uploads (public/sealed.js), and asks it to deliver. People
+// can then open it while this computer is off; the copy expires with the share.
+// Uploads and sends spend anonymous tokens (public/blindrsa.js), so the website
+// can't tell they came from this account.
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -66,7 +61,8 @@ function saveCopies(copies) {
 // The browser modules (ES modules) that do the cryptography.
 const lib = () => Promise.all([
   import('../../public/sealed.js'), import('../../public/filetypes.js'), import('../../public/blindrsa.js'), import('../../public/kt.js'),
-]).then(([sealed, filetypes, blindrsa, kt]) => ({ ...sealed, ...filetypes, ...blindrsa, ...kt }));
+  import('../../public/mcp-common.js'),
+]).then(([sealed, filetypes, blindrsa, kt, common]) => ({ ...sealed, ...filetypes, ...blindrsa, ...kt, toRecipients: common.toRecipients }));
 
 // ── anonymous tokens ─────────────────────────────────────────────────────────
 // A few tokens are kept here (encrypted, like everything in settings), topped
@@ -323,15 +319,11 @@ async function holdForApproval(shortId, username, note, token) {
   return out.body.waiting ? { status: 202, body: { waiting: true } } : { status: out.status, body: { error: out.body.error || 'Couldn’t keep it for approval.' } };
 }
 
-/**
- * Sends a share on this computer to ShareSecure usernames (for the assistant tools).
- *   sendToCloud(shortId: string, usernames: string[], note?: string)
- *     → Promise<{ sent_to: string[], waiting_for_approval: string[], not_sent: { username, reason }[], error?: 'link_account' | 'link_expired' }>
- * Never throws. error is set when no account is linked or the link has expired;
- * then every username is in not_sent.
- */
+// Sends a share on this computer to usernames, for the assistant tools. Never throws.
+// → { sent_to, waiting_for_approval, not_sent: [{ username, reason }], error? }
+// error ('link_account' or 'link_expired') means no one was sent it.
 async function sendToCloud(shortId, usernames, note = '') {
-  const names = [...new Set((usernames || []).map(u => String(u).trim().replace(/^@/, '')).filter(Boolean))].slice(0, 20);
+  const names = (await lib()).toRecipients(usernames);
   const result = { sent_to: [], waiting_for_approval: [], not_sent: [] };
   const cleanNote = String(note || '').trim().slice(0, NOTE_MAX);
   const token = cloudToken();
@@ -366,11 +358,8 @@ async function sendToCloud(shortId, usernames, note = '') {
   return result;
 }
 
-/**
- * Deletes the website's copy of a share, if there is one, so people it was sent
- * to lose it too. Best effort; call it when a share here is deleted.
- *   forgetCloudCopy(shortId: string) → Promise<void>
- */
+// Deletes the website's copy of a share, if any, so people it was sent to lose
+// it too. Best effort; call it when a share here is deleted.
 async function forgetCloudCopy(shortId) {
   if (uploading.has(shortId)) forgotten.add(shortId);
   const copies = loadCopies();
@@ -393,12 +382,9 @@ async function deleteCopy(copy, token) {
   } catch { /* it still expires with the share */ }
 }
 
-/**
- * Deletes every copy on the website, for when the account is unlinked or
- * swapped, or the owner account here is deleted: afterwards nothing here would
- * remember them, so they could never be taken back. Best effort.
- *   forgetAllCloudCopies() → Promise<void>
- */
+// Deletes every copy on the website when the account is unlinked or swapped, or
+// the owner here is deleted, since nothing here would remember them afterwards.
+// Best effort.
 async function forgetAllCloudCopies() {
   copiesGeneration++;
   const copies = Object.values(loadCopies());
@@ -478,5 +464,4 @@ module.exports = router;
 module.exports.sendToCloud = sendToCloud;
 module.exports.forgetCloudCopy = forgetCloudCopy;
 module.exports.forgetAllCloudCopies = forgetAllCloudCopies;
-module.exports.cloudStatus = status;
 module.exports.refillTokens = refillTokens;

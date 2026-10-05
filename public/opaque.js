@@ -1,28 +1,18 @@
-// Password sign-in where the server never sees the password (OPAQUE).
+// Password sign-in where the server never sees the password: OPAQUE-3DH
+// (RFC 9807) on P-256.
 //
-// This follows the design of RFC 9807 (OPAQUE-3DH) on P-256. In plain words:
+//   1. The browser blinds the password and the server applies its own secret,
+//      so the browser ends up with a value that needs both. The server learns
+//      nothing, and a stolen database can't be used to test guesses offline.
+//   2. That value opens an "envelope" holding the account's sign-in key pair and
+//      an export key, which locks the account's end-to-end private key.
+//   3. A three-way Diffie-Hellman handshake proves to each side that the other
+//      is real.
 //
-//   - The browser "blinds" the password (hashes it onto the curve and
-//     multiplies it by a random number) and sends that. The server multiplies
-//     it by a secret of its own and sends it back. The browser removes its
-//     random number, and is left with a value only someone who knows both the
-//     password and the server's secret could make. The server learns nothing
-//     about the password, and someone with a copy of the database can't test
-//     guesses without the server's help.
-//   - That value unlocks a small "envelope" the browser made when the account
-//     was created. It holds the account's sign-in key pair, and an "export key"
-//     that locks the account's end-to-end private key.
-//   - Both sides then do a three-way Diffie-Hellman handshake and prove to each
-//     other they got the same keys. The server learns the password was right
-//     without ever having it; the browser learns it's talking to the real server.
-//
-// The server side (functions/_opaque.js) only uses WebCrypto's ECDH, HKDF and
-// HMAC. This file's curve maths (p256.js) only ever runs in the browser.
-//
-// Differences from the RFC, kept on purpose: points are sent uncompressed
-// (65 bytes, as WebCrypto uses them) and Diffie-Hellman outputs are the shared
-// x-coordinate (what WebCrypto's ECDH gives). The key stretching step is
-// PBKDF2-SHA256 with 600,000 rounds, since browsers have no Argon2.
+// The server side (functions/_auth.js) only needs WebCrypto. Kept apart from
+// the RFC on purpose: points are uncompressed and DH outputs are the shared x
+// coordinate (what WebCrypto uses), and key stretching is PBKDF2-SHA256 with
+// 600,000 rounds, since browsers have no Argon2.
 
 import { hashToCurve, multiply, invMod, n, liftX, bytesToBig, bigToBytes, encodePoint, multiplyBase, randomScalar } from './p256.js';
 import { toB64url, fromB64url, join, randomBytes } from './sealed.js';

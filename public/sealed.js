@@ -1,19 +1,14 @@
-// End-to-end encryption for ShareSecure ("sealed" files).
+// End-to-end encryption ("sealed" files), with only WebCrypto, so it runs in
+// the browser, on Cloudflare and in Node 20+.
 //
-// This one file runs in the browser, on Cloudflare and in Node 20+, and only
-// uses the built-in WebCrypto API. How it works:
-//
-//   1. Every file gets its own random 256-bit key.
-//   2. The file (padded to a standard size), its name and its type are
-//      encrypted with that key (AES-256-GCM).
-//   3. The key goes in the link after "#". Browsers never send that part of a
-//      link to a server, so the server stores a file it can't read.
-//   4. A link can also need a passcode: then the key in the link is only half
-//      of what's needed, and the passcode is the other half.
-//   5. To send a file to a username, its key is sealed to that person's public
-//      key (ECDH P-256 + HKDF + AES-GCM). Only their browser can open it.
-//   6. Each account's private key is kept on the server locked with a key that
-//      only comes out of signing in (see opaque.js), never sent to the server.
+//   - Each file gets a random key. The file (padded), its name and type are
+//     encrypted with it (AES-256-GCM), and the key goes in the link after "#",
+//     which browsers never send to a server.
+//   - With a passcode, the link holds only half the key.
+//   - Sending to a username seals the key to their public key (ECDH P-256 +
+//     HKDF + AES-GCM).
+//   - Each account's private key is stored locked with a key that only comes
+//     out of signing in (see opaque.js).
 
 const subtle = globalThis.crypto.subtle;
 const utf8 = new TextEncoder();

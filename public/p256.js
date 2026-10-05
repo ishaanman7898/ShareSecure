@@ -118,13 +118,6 @@ export function encodePoint(P) {
   return out;
 }
 
-export function decodePoint(bytes) {
-  if (bytes.length !== 65 || bytes[0] !== 4) throw new Error('Not an uncompressed P-256 point');
-  const P = { x: bytesToBig(bytes.subarray(1, 33)), y: bytesToBig(bytes.subarray(33)) };
-  if (!isOnCurve(P)) throw new Error('Point is not on P-256');
-  return P;
-}
-
 // A point with this x (either of the two; the caller only needs its x later).
 export function liftX(x) {
   const y = sqrt(x * x * x + a * x + b);

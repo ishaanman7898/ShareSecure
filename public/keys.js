@@ -1,20 +1,13 @@
-// Your end-to-end encryption keys in this browser, and the keys of people you
-// send to.
+// Your end-to-end keys in this browser, and the keys of people you send to.
 //
-// When you sign in, your private key is unlocked with the export key that
-// signing in produces (see opaque.js) and kept in IndexedDB as a key the
-// browser can use but never read out, not even for this site's own code. It's
-// deleted when you sign out. The server only ever holds it locked.
+// Your private key is unlocked with the export key from signing in (opaque.js)
+// and kept in IndexedDB as a key the browser can use but never read out. It's
+// deleted when you sign out; the server only ever holds it locked.
 //
-// The first time you send to someone, their public key is remembered here. If
-// the server ever hands out a different key for them, sending stops and you're
-// told to compare security codes with them, because a swapped key is how a
-// compromised server would try to read files meant for someone else.
-//
-// Every key is also checked against the public key log (see kt.js): it has to
-// be in the log, and the log has to have only grown since this browser last
-// looked. A key the server made up for someone would have to be published
-// there for everyone to see.
+// Someone's public key is remembered the first time you send to them. If the
+// server later hands out a different one, sending stops until you compare
+// security codes. Every key must also be in the public key log (kt.js), and
+// the log must only have grown since this browser last looked.
 import {
   makeKeyPair, lockPrivateKey, unlockPrivateKey, openKey, sealKey, unlockMeta, linkWithKey, fingerprint, join
 } from './sealed.js';

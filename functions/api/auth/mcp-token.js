@@ -10,9 +10,8 @@ async function signedIn(context) {
 }
 
 const mcpUrl = request => new URL('/mcp', request.url).href;
-// where apps like Claude and ChatGPT reach this server, and whether the
-// custom GPT actions exist here
-const reach = request => ({ publicUrl: new URL(request.url).origin, gptActions: true });
+// where apps like Claude and ChatGPT reach this server
+const reach = request => ({ publicUrl: new URL(request.url).origin });
 
 export async function onRequestGet(context) {
   const auth = await signedIn(context);

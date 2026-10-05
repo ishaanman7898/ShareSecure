@@ -1,6 +1,6 @@
 // Which files ShareSecure accepts, worked out from their bytes, never their
-// name or what the browser claims. Shared by the server (uploads) and the
-// browser (end-to-end encrypted files, which only the browser can look inside).
+// name or what the browser claims. Shared by the browser, the website's API,
+// the self-hosted server and the local MCP server.
 
 export const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 export const TEXT_TYPES = ['text/plain', 'text/markdown', 'text/csv'];
@@ -14,8 +14,17 @@ const EXT_FOR = {
 };
 export const isAllowedType = type => Object.hasOwn(EXT_FOR, type);
 
+// first bytes of every binary type we take
+const MAGIC = [
+  { type: 'application/pdf', ext: 'pdf', bytes: [0x25, 0x50, 0x44, 0x46] },
+  { type: 'image/png', ext: 'png', bytes: [0x89, 0x50, 0x4E, 0x47] },
+  { type: 'image/jpeg', ext: 'jpg', bytes: [0xFF, 0xD8, 0xFF] },
+  { type: DOCX, ext: 'docx', bytes: [0x50, 0x4B, 0x03, 0x04] },
+];
+export const magicOf = b => MAGIC.find(m => m.bytes.every((x, i) => b[i] === x));
+
 // names that promise a file that's never text, so text under them is a mistake
-const BINARY_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'zip']);
+export const BINARY_EXT = /\.(pdf|docx?|xlsx?|pptx?|png|jpe?g|gif|webp|heic|zip)$/i;
 
 // The name people see always ends in the extension of what the file really is,
 // so a text share can't be saved as .html, .bat or .hta.
@@ -39,8 +48,8 @@ function isDocx(bytes) {
 // Text has to really be text: UTF-8, with no control characters except tab,
 // newlines and form feed. The name only says which kind of text it is.
 function textType(bytes, name, declared) {
+  if (BINARY_EXT.test(name || '')) return null;
   const ext = (/\.([a-z]+)$/i.exec(name || '') || [])[1]?.toLowerCase();
-  if (BINARY_EXT.has(ext)) return null;
   let type = { txt: 'text/plain', md: 'text/markdown', markdown: 'text/markdown', csv: 'text/csv' }[ext];
   if (!type && /^text\//i.test(declared || '')) {
     type = /^text\/markdown/i.test(declared) ? 'text/markdown' : /^text\/csv/i.test(declared) ? 'text/csv' : 'text/plain';
@@ -55,10 +64,8 @@ function textType(bytes, name, declared) {
 // The file's type, NOT_UTF8 for text in another encoding, or null if refused.
 export function detectType(bytes, name, declared) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'application/pdf';
-  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image/png';
-  if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image/jpeg';
-  if (b[0] === 0x50 && b[1] === 0x4B && b[2] === 0x03 && b[3] === 0x04) return isDocx(b) ? DOCX : null;
+  const magic = magicOf(b);
+  if (magic) return magic.type !== DOCX || isDocx(b) ? magic.type : null;
   return textType(b, name, declared);
 }
 

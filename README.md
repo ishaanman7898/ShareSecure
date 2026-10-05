@@ -28,18 +28,47 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 ## Features
 
-- **End-to-end encrypted.** On the website, files are locked in your browser before they're uploaded, and the key lives only in the link. ShareSecure can't read them. Add a passcode and the link alone isn't enough.
-- **Private by design.** Your password never leaves your browser, uploads and sends can't be tied to your account, and file sizes are padded. [How.](docs/SECURITY.md)
+**Sharing**
+
+- **Files:** PDF, Word (DOCX), PNG, JPG, plain text, Markdown and CSV, up to 10 MB. Types are checked from the file's contents, and the name people see always ends in the real type, so a PDF can't arrive looking like an `.exe`.
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **Links that work once.** Turn on *Works once* and the file is erased the moment it's opened. If anyone tries the link after that, you're told: it was probably passed on.
-- **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
-- **View-only by default.** Choose per file whether people can download it or draw on it, and whether only people signed in to ShareSecure can open it.
+- **Passcodes.** Add one and the link alone isn't enough to open the file.
+- **View-only by default.** Choose per file whether people can download it or draw on it (pen, highlighter, eraser), and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
-- **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Files sent to you arrive as requests you accept or decline, and they don't show who sent them. In the desktop app's “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**); sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
-- **Text files too.** PDF, DOCX, PNG, JPG, TXT, Markdown and CSV, up to 10 MB.
-- **AI assistants.** Claude Code, Codex and other MCP clients can share, send and receive files for you. Run it on your own computer and neither the assistant nor ShareSecure ever sees a key, and an assistant tricked by something it read can't send your files to a stranger. [See below.](#ai-assistants-mcp)
+- **Name it what you like** when you share it. Every link comes with a QR code.
+- **Your shares** lists every live link with a bar for the time it has left, to send or delete. With end-to-end encryption, the list is sealed to your key and follows you to your other devices.
+- **The viewer** shows PDFs, Word documents, images and text in the browser, and goes black when its tab is hidden or loses focus.
+
+**Sending and receiving**
+
+- **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Each person gets their own copy as a request to accept or decline, and isn't told who sent it.
+- **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
+- **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
+- **From the desktop app** in “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**). Sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
+
+**Privacy and security** ([how it works](#how-files-are-protected))
+
+- **End-to-end encrypted by default.** On the website, files are locked in your browser before they're uploaded, and the key lives only in the link. ShareSecure can't read them.
+- **Your password never leaves your browser** (OPAQUE), and new passwords need 10+ characters and can't be common ones.
+- **Shares can't be tied to you.** Uploads and sends use anonymous tokens instead of your sign-in, and file sizes are padded.
+- **Security codes.** Compare codes with the people you send to; you're warned if someone's key ever changes.
+- **A public key log.** Every account's key is in an append-only log that anyone can audit, and your browser checks that the log shows your own key.
+- **Check the site yourself.** `npm run verify-site` compares every file the website runs with this repository's code. A public check runs it after every deploy and every day.
+- **No tracking and no outside code.** No analytics, ads or cookies; pdf.js and mammoth are served from the site itself, and pages are never indexed.
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
-- **No tracking.** No analytics, ads or cookies.
+
+**AI assistants** ([setup](#ai-assistants-mcp))
+
+- Claude Code, Codex, the Claude app, ChatGPT and other MCP clients can share text and files, send them to people, list and delete shares, read your inbox and make file request links.
+- **On your own computer** (`npx sharesecure-mcp`), files are encrypted there, neither the assistant nor ShareSecure ever sees a key, and links go to your clipboard.
+- **Assistants ask first.** A send to someone not on your list waits for your OK, so an assistant tricked by a web page or email can't send your files to a stranger.
+
+**Apps and hosting**
+
+- **Website**, on phones too, in light and dark mode.
+- **Desktop app** for Windows, macOS and Linux: sign in to your account or keep files on your computer only. It runs in the tray and updates itself.
+- **Self-hosted** with one command or Docker. Only you can upload, and files are erased within 30 seconds of expiring.
 
 ## AI assistants (MCP)
 
@@ -76,8 +105,6 @@ bearer_token_env_var = "SHARESECURE_TOKEN"
 3. **Connection**: your connector URL, the same one as for the Claude app.
 4. **Authentication**: **No authentication**, not OAuth (the token is in the URL). Tick **I understand and want to continue** and create it.
 5. In **Settings → Personalization → Custom instructions**, paste the instructions from the **Connect an AI assistant** dialog, so ChatGPT shares things itself instead of asking you to.
-
-The older custom-GPT actions (`/openapi.json`) still work for plans that have them.
 
 Assistant shares are stored end-to-end encrypted by default: ShareSecure's server seals the file as it shares it and then forgets the key, so the stored file can't be read later. The server does see the file while sealing it, and the whole link (key included) comes back to the assistant, so it's in the chat. For neither, use the [local server](#on-your-own-computer-most-private). Tool results also come back as structured data (`structuredContent`) for clients that read it.
 
@@ -175,6 +202,26 @@ The installers set up Node.js if needed and start ShareSecure at `http://localho
 
 To install by hand: `git clone https://github.com/ishaanman7898/ShareSecure.git`, then `npm install --omit=dev` and `npm start` (Node.js 20+).
 
+## Architecture
+
+[![Architecture diagram of ishaanman7898/sharesecure](https://gitdiagram.com/ishaanman7898/sharesecure/diagram.png)](https://gitdiagram.com/ishaanman7898/sharesecure?utm_source=readme&utm_medium=picture)
+
+There are two backends for the same browser code. The website's API runs on Cloudflare Pages Functions with a Turso database; the desktop app and self-hosted installs run an Express server with SQLite. The encryption, sign-in, token, key-log and file-type code lives once in `public/` and is shared by the browser, both backends and the local MCP package, and so is what the three MCP servers have in common (`public/mcp-common.js`).
+
+```
+public/       website and app UI (served by both backends), plus the shared
+              encryption, sign-in, token, key-log, file-type and MCP modules
+functions/    Cloudflare Pages Functions: the website's API, including /mcp
+server/       Express server for the desktop app and self-hosted installs
+desktop/      Electron app, icons, the logo and the first-run welcome screen
+packages/     sharesecure-mcp, the local MCP server (npm)
+scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
+tests/        security tests for the website and self-hosted server, and the
+              RFC test vectors they check against
+docs/         security and signing
+db/           the database tables, for reference (the API creates them itself)
+```
+
 ## Development
 
 ```bash
@@ -182,23 +229,12 @@ npm install
 npm start           # self-hosted server at http://localhost:3000
 npm run desktop     # the desktop app (rebuilds the SQLite driver for Electron, then back)
 npm run dist        # desktop installer for this platform, in dist/
-npm test            # security tests, including attempts to break in
+npm test            # security tests (website, self-hosted, local MCP), including attempts to break in
 npm run icons       # re-render the app icons from desktop/logo.js
 npm run rosette     # re-draw the rosette logo from desktop/rosette.js
 ```
 
 Releases are `vX.Y.Z` tags. Pushing one builds the Windows, macOS and Linux installers in GitHub Actions and attaches them to the release. Self-hosted installs and the desktop app update from the latest release. Signing the macOS build is described in [docs/SIGNING.md](docs/SIGNING.md).
-
-```
-public/       website and app UI (served by both backends), including the
-              encryption, sign-in and token code that runs in the browser
-functions/    Cloudflare Pages Functions: the website's API, including /mcp
-server/       Express server for the desktop app and self-hosted installs
-desktop/      Electron app, icons, the logo and the first-run welcome screen
-tests/        security tests and the RFC test vectors they check against
-docs/         security and signing
-db/           the database tables, for reference (the API creates them itself)
-```
 
 The website runs on Cloudflare Pages with a Turso database. It needs these
 settings (as encrypted secrets, under Pages → Settings → Variables and Secrets):

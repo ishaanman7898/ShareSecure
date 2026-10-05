@@ -2,210 +2,97 @@
 const crypto = require('crypto');
 const zlib = require('zlib');
 
-/** Cryptographically random alphanumeric ID */
+const toBuffer = b => Buffer.isBuffer(b) ? b : Buffer.from(b);
+
+// random letters and digits
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = crypto.randomBytes(length);
-  return Array.from(bytes).map(b => chars[b % chars.length]).join('');
+  return Array.from(crypto.randomBytes(length), b => chars[b % chars.length]).join('');
 }
 
-/** SHA-256 hex digest of a Buffer/ArrayBuffer */
-function sha256hex(buffer) {
-  return crypto.createHash('sha256').update(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)).digest('hex');
-}
+const compress = buffer => zlib.deflateSync(toBuffer(buffer));
+const decompress = buffer => zlib.inflateSync(toBuffer(buffer));
+const randomHex = (bytes = 32) => crypto.randomBytes(bytes).toString('hex');
 
-/** zlib DEFLATE compress → Buffer */
-function compress(buffer) {
-  return zlib.deflateSync(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
-}
-
-/** zlib INFLATE decompress → Buffer */
-function decompress(buffer) {
-  return zlib.inflateSync(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
-}
-
-/**
- * Load AES-256-GCM key from ENCRYPTION_KEY env (64 hex chars = 32 bytes).
- * Returns a Buffer, or null if not configured.
- */
+// the master key from ENCRYPTION_KEY (64 hex characters), or null
 function getEncKey() {
   const hex = process.env.ENCRYPTION_KEY;
-  if (!hex || hex.length !== 64) return null;
-  try {
-    return Buffer.from(hex, 'hex');
-  } catch {
-    return null;
-  }
+  return hex && hex.length === 64 ? Buffer.from(hex, 'hex') : null;
 }
 
-/**
- * Encrypt a Buffer with AES-256-GCM.
- * Output format: IV(12) + AuthTag(16) + Ciphertext
- * Returns the combined Buffer.
- */
+// AES-256-GCM: IV (12) + tag (16) + ciphertext. Without a key, the bytes pass through.
 function encryptBuffer(buffer, key) {
-  if (!key) return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  if (!key) return toBuffer(buffer);
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const encrypted = Buffer.concat([cipher.update(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)), cipher.final()]);
-  const authTag = cipher.getAuthTag();
-  return Buffer.concat([iv, authTag, encrypted]);
+  const encrypted = Buffer.concat([cipher.update(toBuffer(buffer)), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), encrypted]);
 }
 
-/**
- * Decrypt a Buffer encrypted with encryptBuffer.
- */
 function decryptBuffer(buffer, key) {
-  if (!key) return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  const iv = buf.slice(0, 12);
-  const authTag = buf.slice(12, 28);
-  const ct = buf.slice(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-  decipher.setAuthTag(authTag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]);
+  const buf = toBuffer(buffer);
+  if (!key) return buf;
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, buf.subarray(0, 12));
+  decipher.setAuthTag(buf.subarray(12, 28));
+  return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]);
 }
 
-/**
- * Encrypt a string to 'enc:<base64>' format.
- * Returns the plain string if no key.
- */
+// strings are stored as "enc:<base64>"; anything else is returned as it is
 function encryptString(str, key) {
   if (!key || !str) return str || '';
-  const encrypted = encryptBuffer(Buffer.from(str, 'utf8'), key);
-  return 'enc:' + encrypted.toString('base64');
+  return 'enc:' + encryptBuffer(Buffer.from(str, 'utf8'), key).toString('base64');
 }
 
-/**
- * Decrypt an 'enc:<base64>' string.
- * Returns the raw string if not encrypted or no key.
- */
 function decryptString(stored, key) {
   if (!stored) return '';
   if (!key || !stored.startsWith('enc:')) return stored;
   try {
-    const buf = Buffer.from(stored.slice(4), 'base64');
-    return decryptBuffer(buf, key).toString('utf8');
+    return decryptBuffer(Buffer.from(stored.slice(4), 'base64'), key).toString('utf8');
   } catch {
-    return stored; // return raw if decryption fails
+    return stored;
   }
 }
 
-/**
- * Verify a signed Bearer session token → { username, userId } or null.
- * (Replaces the old unsigned base64 "username:userId" tokens, which could be forged.)
- */
-function decodeToken(authHeader) {
-  return require('./session').verifyToken(authHeader);
-}
-
-/**
- * Quantize current UTC time to the nearest hour boundary (privacy: reduce temporal fingerprinting).
- * Returns SQLite-compatible datetime string: "YYYY-MM-DD HH:00:00"
- */
+// now, to the hour ("YYYY-MM-DD HH:00:00"), so upload times say less
 function quantizeToHour() {
   const d = new Date();
   d.setUTCMinutes(0, 0, 0);
   return d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
 }
 
-/**
- * Pad size to the next 100 KB boundary (privacy: hide exact file size).
- */
-function padSize(bytes) {
-  const boundary = 100 * 1024;
-  return Math.ceil(Math.max(bytes, 1) / boundary) * boundary;
-}
+// sizes are rounded up to 100 KB, so they say less about the file
+const padSize = bytes => Math.ceil(Math.max(bytes, 1) / (100 * 1024)) * (100 * 1024);
 
-/**
- * Cryptographically random hex string of `bytes` bytes (default 32 → 64 hex chars).
- */
-function randomHex(bytes = 32) {
-  return crypto.randomBytes(bytes).toString('hex');
-}
-
-// Ephemeral fallback key — used only when ENCRYPTION_KEY is not set.
-// Changes on every server restart, which means tags are non-persistent
-// but the app still won't link uploads to a username in the DB.
-let _ephemeralTagKey = null;
-
-/**
- * Derive a pseudonymous upload tag for a user.
- * HMAC-SHA256(userId, derived_key) — irreversible without the key.
- * DB rows store this tag instead of the raw user ID, so a DB leak
- * alone cannot link a row to a username.
- */
-function getUserTag(userId) {
-  const encKey = getEncKey();
-  if (!_ephemeralTagKey) {
-    _ephemeralTagKey = encKey
-      // sub-key derived from the encryption key so it's stable across restarts
-      ? crypto.createHmac('sha256', encKey).update('sharesecure-user-tag-v1').digest()
-      : crypto.randomBytes(32); // ephemeral if no ENCRYPTION_KEY
-  }
-  return crypto.createHmac('sha256', _ephemeralTagKey).update(String(userId)).digest('hex');
-}
-
-/**
- * Encrypt a buffer using a freshly generated per-file key, then wrap that key
- * with the master key.  Returns { data: Buffer, wrappedKey: string|null }.
- *
- * Forward-secrecy improvement: each file gets a unique key so compromising
- * the master key only exposes future files, not past ones.
- */
+// Each file gets its own random key, wrapped by the master key and kept only in
+// the file's row, so deleting the row destroys the key. → { data, wrappedKey }
 function encryptWithPerFileKey(buffer, masterKey) {
-  if (!masterKey) {
-    return { data: Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer), wrappedKey: null };
-  }
+  if (!masterKey) return { data: toBuffer(buffer), wrappedKey: null };
   const fileKey = crypto.randomBytes(32);
-  const data = encryptBuffer(buffer, fileKey);
-  // Wrap (encrypt) the file key with the master key.
-  const wrappedKey = encryptBuffer(fileKey, masterKey).toString('base64');
-  return { data, wrappedKey };
+  return { data: encryptBuffer(buffer, fileKey), wrappedKey: encryptBuffer(fileKey, masterKey).toString('base64') };
 }
 
-/**
- * Decrypt a buffer that was encrypted with encryptWithPerFileKey.
- * Falls back to direct master-key decryption for files uploaded before this
- * scheme was introduced (wrappedKey === null).
- */
+// files from before per-file keys (no wrapped key) use the master key directly
 function decryptWithPerFileKey(buffer, wrappedKeyB64, masterKey) {
-  if (!masterKey) return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
-  if (!wrappedKeyB64) {
-    // Backward compat: file encrypted directly with master key (old format)
-    return decryptBuffer(buffer, masterKey);
-  }
-  const wrappedKeyBuf = Buffer.from(wrappedKeyB64, 'base64');
-  const fileKey = decryptBuffer(wrappedKeyBuf, masterKey);
-  return decryptBuffer(buffer, fileKey);
+  if (!masterKey) return toBuffer(buffer);
+  if (!wrappedKeyB64) return decryptBuffer(buffer, masterKey);
+  return decryptBuffer(buffer, decryptBuffer(Buffer.from(wrappedKeyB64, 'base64'), masterKey));
 }
 
-// ── HMAC integrity hash ────────────────────────────────────────────────────────
-// Keyed with a sub-key derived from ENCRYPTION_KEY (or ephemeral if unset).
-// Unlike raw SHA-256, this hash cannot be looked up in public content-addressable
-// databases (VirusTotal, NSRL, etc.) because the key is secret.
-let _ephemeralIntegrityKey = null;
-
+// An integrity hash keyed from the master key (random if there isn't one), so
+// it can't be looked up in public hash databases.
+let integrityKey = null;
 function hmacHex(buffer) {
-  const encKey = getEncKey();
-  if (!_ephemeralIntegrityKey) {
-    _ephemeralIntegrityKey = encKey
-      ? crypto.createHmac('sha256', encKey).update('sharesecure-integrity-v1').digest()
-      : crypto.randomBytes(32);
+  if (!integrityKey) {
+    const encKey = getEncKey();
+    integrityKey = encKey ? crypto.createHmac('sha256', encKey).update('sharesecure-integrity-v1').digest() : crypto.randomBytes(32);
   }
-  return crypto.createHmac('sha256', _ephemeralIntegrityKey)
-    .update(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer))
-    .digest('hex');
+  return crypto.createHmac('sha256', integrityKey).update(toBuffer(buffer)).digest('hex');
 }
 
 // ── in-file metadata stripping ────────────────────────────────────────────────
 
-/**
- * Strip author/company/revision metadata from a DOCX buffer.
- * Replaces docProps/core.xml and docProps/app.xml with blank versions, and
- * zeroes out all ZIP entry timestamps.
- * Safe fallback: returns original buffer if parsing fails.
- */
+// DOCX: blank docProps/core.xml and app.xml and zero every ZIP timestamp.
+// Returns the original bytes if it can't be parsed.
 function stripDocxMetadata(buf) {
   try {
     return _rebuildDocxWithoutMeta(buf);
@@ -369,15 +256,11 @@ function _rebuildDocxWithoutMeta(buf) {
   return Buffer.concat([localBuf, centralBuf, eocd]);
 }
 
-/**
- * Strip author/date/producer metadata from a PDF buffer.
- * Blanks /Info dictionary string values and removes the XMP metadata packet.
- * Safe fallback: returns original buffer if processing fails.
- */
+// PDF: blank the author, dates and other /Info strings and drop the XMP packet.
+// Returns the original bytes if anything goes wrong.
 function stripPdfMetadata(buf) {
   try {
-    // 'binary' (Latin-1) encoding is a byte-safe lossless round-trip for raw binary data
-    let s = buf.toString('binary');
+    let s = buf.toString('binary');   // Latin-1 round-trips every byte
     const fields = [
       'Author', 'Creator', 'Producer', 'Subject', 'Keywords', 'Title',
       'Company', 'Manager', 'CreationDate', 'ModDate',
@@ -397,23 +280,7 @@ function stripPdfMetadata(buf) {
 }
 
 module.exports = {
-  generateId,
-  sha256hex,
-  hmacHex,
-  compress,
-  decompress,
-  getEncKey,
-  encryptBuffer,
-  decryptBuffer,
-  encryptString,
-  decryptString,
-  decodeToken,
-  quantizeToHour,
-  padSize,
-  randomHex,
-  getUserTag,
-  encryptWithPerFileKey,
-  decryptWithPerFileKey,
-  stripDocxMetadata,
-  stripPdfMetadata,
+  generateId, hmacHex, compress, decompress, getEncKey,
+  encryptString, decryptString, quantizeToHour, padSize, randomHex,
+  encryptWithPerFileKey, decryptWithPerFileKey, stripDocxMetadata, stripPdfMetadata,
 };

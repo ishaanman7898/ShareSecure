@@ -103,7 +103,6 @@ const mcpUrl = () => `http://localhost:${process.env.PORT || 3000}/mcp`;
 // apps like Claude and ChatGPT need a public https address: the tunnel, or your domain
 const reach = () => ({
   publicUrl: /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null,
-  gptActions: false,
 });
 
 router.get('/mcp-token', session.requireOwner, (_req, res) => {

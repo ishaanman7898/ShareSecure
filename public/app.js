@@ -3,6 +3,7 @@ import {
   newPasscodeSalt, passcodeKey, sealText, openText
 } from './sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
+import { toRecipients } from './mcp-common.js';
 import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey, checkLogged } from './keys.js';
 import { refill, takeToken, forgetTokens } from './tokens.js';
 import { loadVault, saveVault } from './vault.js';
@@ -292,6 +293,16 @@ function saveUploadToHistory(record) {
     history.unshift(record);
     localStorage.setItem(historyKey(), JSON.stringify(history.slice(0, 50)));
   } catch {}
+}
+
+// Shares deleted in this browser. The sealed list on the server is saved a while
+// after changes, so until then it still has them; this keeps them from coming back.
+const deletedKey = () => historyKey().replace(LEGACY_HISTORY_KEY, 'ss_deleted');
+function deletedShares() {
+  try { return new Set(JSON.parse(localStorage.getItem(deletedKey()) || '[]')); } catch { return new Set(); }
+}
+function rememberDeleted(shortId) {
+  try { localStorage.setItem(deletedKey(), JSON.stringify([...deletedShares(), shortId].slice(-200))); } catch {}
 }
 
 function removeFromHistory(shortId) {
@@ -1581,8 +1592,13 @@ async function syncVault() {
   const list = await loadVault(authHeaders());
   if (!list) return;
   const history = loadUploadHistory();
-  const known = new Set(history.map(f => f.short_id));
-  const fresh = list.filter(f => f.short_id && !known.has(f.short_id) && new Date(f.expires_at) > Date.now());
+  const known = new Set([...history.map(f => f.short_id), ...deletedShares()]);
+  let fresh = list.filter(f => f.short_id && !known.has(f.short_id) && new Date(f.expires_at) > Date.now());
+  // deleted on another device since the list was saved: never shown
+  if (fresh.length) {
+    const alive = await aliveShares(fresh.map(f => f.short_id));
+    if (alive) fresh = fresh.filter(f => alive.has(f.short_id));
+  }
   if (fresh.length) {
     try {
       const merged = [...history, ...fresh].sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at));
@@ -1596,20 +1612,24 @@ async function syncVault() {
 
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushVault(); });
 
-// Drops shares deleted somewhere else: by a link they came from, or on another device.
-async function pruneDeletedShares() {
-  const history = loadUploadHistory();
-  if (!history.length) return;
+// which of these shares still exist → Set, or null if the server can't be reached
+async function aliveShares(ids) {
   try {
     const res = await fetch('/api/alive', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: history.map(f => f.short_id) }),
+      body: JSON.stringify({ ids }),
     });
-    if (!res.ok) return;
-    const alive = new Set((await res.json()).alive || []);
-    history.filter(f => !alive.has(f.short_id)).forEach(f => forgetShare(f.short_id));
-  } catch { /* offline: try again next time */ }
+    return res.ok ? new Set((await res.json()).alive || []) : null;
+  } catch { return null; }
+}
+
+// Drops shares deleted somewhere else: by a link they came from, or on another device.
+async function pruneDeletedShares() {
+  const history = loadUploadHistory();
+  if (!history.length) return;
+  const alive = await aliveShares(history.map(f => f.short_id));
+  if (alive) history.filter(f => !alive.has(f.short_id)).forEach(f => forgetShare(f.short_id));
 }
 
 // SQLite timestamps ("2026-09-23 14:00:00") are UTC but carry no zone.
@@ -1624,7 +1644,7 @@ function parseServerTime(value) {
 // and link key are sealed to it. True if any were added.
 async function mergeServerShares(files) {
   const history = loadUploadHistory();
-  const known = new Set(history.map(f => f.short_id));
+  const known = new Set([...history.map(f => f.short_id), ...deletedShares()]);
   const fresh = [];
   for (const f of files) {
     if (!f.short_id || known.has(f.short_id)) continue;
@@ -1852,7 +1872,7 @@ function renderInbox(files) {
 // this computer the local server passes it on through the linked account.
 // The delete key proves to the website that the share is yours.
 async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(shortId), note = '') {
-  const names = [...new Set(input.split(/[\s,;]+/).map(u => u.replace(/^@/, '')).filter(Boolean))].slice(0, 20);
+  const names = toRecipients(input);
   let key = deleteToken || null;
   if (!key) {
     try { key = localStorage.getItem('owner_' + shortId) || loadUploadHistory().find(f => f.short_id === shortId)?.delete_token || null; } catch {}
@@ -1916,10 +1936,7 @@ let cloudState = { linked: false, username: null, cloudUrl: null };
 function renderSendHint() {
   if (!selfHostMode) return;
   const hint = document.getElementById('send-to-hint');
-  if (cloudState.linked) {
-    hint.textContent = `Sent through your ShareSecure account, @${cloudState.username}. They get an end-to-end encrypted copy (ShareSecure can’t read it, or tell it came from you) that works even while this computer is off.`;
-    return;
-  }
+  if (cloudState.linked) { hint.textContent = ''; return; }
   hint.textContent = 'Sending to usernames needs your ShareSecure account. Leave it empty to just get a link. ';
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -2053,6 +2070,8 @@ let listTimer = null;
 // Drop a share from this browser entirely: list entry, owner key, and row.
 function forgetShare(shortId) {
   removeFromHistory(shortId);
+  rememberDeleted(shortId);
+  vaultChanged();
   try { localStorage.removeItem('owner_' + shortId); } catch {}
   fileList.querySelector(`[data-short-id="${CSS.escape(shortId)}"]`)?.remove();
   if (!fileList.querySelector('.file-item')) fileList.innerHTML = EMPTY_LIST;
