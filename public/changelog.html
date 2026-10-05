@@ -39,12 +39,45 @@
 
     <div class="timeline">
 
-      <!-- v1.12.0 -->
+      <!-- v1.13.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.13.0</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge badge-done">Latest</span>
+        </div>
+
+        <div class="change-group">
+          <h3>Security</h3>
+          <ul class="change-list">
+            <li><strong>Public key log</strong> — Every account’s key is recorded in an append-only log anyone can audit. Every key you’re given comes with proof it’s in the log, and your browser checks the log shows your own key, so ShareSecure can’t quietly hand someone a key of its own for you. A public check keeps a daily record of the log.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Fixes</h3>
+          <ul class="change-list">
+            <li><strong>No more double shares from assistants</strong> — If sending a share to people failed after the file was uploaded, the assistant was told the whole thing failed and shared it again. Now it gets the link, is told who it didn’t reach, and resends instead of making another copy.</li>
+            <li><strong>Deleted shares stay gone</strong> — Shares you’d just deleted could flash back for a moment when you came back to the tab.</li>
+            <li><strong>ShareSecure’s icon in apps</strong> — Apps like Claude showed another icon next to the ShareSecure connector. They now show ShareSecure’s.</li>
+          </ul>
+        </div>
+
+        <div class="change-group">
+          <h3>Changes</h3>
+          <ul class="change-list">
+            <li><strong>Simpler forms</strong> — Sign-in no longer shows a big logo, the share form drops two long hints, and Privacy and Terms moved out of the account menu (they’re in the footer, and the desktop app’s tray menu).</li>
+            <li><strong>Same file checks everywhere</strong> — The desktop app and self-hosted installs check uploads with exactly the website’s code.</li>
+            <li><strong>Old ChatGPT actions removed</strong> — The custom-GPT actions (<code>/openapi.json</code>) are gone. ChatGPT connects as a plugin instead: account menu → Connect an AI assistant.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- v1.12.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.12.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge badge-done">Latest</span>
         </div>
 
         <div class="change-group">
