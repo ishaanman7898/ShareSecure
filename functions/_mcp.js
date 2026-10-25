@@ -127,13 +127,14 @@ export async function userForToken(header, env) {
   const db = getDb(env);
   const row = (await db.execute({ sql: 'SELECT user_id FROM api_tokens WHERE token_hash = ?', args: [await sha256(token)] })).rows[0];
   if (!row) return null;
-  const user = (await db.execute({ sql: 'SELECT id, username FROM users WHERE id = ?', args: [row.user_id] })).rows[0];
-  return user ? { userId: Number(user.id), username: user.username } : null;
+  await ensureUserColumns(db);
+  const user = (await db.execute({ sql: 'SELECT id, username, session_epoch FROM users WHERE id = ?', args: [row.user_id] })).rows[0];
+  return user ? { userId: Number(user.id), username: user.username, epoch: Number(user.session_epoch) || 0 } : null;
 }
 
 // A normal session for the user, so MCP calls go through the regular endpoints.
 export async function sessionHeader(user, env) {
-  return `Bearer ${await signToken({ username: user.username, userId: user.userId }, env)}`;
+  return `Bearer ${await signToken({ username: user.username, userId: user.userId, ep: user.epoch || 0 }, env)}`;
 }
 
 // An account's public key for end-to-end encryption, or null if it has none yet.

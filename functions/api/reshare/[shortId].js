@@ -3,9 +3,12 @@
 // a branch of the link it came from: deleting that link deletes this one too.
 // Which link it came from isn't stored in the clear (see branchFrom).
 import { getDb, decryptStr, encryptStr, ensureFileColumns, signInRequired, branchFrom, randomId, LINK_ID_LENGTH, findLiveFile } from '../../_turso.js';
+import { overPublicLimit } from '../../_auth.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
+  const limited = await overPublicLimit(context, 'reshare');
+  if (limited) return limited;
   const db = getDb(env);
   await ensureFileColumns(db);
 

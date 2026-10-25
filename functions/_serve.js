@@ -2,6 +2,7 @@
 // /api/download (saved as a file).
 import { getDb, purgeExpired, decryptStr, ensureFileColumns, loadFileBytes, signInRequired, findLiveFile } from './_turso.js';
 import { takeView, burn, noteTry } from './_burn.js';
+import { overPublicLimit } from './_auth.js';
 
 // RFC 6266: a plain ASCII name, plus the real one for browsers that read it
 function contentDisposition(type, filename) {
@@ -24,6 +25,8 @@ function contentType(type, disposition) {
 
 export async function serveFile(context, { disposition }) {
   const { params, env, request } = context;
+  const limited = await overPublicLimit(context, 'lookup');
+  if (limited) return limited;
   const db = getDb(env);
   await ensureFileColumns(db);
   purgeExpired(env, context);

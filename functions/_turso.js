@@ -121,6 +121,9 @@ export const ensureUserColumns = db => migrateOnce('users', db, [
   'ALTER TABLE users ADD COLUMN private_key_box TEXT',
   // the account's own list of its shares, sealed to its own key (public/vault.js)
   'ALTER TABLE users ADD COLUMN vault TEXT',
+  // goes up by one on "Sign out everywhere": sessions carry the number they
+  // were made with, so every older one stops working
+  'ALTER TABLE users ADD COLUMN session_epoch INTEGER DEFAULT 0',
 ]);
 
 // Expired links are deleted for good, in the background.
@@ -224,7 +227,8 @@ export async function signToken(payload, env) {
   return `${body}.${b64url(await hmac(env.TOKEN_SECRET, body))}`;
 }
 
-// "Bearer <token>" → { userId, username } for a live account, or null.
+// "Bearer <token>" → { userId, username } for a live account, or null. A
+// session made before the account last signed out everywhere doesn't count.
 export async function verifyToken(authHeader, env) {
   if (!authHeader || !env.TOKEN_SECRET) return null;
   const [body, sig] = authHeader.replace(/^Bearer /, '').split('.', 2);
@@ -241,9 +245,12 @@ export async function verifyToken(authHeader, env) {
     if ((Number(payload.iat) || 0) < validFrom) return null;
     const userId = parseInt(payload.userId, 10);
     if (!Number.isSafeInteger(userId) || userId < 1) return null;
-    const user = (await getDb(env).execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] })).rows[0];
+    const db = getDb(env);
+    await ensureUserColumns(db);
+    const user = (await db.execute({ sql: 'SELECT username, session_epoch FROM users WHERE id = ?', args: [userId] })).rows[0];
+    if (!user || (Number(payload.ep) || 0) !== (Number(user.session_epoch) || 0)) return null;
     // issuedAt lets sensitive steps ask for a recent sign-in
-    return user ? { userId, username: user.username, issuedAt: Number(payload.iat) || 0 } : null;
+    return { userId, username: user.username, issuedAt: Number(payload.iat) || 0, epoch: Number(user.session_epoch) || 0 };
   } catch {
     return null;
   }

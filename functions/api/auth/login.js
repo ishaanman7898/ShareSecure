@@ -19,7 +19,7 @@ export async function onRequestPost(context) {
     const tries = await attemptKeys(request, body.username, env);
     if (await tooManyTries(db, tries, context)) return fail('Too many attempts. Try again in a few minutes.', 429);
 
-    const user = await findUser(db, body.username, 'id, username, access_code, opaque_record, public_key, private_key_box');
+    const user = await findUser(db, body.username, 'id, username, access_code, opaque_record, public_key, private_key_box, session_epoch');
     // accounts that have switched never take a password again
     if (user?.opaque_record) return fail('This account signs in without sending its password. Update ShareSecure and try again.', 401, { code: 'opaque_only' });
     const { ok } = user ? await checkAccessCode(String(body.access_code), user.access_code, env) : { ok: false };

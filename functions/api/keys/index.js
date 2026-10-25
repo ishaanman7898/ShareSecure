@@ -16,6 +16,7 @@
 import { getDb, verifyToken, ensureUserColumns, findUser } from '../../_turso.js';
 import { isSealed, isPublicKey } from '../../../public/sealed.js';
 import { keyProof } from '../../_kt.js';
+import { overPublicLimit } from '../../_auth.js';
 
 const fail = (error, status) => Response.json({ error }, { status });
 
@@ -26,6 +27,8 @@ export async function onRequestGet(context) {
 
   const username = new URL(request.url).searchParams.get('username');
   if (username) {
+    const limited = await overPublicLimit(context, 'lookup');
+    if (limited) return limited;
     const user = await findUser(db, username.trim().replace(/^@/, ''), 'username, public_key');
     if (!user) return fail('User not found', 404);
     const transparency = user.public_key ? await keyProof(env, user.username, user.public_key) : null;

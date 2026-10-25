@@ -3,9 +3,12 @@
 // the viewer opens it with the key from the link.
 import { getDb, purgeExpired, decryptStr, ensureFileColumns, signInRequired, findLiveFile } from '../../_turso.js';
 import { noteTry } from '../../_burn.js';
+import { overPublicLimit } from '../../_auth.js';
 
 export async function onRequestGet(context) {
   const { params, env, request } = context;
+  const limited = await overPublicLimit(context, 'lookup');
+  if (limited) return limited;
   const db = getDb(env);
   await ensureFileColumns(db);
   purgeExpired(env, context);

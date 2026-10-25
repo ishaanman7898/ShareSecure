@@ -230,7 +230,8 @@ export async function checkProof(context, body) {
   if (!used.rowsAffected) return fail('That sign-in was already used. Try again.', 401);
   context.waitUntil(db.execute({ sql: 'DELETE FROM login_used WHERE at < ?', args: [Date.now() - LOGIN_TTL_MS] }).catch(() => {}));
 
-  const user = (await db.execute({ sql: 'SELECT id, username, public_key, private_key_box FROM users WHERE id = ?', args: [state.uid] })).rows[0];
+  await ensureUserColumns(db);
+  const user = (await db.execute({ sql: 'SELECT id, username, public_key, private_key_box, session_epoch FROM users WHERE id = ?', args: [state.uid] })).rows[0];
   return user || fail('Wrong username or password.', 401);
 }
 
@@ -239,12 +240,41 @@ export async function checkProof(context, body) {
 export async function sessionFor(user, env) {
   return {
     success: true,
-    token: await signToken({ username: user.username, userId: user.id }, env),
+    token: await signToken({ username: user.username, userId: user.id, ep: Number(user.session_epoch) || 0 }, env),
     userId: String(user.id),
     username: user.username,
     publicKey: user.public_key || null,
     privateKeyBox: user.private_key_box || null,
   };
+}
+
+// ── limits for endpoints anyone can call ─────────────────────────────────────
+// Looking links up, opening them, resharing and file requests need no sign-in,
+// so each address gets a limit too, in the same 15-minute windows as sign-in:
+// nobody can hammer them to hunt for links, pile up rows or use up the site's
+// requests. Generous enough for an office behind one address.
+export const PUBLIC_LIMITS = { lookup: 600, alive: 200, reshare: 60, request: 60 };
+
+// → a 429 Response once this address is past the limit, or null to go on.
+// Requests with no address (an assistant's call passed on inside the server) aren't counted.
+export async function overPublicLimit(context, kind) {
+  const ip = context.request.headers.get('CF-Connecting-IP');
+  if (!ip || !context.env.TOKEN_SECRET) return null;
+  const db = getDb(context.env);
+  await ensureAuthTables(db);
+  const now = Date.now(), since = now - WINDOW_MS;
+  const row = (await db.execute({
+    sql: `INSERT INTO login_attempts (key, failures, first_at) VALUES (?, 1, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            failures = CASE WHEN first_at <= ? THEN 1 ELSE failures + 1 END,
+            first_at = CASE WHEN first_at <= ? THEN ? ELSE first_at END
+          RETURNING failures`,
+    args: [await hmacHex(context.env.TOKEN_SECRET, `public:${kind}:ip:${ip}`), now, since, since, now]
+  })).rows[0];
+  // old windows are cleared now and then, not on every view
+  if (Math.random() < 0.02) context.waitUntil(db.execute({ sql: 'DELETE FROM login_attempts WHERE first_at <= ?', args: [since] }).catch(() => {}));
+  if (Number(row?.failures) <= PUBLIC_LIMITS[kind]) return null;
+  return Response.json({ error: 'Too many requests from here. Try again in a few minutes.', code: 'rate_limited' }, { status: 429, headers: { 'Retry-After': '900' } });
 }
 
 export async function readJson(request) {

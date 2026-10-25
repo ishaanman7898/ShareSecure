@@ -2,8 +2,11 @@
 // "Your shares" can drop ones deleted elsewhere (a parent link, another device).
 // It only answers for ids the caller already has.
 import { getDb } from '../_turso.js';
+import { overPublicLimit } from '../_auth.js';
 
 export async function onRequestPost(context) {
+  const limited = await overPublicLimit(context, 'alive');
+  if (limited) return limited;
   const { ids } = await context.request.json().catch(() => ({}));
   const list = (Array.isArray(ids) ? ids : []).filter(id => /^[A-Za-z0-9]{4,32}$/.test(id)).slice(0, 100);
   if (!list.length) return Response.json({ alive: [] });

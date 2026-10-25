@@ -910,6 +910,29 @@ document.getElementById('menu-inbox').addEventListener('click', () => {
 });
 
 document.getElementById('logout-btn').addEventListener('click', logout);
+
+// Every other browser, app and device signed in to this account is signed
+// out; this one gets a new session and stays in.
+document.getElementById('menu-signout-all').addEventListener('click', async () => {
+  closeMenu(false);
+  const sure = await confirmAction({
+    title: 'Sign out everywhere?',
+    text: 'Every other browser, desktop app and device signed in to this account is signed out. This one stays signed in. Assistants stay connected: turn them off in Connect an AI assistant.',
+    confirm: 'Sign out everywhere',
+  });
+  if (!sure) return;
+  try {
+    const res = await fetch('/api/auth/sign-out-everywhere', { method: 'POST', headers: authHeaders() });
+    if (res.status === 401) { logout(); return; }
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.token) throw new Error(data.error);
+    userToken = data.token;
+    sessionStorage.setItem('user_token', data.token);
+    showToast('Signed out everywhere else.', 'success');
+  } catch (err) {
+    showToast(err.message || 'Couldn’t sign out everywhere. Try again.', 'error');
+  }
+});
 // Privacy and Terms open in a new window, so close the menu behind them
 profileMenu.querySelectorAll('a.menu-item').forEach(a => a.addEventListener('click', () => closeMenu(false)));
 
@@ -1514,6 +1537,7 @@ function initAuth() {
     document.getElementById('e2e-wrap')?.classList.remove('hidden');
     document.getElementById('burn-wrap')?.classList.remove('hidden');
     document.getElementById('menu-code')?.classList.remove('hidden');
+    document.getElementById('menu-signout-all')?.classList.remove('hidden');
     syncPasscodeField();
     // tokens are picked up a little after the page opens, not when they're used
     setTimeout(() => refill(username, authHeaders()), 4000 + Math.random() * 8000);

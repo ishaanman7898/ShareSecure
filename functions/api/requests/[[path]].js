@@ -6,6 +6,7 @@
 //   POST   /api/requests/:id/upload   one sealed file (multipart: file, meta, inbox_key, note?)
 import { verifyToken } from '../../_turso.js';
 import { openRequest, listRequests, closeRequest, requestInfo, receive } from '../../_requests.js';
+import { overPublicLimit } from '../../_auth.js';
 
 const fail = (error, status) => Response.json({ error }, { status });
 const ID = /^[A-Za-z0-9]{6,32}$/;
@@ -18,6 +19,10 @@ export async function onRequest(context) {
 
   try {
     // anyone with the link: see the request, and send a file to it
+    if (id && (method === 'GET' || action === 'upload')) {
+      const limited = await overPublicLimit(context, 'request');
+      if (limited) return limited;
+    }
     if (id && !action && method === 'GET') {
       const info = await requestInfo(id, env);
       return info ? Response.json(info) : fail('This file request doesn’t exist, or was closed.', 404);

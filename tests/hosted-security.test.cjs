@@ -257,6 +257,39 @@ test('SESSIONS_VALID_FROM signs out every session made before it', async () => {
   assert.equal((await api.verifyToken(fresh, past)).username, 'alice');
 });
 
+test('sign out everywhere: older sessions stop working, this one and assistants keep going', async () => {
+  const signOutAll = (await load('api/auth/sign-out-everywhere.js')).onRequestPost;
+  const id = Number(db.prepare("INSERT INTO users (username, access_code) VALUES ('yan', 'test') RETURNING id").get().id);
+  const phone = 'Bearer ' + await api.signToken({ userId: id, username: 'yan' }, env);
+  const laptop = 'Bearer ' + await api.signToken({ userId: id, username: 'yan' }, env);
+  const assistant = await mcp.createToken(id, env);
+  const res = await signOutAll(context('/api/auth/sign-out-everywhere', { user: null, headers: { Authorization: laptop } }));
+  assert.equal(res.status, 200);
+  const { token } = await res.json();
+  assert.equal(await api.verifyToken(phone, env), null);
+  assert.equal(await api.verifyToken(laptop, env), null);
+  assert.equal((await api.verifyToken('Bearer ' + token, env)).username, 'yan');
+  // the old session can't do it again, or anything else
+  assert.equal((await signOutAll(context('/api/auth/sign-out-everywhere', { user: null, headers: { Authorization: phone } }))).status, 401);
+  // an assistant's token still works, and the sessions made for it are current
+  const user = await mcp.userForToken('Bearer ' + assistant, env);
+  assert.equal(user.username, 'yan');
+  assert.equal((await api.verifyToken(await mcp.sessionHeader(user, env), env)).username, 'yan');
+});
+
+test('endpoints anyone can call have a limit per address', async () => {
+  freshDay();
+  const share = await upload('limits.txt', 'Rate limit audit');
+  const from = ip => context('/api/reshare/' + share.shortId, { user: null, params: { shortId: share.shortId }, headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: '{}' });
+  const statuses = [];
+  for (let i = 0; i < 61; i++) statuses.push((await reshareHandler(from('198.51.100.7'))).status);
+  assert.deepEqual([statuses[0], statuses[59], statuses[60]], [200, 200, 429]);
+  // another address isn't affected, and looking the link up still works from the first
+  assert.equal((await reshareHandler(from('198.51.100.8'))).status, 200);
+  const info = await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId }, headers: { 'CF-Connecting-IP': '198.51.100.7' } }));
+  assert.equal(info.status, 200);
+});
+
 test('ids are evenly spread over all 62 letters and digits', () => {
   const seen = new Map();
   for (let i = 0; i < 2000; i++) for (const ch of api.randomId(31)) seen.set(ch, (seen.get(ch) || 0) + 1);

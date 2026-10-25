@@ -3,10 +3,14 @@
 // encrypted files, the key after "#") from the address itself.
 import { getDb } from '../_turso.js';
 import { wasBurned } from '../_burn.js';
+import { overPublicLimit } from '../_auth.js';
 
 export async function onRequestGet(context) {
   const { params, request, env } = context;
   const page = name => env.ASSETS.fetch(new URL(name, new URL(request.url).origin));
+  if (await overPublicLimit(context, 'lookup')) {
+    return new Response('Too many links opened from here. Try again in a few minutes.', { status: 429, headers: { 'Retry-After': '900' } });
+  }
 
   const file = (await getDb(env).execute({
     sql: 'SELECT expires_at, is_active FROM files WHERE short_id = ?', args: [params.shortId]
