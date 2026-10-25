@@ -202,7 +202,7 @@ app.get('/signin', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'signin.html
 app.get('/self-host', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'self-host.html'));
 });
-app.get('/download', (req, res) => res.redirect(301, '/self-host'));
+app.get('/download', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'download.html')));
 
 // ── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html')));

@@ -17,6 +17,8 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 const CLOUD = 'https://sharesecure-du8.pages.dev';
+// set when the app restarts to create an account (see createAccount)
+const NEW_ACCOUNT_FLAG = '--new-account';
 
 // Program files are read-only once packaged, so settings, the encryption key
 // and every stored file live in the user's app-data folder. It's a separate
@@ -121,6 +123,8 @@ function wireLinks(contents) {
   contents.on('will-navigate', (e, url) => {
     if (inApp(url) || url.startsWith('file:')) return;
     e.preventDefault();
+    // "Create an account" on this computer's sign-in page
+    if (url.startsWith(`${CLOUD}/signin`)) return createAccount();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
 }
@@ -209,10 +213,43 @@ async function start(chosen) {
   }
 }
 
+// Opens sign-up for a ShareSecure account. From this computer's own
+// ShareSecure that means switching to an account, which needs a restart.
+async function createAccount() {
+  if (mode === 'account') {
+    showMain();
+    win.loadURL(mainUrl(true));
+    return;
+  }
+  if (!mode) {
+    saveMode('account');
+    await start('account');
+    showMain();
+    win.loadURL(mainUrl(true));
+    buildTrayMenu();
+    return;
+  }
+  const { response } = await dialog.showMessageBox({
+    type: 'question',
+    title: 'ShareSecure',
+    buttons: ['Create an account', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Create a ShareSecure account?',
+    detail: 'ShareSecure will restart with your account. The files on this computer stay, but their links stop working until you switch back from the tray icon.',
+  });
+  if (response !== 0) return;
+  saveMode('account');
+  quitting = true;
+  app.relaunch({ args: [...process.argv.slice(1).filter(a => a !== NEW_ACCOUNT_FLAG), NEW_ACCOUNT_FLAG] });
+  app.exit(0);
+}
+
 // Switching needs a fresh start: a local server can't be stopped in place.
 async function changeMode() {
   const { response } = await dialog.showMessageBox({
     type: 'question',
+    title: 'ShareSecure',
     buttons: ['Choose again', 'Cancel'],
     defaultId: 0,
     cancelId: 1,
@@ -229,6 +266,7 @@ async function changeMode() {
 function buildTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open ShareSecure', click: showMain },
+    { label: 'Create a ShareSecure account…', click: createAccount },
     ...(mode === 'local' ? [{ label: 'Open data folder', click: () => shell.openPath(DATA_DIR) }] : []),
     { label: 'Switch between account and this computer…', click: changeMode, enabled: Boolean(mode) },
     { type: 'separator' },
@@ -304,6 +342,7 @@ app.whenReady().then(async () => {
   const saved = readMode();
   if (saved) await start(saved);
   createTray();
-  showMain();
+  if (mode === 'account' && process.argv.includes(NEW_ACCOUNT_FLAG)) createMain(mainUrl(true));
+  else showMain();
   checkForUpdates();
 });

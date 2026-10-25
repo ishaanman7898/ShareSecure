@@ -2,7 +2,11 @@ import { setUpKeys, newKeyFields } from './keys.js';
 import { signIn as opaqueSignIn, register as opaqueRegister, postWith } from './opaque.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
-if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
+const inDesktop = /ShareSecureDesktop\//.test(navigator.userAgent);
+if (inDesktop) document.documentElement.classList.add('is-desktop');
+// On this computer's own ShareSecure, the desktop app catches this link and
+// restarts with a ShareSecure account instead (see createAccount in main.js).
+const DESKTOP_SIGNUP = 'Want a ShareSecure account instead? <a href="https://sharesecure-du8.pages.dev/signin?new=1">Create an account</a>';
 
 
 const $ = id => document.getElementById(id);
@@ -68,8 +72,9 @@ function render() {
   $('auth-title').textContent = c.title;
   $('auth-sub').textContent = c.sub;
   submit.textContent = c.submit;
-  $('auth-switch').innerHTML = c.switch;
-  $('auth-switch').classList.toggle('hidden', !c.switch);
+  const switchHtml = c.switch || (selfHost && inDesktop ? DESKTOP_SIGNUP : '');
+  $('auth-switch').innerHTML = switchHtml;
+  $('auth-switch').classList.toggle('hidden', !switchHtml);
   $('auth-note').textContent = c.note || '';
   $('auth-note').classList.toggle('hidden', !c.note);
   $('confirm-group').classList.toggle('hidden', !creating);
@@ -87,6 +92,17 @@ function setMode(next) {
   history.replaceState(null, '', next === 'signup' ? '/signin?new=1' : '/signin');
   render();
   username.focus();
+}
+
+// The eye beside each password box shows what's typed, and hides it again.
+const toggles = [...document.querySelectorAll('.password-toggle')];
+function showPassword(btn, show) {
+  $(btn.getAttribute('aria-controls')).type = show ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', String(show));
+  btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+}
+for (const btn of toggles) {
+  btn.addEventListener('click', () => showPassword(btn, btn.getAttribute('aria-pressed') !== 'true'));
 }
 
 $('auth-switch').addEventListener('click', e => {
@@ -145,6 +161,8 @@ async function signInSelfHosted(user, pass) {
 form.addEventListener('submit', async e => {
   e.preventDefault();
   errorEl.textContent = '';
+  // hidden again before it's sent, so password managers see a password box
+  toggles.forEach(btn => showPassword(btn, false));
   const user = username.value.trim();
   const pass = password.value;
   const creating = mode === 'signup' || mode === 'setup';

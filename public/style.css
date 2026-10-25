@@ -1046,6 +1046,14 @@ select:focus,
 .auth-legal { margin-top: 14px; font-size: 0.8rem; color: var(--muted); text-align: center; }
 .auth-legal a { color: var(--ink-2); }
 
+/* show / hide a password: the eye sits inside the end of the box */
+.password-field { position: relative; }
+.form-group .password-field input { padding-right: 46px; }
+.password-toggle { position: absolute; top: 50%; right: 4px; transform: translateY(-50%); }
+.password-toggle:focus-visible { outline: none; box-shadow: var(--focus); }
+/* the slash means "hidden"; it goes once the password shows */
+.password-toggle[aria-pressed="true"] .eye-slash { display: none; }
+
 .auth-switch { padding: 16px 28px; border-top: 1px solid var(--line); text-align: center; font-size: 0.9rem; color: var(--muted); }
 .auth-switch a { font-weight: 600; color: var(--ink); }
 
@@ -1332,26 +1340,28 @@ a.menu-item { text-decoration: none; }
 /* ── footer (the website only: self-hosted installs and the desktop app drop it) ── */
 .app-footer {
   width: 100%;
-  padding: 16px max(24px, calc((100% - 1072px) / 2)) 20px;
+  padding: 24px 40px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 24px;
+  gap: 14px 48px;
   border-top: 1px solid var(--line);
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   color: var(--muted);
 }
 
-.footer-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
-.footer-links a { color: var(--ink-2); text-decoration: none; }
-.footer-links a:hover { color: var(--ink); text-decoration: underline; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 10px 36px; }
+.footer-links a { color: var(--muted); text-decoration: none; }
+.footer-links a:hover { color: var(--ink); text-decoration: underline; filter: none; }
+.footer-note { margin: 0; }
 
 
 .sh-version { margin-top: 10px; font-size: 0.85rem; color: var(--muted); }
 
 @media (max-width: 560px) {
-  .app-footer { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); flex-direction: column; align-items: flex-start; gap: 6px; }
+  .app-footer { padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); flex-direction: column; align-items: flex-start; gap: 16px; }
+  .footer-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; width: 100%; }
 }
 
 /* ── security codes: six groups of five digits ─────────────────────────────── */

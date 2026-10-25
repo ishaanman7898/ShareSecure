@@ -41,8 +41,13 @@ jobs:
       # Linux build unsigned. See docs/SIGNING.md.
       # Missing secrets arrive as empty strings, which electron-builder would read
       # as a certificate path, so unset them.
+      # 7-Zip packs ARM64 Windows code with its ARM64 filter, which the NSIS
+      # installer can't unpack: it silently skips every .exe and .dll. BCJ is
+      # one it can.
       - name: Build
         shell: bash
+        env:
+          ELECTRON_BUILDER_7Z_FILTER: BCJ
         run: |
           for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
             if [ -z "${!v}" ]; then unset "$v"; fi
