@@ -246,6 +246,17 @@ test('branches: a link reshared many times can still be deleted, in a few querie
   for (const id of [root.shortId, kids[0], kids[119], grandkid]) assert(!db.prepare('SELECT 1 FROM files WHERE short_id = ?').get(id), id);
 });
 
+test('SESSIONS_VALID_FROM signs out every session made before it', async () => {
+  const old = 'Bearer ' + await api.signToken({ userId: 1, username: 'alice' }, env);
+  assert.equal((await api.verifyToken(old, env)).username, 'alice');
+  const later = { ...env, SESSIONS_VALID_FROM: String(Math.floor(Date.now() / 1000) + 60) };
+  assert.equal(await api.verifyToken(old, later), null);
+  // a session made after the cutoff still works
+  const fresh = 'Bearer ' + await api.signToken({ userId: 1, username: 'alice' }, { ...later, now: 0 });
+  const past = { ...env, SESSIONS_VALID_FROM: String(Math.floor(Date.now() / 1000) - 60) };
+  assert.equal((await api.verifyToken(fresh, past)).username, 'alice');
+});
+
 test('ids are evenly spread over all 62 letters and digits', () => {
   const seen = new Map();
   for (let i = 0; i < 2000; i++) for (const ch of api.randomId(31)) seen.set(ch, (seen.get(ch) || 0) + 1);

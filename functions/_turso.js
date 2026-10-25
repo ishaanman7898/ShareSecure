@@ -235,6 +235,10 @@ export async function verifyToken(authHeader, env) {
     // older tokens have no exp, so they run out 30 days after they were issued
     const exp = typeof payload.exp === 'number' ? payload.exp : (payload.iat ?? 0) + TOKEN_TTL_S;
     if (exp < Date.now() / 1000) return null;
+    // SESSIONS_VALID_FROM (seconds since 1970) signs everyone out who signed
+    // in before it, without changing TOKEN_SECRET (which file tags still use)
+    const validFrom = Number(env.SESSIONS_VALID_FROM) || 0;
+    if ((Number(payload.iat) || 0) < validFrom) return null;
     const userId = parseInt(payload.userId, 10);
     if (!Number.isSafeInteger(userId) || userId < 1) return null;
     const user = (await getDb(env).execute({ sql: 'SELECT username FROM users WHERE id = ?', args: [userId] })).rows[0];
