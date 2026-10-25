@@ -1045,22 +1045,16 @@ select:focus,
   background: var(--paper);
 }
 .auth-page > :not(.auth-gradient) { position: relative; z-index: 1; }
-.auth-page .topbar {
-  background: #000;
-  border-bottom-color: #000;
-}
-.auth-page .brand { color: #fff; }
-.auth-page #auth-back {
-  color: #fff;
-  border-color: #555;
-}
-.auth-page #auth-back:hover { border-color: #fff; }
+/* the top bar floats over the gradient instead of cutting it off */
+.auth-page .topbar { border-bottom-color: transparent; }
 .auth-main { flex: 1; display: grid; place-items: center; padding: 40px 16px; }
 
 .auth-panel {
   width: 100%;
   max-width: 400px;
-  background: color-mix(in srgb, var(--surface) 91%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
 }

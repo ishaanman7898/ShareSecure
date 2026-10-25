@@ -3,13 +3,11 @@ import { signIn as opaqueSignIn, register as opaqueRegister, postWith } from './
 import { mountGradientASCII } from './gradient-ascii.js';
 
 mountGradientASCII(document.getElementById('auth-gradient'), {
-  shape: 'horizon',
-  cellSize: 17,
-  density: 0.72,
-  glyphOpacity: 0.62,
-  gradientOpacity: 0.55,
-  glow: 0.12,
+  shape: 'rise',
+  cellSize: 18,
+  density: 0.8,
   speed: 0.7,
+  lightMode: !matchMedia('(prefers-color-scheme: dark)').matches,
 });
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
