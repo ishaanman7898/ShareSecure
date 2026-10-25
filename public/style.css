@@ -1036,12 +1036,22 @@ select:focus,
 .update-actions .btn { min-height: 36px; padding: 0 14px; font-size: 0.86rem; }
 
 /* ── sign-in page ── */
+.auth-gradient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--paper);
+}
+.auth-gradient .gradient-ascii-canvas { display: block; width: 100%; height: 100%; }
+.auth-page > :not(.auth-gradient) { position: relative; z-index: 1; }
 .auth-main { flex: 1; display: grid; place-items: center; padding: 40px 16px; }
 
 .auth-panel {
   width: 100%;
   max-width: 400px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 91%, transparent);
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
 }

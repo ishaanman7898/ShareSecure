@@ -1,5 +1,16 @@
 import { setUpKeys, newKeyFields } from './keys.js';
 import { signIn as opaqueSignIn, register as opaqueRegister, postWith } from './opaque.js';
+import { mountGradientASCII } from './gradient-ascii.js';
+
+mountGradientASCII(document.getElementById('auth-gradient'), {
+  shape: 'horizon',
+  cellSize: 17,
+  density: 0.72,
+  glyphOpacity: 0.62,
+  gradientOpacity: 0.55,
+  glow: 0.12,
+  speed: 0.7,
+});
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 const inDesktop = /ShareSecureDesktop\//.test(navigator.userAgent);
