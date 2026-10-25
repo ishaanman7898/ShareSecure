@@ -9,6 +9,7 @@ import { refill, takeToken, forgetTokens } from './tokens.js';
 import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
 import { confirmAction } from './confirm.js';
+import { mountGradientASCII } from './gradient-ascii.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
@@ -1526,6 +1527,15 @@ function showSignedIn(username) {
   document.body.classList.add('is-logged-in');
   landingPage.classList.add('hidden');
   document.getElementById('app-grid')?.classList.remove('hidden');
+  if (/ShareSecureDesktop\//.test(navigator.userAgent)) {
+    mountGradientASCII(document.getElementById('desktop-gradient'), {
+      colors: ['#1e3fd8', '#f6f8ff', '#a5d8ff', '#38bdf8'],
+      shape: 'horizon',
+      characters: ' =+xX0S8#@',
+      cellSize: 17,
+      density: 0.78,
+    });
+  }
 }
 
 function initAuth() {

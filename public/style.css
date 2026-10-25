@@ -330,6 +330,19 @@ body.page-loading > :not(.page-loader) { visibility: hidden; }
   align-items: start;
 }
 
+.gradient-showcase { display: none; }
+body.is-desktop .gradient-showcase {
+  display: block;
+  position: relative;
+  grid-column: 1 / -1;
+  height: clamp(145px, 23vh, 220px);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--sunken);
+}
+.gradient-showcase .gradient-ascii-canvas { position: absolute; inset: 0; display: block; }
+
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
