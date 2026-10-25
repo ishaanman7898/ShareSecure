@@ -33,12 +33,39 @@
 
     <div class="timeline">
 
-      <!-- v1.13.0 -->
+      <!-- v1.13.1 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.13.1</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge">Latest</span>
+        </div>
+        <div class="release-body">
+
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>Sign-in can’t be faked</strong> A made-up sign-in request could get a session for someone else’s account without their password. The server now only accepts sign-in steps it sealed itself. If you’re worried, sign out and back in.</li>
+              <li><strong>Sign-ups go through their limit</strong> New accounts can’t skip the step that limits how many are made, so nobody can claim usernames in bulk, and a few addresses can no longer stop everyone else from signing up.</li>
+              <li><strong>Your own ShareSecure is yours</strong> Until its owner account exists, setting it up from another device or through Docker asks for the code it prints when it starts, so nobody else on the network or the public link can claim it first. Wrong passwords tried through the public link no longer lock you out on your own computer.</li>
+              <li><strong>Longer links</strong> New links are 12 characters instead of 8, so they can’t be guessed, and every character is equally likely. Older links keep working.</li>
+            </ul>
+          </div>
+
+          <div class="change-group">
+            <h3>Fixes</h3>
+            <ul class="change-list">
+              <li><strong>Deleting a link shared on many times</strong> A link reshared a few dozen times could fail to delete. It now deletes in a few steps however many times it was shared on.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- v1.13.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.13.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
 
