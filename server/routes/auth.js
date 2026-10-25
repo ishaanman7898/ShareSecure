@@ -21,8 +21,9 @@ function ownerExists() {
 }
 
 // ── GET /api/auth/status ──────────────────────────────────────────────────────
-router.get('/status', (_req, res) => {
-  res.json({ setupRequired: !ownerExists() });
+router.get('/status', (req, res) => {
+  const setupRequired = !ownerExists();
+  res.json({ setupRequired, setupCodeNeeded: setupRequired && !session.fromThisComputer(req) });
 });
 
 // ── POST /api/auth/register (first-run setup only) ──────────────────────────
@@ -35,6 +36,9 @@ router.post('/register', (req, res) => {
   }
   if (password.length < MIN_PASSWORD) {
     return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD} characters.` });
+  }
+  if (!session.fromThisComputer(req) && !session.setupCodeOk(req.body?.setup_code)) {
+    return res.status(403).json({ error: 'Enter the setup code shown in the window or log where ShareSecure is running.', code: 'setup_code' });
   }
 
   const hashed = session.hashPassword(password);
@@ -51,7 +55,8 @@ router.post('/register', (req, res) => {
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
 router.post('/login', (req, res) => {
-  const wait = session.lockoutRemainingMs();
+  const from = session.fromThisComputer(req) ? 'local' : 'remote';
+  const wait = session.lockoutRemainingMs(from);
   if (wait > 0) {
     return res.status(429).json({ error: `Too many attempts. Try again in ${Math.ceil(wait / 1000)} seconds.` });
   }
@@ -62,11 +67,11 @@ router.post('/login', (req, res) => {
   const check = user ? session.verifyPassword(password, user.access_code) : { ok: false };
 
   if (!check.ok) {
-    session.recordFailure();
+    session.recordFailure(from);
     return res.status(401).json({ error: 'Wrong username or password.' });
   }
 
-  session.recordSuccess();
+  session.recordSuccess(from);
 
   res.json({ success: true, username: user.username, token: session.issueToken(user) });
 });

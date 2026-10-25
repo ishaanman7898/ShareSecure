@@ -7,7 +7,7 @@ const multer = require('multer');
 
 const { db, UPLOADS_DIR } = require('../db');
 const {
-  generateId, hmacHex, compress, decompress, getEncKey, encryptString, decryptString,
+  generateId, LINK_ID_LENGTH, hmacHex, compress, decompress, getEncKey, encryptString, decryptString,
   quantizeToHour, padSize, randomHex, encryptWithPerFileKey, decryptWithPerFileKey,
   stripDocxMetadata, stripPdfMetadata,
 } = require('../utils');
@@ -62,7 +62,7 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
   const allow_download    = body.allow_download    === '1' ? 1 : 0;
   const displayName = types.nameFor(body.display_name, file.originalname, mimeType);
 
-  const shortId     = generateId(8);
+  const shortId     = generateId(LINK_ID_LENGTH);
   const deleteToken = generateId(24);
 
   // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
@@ -279,7 +279,7 @@ router.post('/reshare/:shortId', (req, res) => {
 
   if (goneIfExpired(file, res)) return;
 
-  const newShortId      = generateId(8);
+  const newShortId      = generateId(LINK_ID_LENGTH);
   const newDeleteToken  = generateId(24);
   const newIntegrity    = randomHex(32);    // privacy: random hash, breaks content-fingerprint correlation
   const reshareUploadAt = quantizeToHour(); // privacy: quantize to hour boundary

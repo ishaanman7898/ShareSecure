@@ -145,3 +145,49 @@ test('MCP: shares text and files, refuses fakes, and takes chunked uploads', asy
     server.close();
   }
 });
+
+// a request as if from elsewhere: through the public tunnel it comes from this
+// computer, but with the tunnel's host name
+function request(port, path, body, host = `127.0.0.1:${port}`) {
+  const http = require('node:http');
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request({ host: '127.0.0.1', port, path, method: body === undefined ? 'GET' : 'POST', headers: { Host: host, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data || '') } }, res => {
+      let text = '';
+      res.on('data', c => { text += c; });
+      res.on('end', () => resolve({ status: res.statusCode, data: JSON.parse(text || '{}') }));
+    });
+    req.on('error', reject);
+    req.end(data);
+  });
+}
+
+test('setup: only this computer, or someone with the console’s code, can claim the owner account', async () => {
+  const session = require(path.join(root, 'server', 'session.js'));
+  const app = express();
+  app.use(express.json());
+  app.use('/api/auth', require(path.join(root, 'server', 'routes', 'auth.js')));
+  const server = app.listen(0);
+  try {
+    const port = server.address().port;
+    const remote = 'someone-else.loca.lt';
+    const owner = { username: 'owner', access_code: 'owner-password-1' };
+    assert.equal((await request(port, '/api/auth/status', undefined, remote)).data.setupCodeNeeded, true);
+    assert.equal((await request(port, '/api/auth/status')).data.setupCodeNeeded, false);
+    // from elsewhere, without the code or with a wrong one: refused, and nobody owns it
+    assert.equal((await request(port, '/api/auth/register', owner, remote)).data.code, 'setup_code');
+    assert.equal((await request(port, '/api/auth/register', { ...owner, setup_code: '0000000000' }, remote)).status, 403);
+    assert.equal((await request(port, '/api/auth/status')).data.setupRequired, true);
+    // with the code from the console it works
+    assert.equal((await request(port, '/api/auth/register', { ...owner, setup_code: session.getSetupCode() }, remote)).status, 200);
+
+    // guesses through the public link lock out the public link, not this computer
+    for (let i = 0; i < 6; i++) await request(port, '/api/auth/login', { username: 'owner', access_code: 'wrong-guess' }, remote);
+    assert.equal((await request(port, '/api/auth/login', owner, remote)).status, 429);
+    const home = await request(port, '/api/auth/login', owner);
+    assert.equal(home.status, 200);
+    assert(home.data.token);
+  } finally {
+    server.close();
+  }
+});

@@ -5,7 +5,7 @@
 // Everything here is WebCrypto's ECDH, HKDF and HMAC, so it's quick enough for
 // Cloudflare's CPU limit. The server's OPAQUE keys come from ENCRYPTION_KEY,
 // so there's no extra secret to set up.
-import { getDb, migrateOnce, hmacHex, findUser, ensureUserColumns, signToken, encryptStr, decryptStr, sha256, USERS_TABLE } from './_turso.js';
+import { getDb, migrateOnce, hmacHex, findUser, ensureUserColumns, signToken, encryptStr, openOwnSeal, sha256, USERS_TABLE } from './_turso.js';
 import {
   credentialId, hkdfExpand, hkdfExtract, keySchedule, preamble, ecdh, scalarToPkcs8, toScalar, sameBytes, xor
 } from '../public/opaque.js';
@@ -47,7 +47,7 @@ export async function attemptKeys(request, username, env, kind = 'login') {
   const ip = request.headers.get('CF-Connecting-IP') || '';
   const keys = [{ key: await hmacHex(env.TOKEN_SECRET, `${kind}:u:${name}:ip:${ip}`), max: LIMITS.userFromIp }];
   if (ip) keys.push({ key: await hmacHex(env.TOKEN_SECRET, `${kind}:ip:${ip}`), max: LIMITS.ip, address: true });
-  keys.push({ key: await hmacHex(env.TOKEN_SECRET, `${kind}:u:${name}`), max: LIMITS.user });
+  keys.push({ key: await hmacHex(env.TOKEN_SECRET, `${kind}:u:${name}`), max: LIMITS.user, anywhere: true });
   return keys;
 }
 
@@ -112,6 +112,22 @@ async function evaluate(keys, username, blindedB64) {
 export async function startRecord(env, username, blinded) {
   const keys = await getServerKeys(env);
   return { evaluated: toB64url(await evaluate(keys, username, blinded)), serverPublicKey: toB64url(keys.publicKey) };
+}
+
+// A new account can only be saved with the state its first half handed out,
+// for that name and within a few minutes. Without it, anyone could skip the
+// first half (and its limit on new accounts) and claim names by the thousand.
+const REGISTER_TTL_MS = 10 * 60 * 1000;
+const nameKey = username => String(username).toLowerCase();
+
+export const registerState = (env, username) =>
+  encryptStr(JSON.stringify({ name: nameKey(username), exp: Date.now() + REGISTER_TTL_MS }), null, env, 'opaque-register');
+
+export async function registerStateOk(env, state, username) {
+  try {
+    const got = JSON.parse(await openOwnSeal(state, env, 'opaque-register'));
+    return got?.name === nameKey(username) && got.exp > Date.now();
+  } catch { return false; }
 }
 
 // Checks a record from the browser and turns it into what's stored.
@@ -201,7 +217,7 @@ export async function checkProof(context, body) {
   const db = getDb(env);
   await ensureAuthTables(db);
   let state;
-  try { state = JSON.parse(await decryptStr(String(body?.state || ''), null, env, 'opaque-login')); } catch {
+  try { state = JSON.parse(await openOwnSeal(body?.state, env, 'opaque-login')); } catch {
     return fail('That sign-in has expired. Try again.', 401);
   }
   if (!state?.uid || state.exp < Date.now()) return fail('That sign-in has expired. Try again.', 401);

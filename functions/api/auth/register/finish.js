@@ -1,14 +1,16 @@
-// POST /api/auth/register/finish { username, record, public_key, private_key_box }
+// POST /api/auth/register/finish { username, state, record, public_key, private_key_box }
 // Saves the new account. `record` is what the server keeps instead of a
 // password (OPAQUE), and the key pair is the account's end-to-end keys, with
-// the private half locked in the browser.
+// the private half locked in the browser. `state` comes from register/start,
+// so every new account has been through its limit.
 import { getDb, ensureUserColumns } from '../../../_turso.js';
-import { USERNAME, recordFrom, keyPairFrom, ensureAuthTables, readJson, fail } from '../../../_auth.js';
+import { USERNAME, recordFrom, keyPairFrom, registerStateOk, ensureAuthTables, readJson, fail } from '../../../_auth.js';
 
 export async function onRequestPost(context) {
   const body = await readJson(context.request);
   const username = String(body?.username || '').trim().normalize('NFKC');
   if (!USERNAME.test(username)) return fail('That username isn’t allowed.');
+  if (!(await registerStateOk(context.env, body?.state, username))) return fail('That sign-up has expired. Try again.', 401);
   const record = recordFrom(body);
   const keys = keyPairFrom(body);
   if (!record || keys === false) return fail('That account request is malformed.');

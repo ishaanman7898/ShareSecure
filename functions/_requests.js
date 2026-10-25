@@ -6,7 +6,7 @@
 // asked for); the public key is what the uploader's browser seals each file
 // to, taken from the link so a compromised server can't swap it. Files land in
 // your inbox sealed, so the server never sees a file, its name, the note or the label.
-import { getDb, migrateOnce, getUserTag, ensureFileColumns, randomId, bufToB64, findUser } from './_turso.js';
+import { getDb, migrateOnce, getUserTag, ensureFileColumns, randomId, LINK_ID_LENGTH, bufToB64, findUser } from './_turso.js';
 import { isSealed, MAX_SEALED_FILE, BOX_OVERHEAD, newFileKey, lockText, sealKey, toB64url } from '../public/sealed.js';
 
 export const MAX_OPEN = 10;            // open requests per account
@@ -139,7 +139,7 @@ export async function receive(id, form, env) {
   const giveBack = () => db.execute({ sql: 'UPDATE file_requests SET received = received - 1 WHERE id = ? AND received > 0', args: [String(id)] }).catch(() => {});
 
   const ownerTag = await getUserTag(Number(req.owner_id), env);
-  const shortId = randomId(8);
+  const shortId = randomId(LINK_ID_LENGTH);
   try {
     await db.execute({
       sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token,

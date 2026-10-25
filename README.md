@@ -183,7 +183,7 @@ docker run -d --name sharesecure --restart unless-stopped -p 3000:3000 \
   -v sharesecure-data:/app/data $(docker build -q https://github.com/ishaanman7898/ShareSecure.git)
 ```
 
-The installers set up Node.js if needed and start ShareSecure at `http://localhost:3000`. The first time you open it, you create the owner account. Only the owner can upload; people you share with don't need an account.
+The installers set up Node.js if needed and start ShareSecure at `http://localhost:3000`. The first time you open it, you create the owner account. Only the owner can upload; people you share with don't need an account. Setting up from another device (or through Docker) asks for the setup code the server prints when it starts (`docker logs sharesecure`), so nobody else on the network can claim it first.
 
 - **Data** lives in your app-data folder, not the install folder:
   - Windows: `%LOCALAPPDATA%\ShareSecure`

@@ -32,7 +32,7 @@ require('dotenv').config({ path: envPath });
 const express = require('express');
 const { db, UPLOADS_DIR } = require('./db');
 const { purgeExpired, purgeOrphans } = require('./purge');
-const { requireOwner } = require('./session');
+const { requireOwner, fromThisComputer, getSetupCode } = require('./session');
 const updater = require('./updater');
 
 const app = express();
@@ -133,12 +133,12 @@ app.use('/connect', require('./mcp').connectRouter);
 // Returns selfHostMode: true so the frontend can skip auth and show admin UI.
 // This endpoint only exists in the Express server, not in Cloudflare Pages functions,
 // so the frontend uses its presence to detect self-hosted mode.
-app.get('/api/mode', (_req, res) => {
+app.get('/api/mode', (req, res) => {
   const setupRequired = db.prepare("SELECT COUNT(*) AS n FROM users WHERE access_code LIKE 'scrypt$%'").get().n === 0;
   // the public https address links are made with (the tunnel, or your domain), so
   // the app never hands out a localhost link it can't be opened from elsewhere
   const publicUrl = /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null;
-  res.json({ selfHostMode: true, setupRequired, version: updater.status().current, publicUrl });
+  res.json({ selfHostMode: true, setupRequired, setupCodeNeeded: setupRequired && !fromThisComputer(req), version: updater.status().current, publicUrl });
 });
 
 // ── updates (owner only) ──────────────────────────────────────────────────────
@@ -386,6 +386,11 @@ app.listen(PORT, async () => {
   console.log(`\n  Your data    →  ${DATA_DIR}`);
   console.log(`  Database     →  ${DB_PATH}`);
   console.log(`  Uploads      →  ${UPLOADS_DIR}`);
+  if (!db.prepare("SELECT COUNT(*) AS n FROM users WHERE access_code LIKE 'scrypt$%'").get().n) {
+    console.log(`
+  Setup code   →  ${getSetupCode()}`);
+    console.log('  (Setting up the owner account from another device asks for it.)');
+  }
   if (!process.env.ENCRYPTION_KEY) {
     console.warn('\n  [warn] ENCRYPTION_KEY not set — files stored unencrypted on disk.');
     console.warn('         Generate one with: node -e "require(\'crypto\').randomBytes(32).toString(\'hex\') |> console.log"');

@@ -225,6 +225,36 @@ test('MCP refuses cross-origin calls and oversized bodies', async () => {
   assert.equal((await mcp.handleMcp(huge)).status,413);
 });
 
+test('branches: a link reshared many times can still be deleted, in a few queries', async () => {
+  freshDay();
+  const deleteHandler = (await load('api/delete/[shortId].js')).onRequestPost;
+  const call = (handler, id, init = {}) => handler(context('/api/x/' + id, { user: null, params: { shortId: id }, headers: { 'Content-Type': 'application/json' }, ...init }));
+  const root = await upload('popular.txt', 'Reshared a lot');
+  assert.equal(root.shortId.length, 12);
+  const kids = [];
+  for (let i = 0; i < 120; i++) kids.push((await (await call(reshareHandler, root.shortId, { body: '{}' })).json()).shortId);
+  const grandkid = (await (await call(reshareHandler, kids[0], { body: '{}' })).json()).shortId;
+  // count the database calls the delete makes (Cloudflare caps them per request)
+  const before = global.fetch;
+  let calls = 0;
+  global.fetch = (...args) => { calls++; return before(...args); };
+  try {
+    const del = await call(deleteHandler, root.shortId, { body: JSON.stringify({ deleteToken: root.deleteToken }) });
+    assert.equal(del.status, 200, await del.clone().text());
+  } finally { global.fetch = before; }
+  assert(calls < 20, `deleting took ${calls} database calls`);
+  for (const id of [root.shortId, kids[0], kids[119], grandkid]) assert(!db.prepare('SELECT 1 FROM files WHERE short_id = ?').get(id), id);
+});
+
+test('ids are evenly spread over all 62 letters and digits', () => {
+  const seen = new Map();
+  for (let i = 0; i < 2000; i++) for (const ch of api.randomId(31)) seen.set(ch, (seen.get(ch) || 0) + 1);
+  assert.equal(seen.size, 62);
+  // 62,000 characters: about 1,000 each, give or take 32. With the old modulo
+  // the first 8 letters came up about 1,211 times.
+  for (const [ch, n] of seen) assert(n > 850 && n < 1150, `${ch} came up ${n} times`);
+});
+
 test('MCP refuses private URL literals and unsafe schemes before networking',async()=>{
   for(const url of ['http://example.com/file','https://127.0.0.1/file','https://[::1]/file','https://localhost/file','https://service.internal/file','https://example.com:8443/file','https://user:password@example.com/file']) {
     assert((await mcp.fetchFile(url,context('/mcp'))).error,url);
@@ -406,6 +436,29 @@ test('OPAQUE: new accounts sign in without the password ever reaching the server
   assert.equal((await post('/api/auth/login/finish', { ...other.proof, client_mac: sealed.toB64url(sealed.newFileKey()) })).status, 401);
   // a name that's taken can't be registered again, in any capitalisation
   await assert.rejects(opaque.register(post, 'CAROL', 'another password'), /already exists/);
+});
+
+test('OPAQUE: a made-up sign-in state can’t sign in as anyone, or make an account', async () => {
+  const opaque = await publicLib('opaque.js');
+  const { post } = await authPost();
+  // a state the server never handed out, in plain JSON, with a proof to match it
+  const mac = sealed.toB64url(sealed.newFileKey());
+  const forged = await post('/api/auth/login/finish', { state: JSON.stringify({ uid: 1, mac, exp: Date.now() + 60000 }), client_mac: mac });
+  assert.equal(forged.status, 401);
+  assert(!forged.data.token);
+
+  // a new account has to come through register/start, for the same name
+  const record = { client_public_key: (await sealed.makeKeyPair()).publicKey, masking_key: sealed.toB64url(sealed.newFileKey()), envelope: sealed.toB64url(new Uint8Array(64)) };
+  assert.equal((await post('/api/auth/register/finish', { username: 'squatter', record })).status, 401);
+  const plain = JSON.stringify({ name: 'squatter', exp: Date.now() + 60000 });
+  assert.equal((await post('/api/auth/register/finish', { username: 'squatter', record, state: plain })).status, 401);
+  const started = await post('/api/auth/register/start', { username: 'fern', blinded: (await sealed.makeKeyPair()).publicKey });
+  assert.equal(started.status, 200, JSON.stringify(started.data));
+  assert.equal((await post('/api/auth/register/finish', { username: 'squatter', record, state: started.data.state })).status, 401);
+  assert(!db.prepare("SELECT 1 FROM users WHERE username = 'squatter'").get());
+  // the real thing still works
+  await opaque.register(post, 'fern', 'fern-password-long', newKeys);
+  assert(db.prepare("SELECT 1 FROM users WHERE username = 'fern'").get());
 });
 
 test('OPAQUE: older password accounts switch once, then never send the password again', async () => {

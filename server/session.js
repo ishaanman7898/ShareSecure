@@ -63,27 +63,50 @@ function requireOwner(req, res, next) {
   next();
 }
 
-// Slow down password guessing: after 5 failures, lock sign-in for a growing period.
-let failures = 0;
-let lockedUntil = 0;
-
-function lockoutRemainingMs() {
-  return Math.max(0, lockedUntil - Date.now());
+// A request made on the computer ShareSecure runs on. Requests through the
+// public tunnel also arrive from this computer, but carry the tunnel's host name.
+function fromThisComputer(req) {
+  const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
+  const addr = String(req.socket.remoteAddress || '');
+  const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+  return loopback && ['localhost', '127.0.0.1', '::1'].includes(host);
 }
 
-function recordFailure() {
-  failures++;
-  if (failures >= 5) {
-    lockedUntil = Date.now() + Math.min(15 * 60, 30 * 2 ** (failures - 5)) * 1000;
+// Until the owner account exists, whoever reaches the server first could
+// claim it, and it's often reachable from elsewhere (the same network,
+// Docker's published port, the public tunnel). So setting up from anywhere
+// but this computer takes the code printed in the server's console.
+let setupCode = null;
+const getSetupCode = () => (setupCode ||= crypto.randomBytes(5).toString('hex'));
+
+function setupCodeOk(given) {
+  const a = Buffer.from(String(given || '').trim().toLowerCase()), b = Buffer.from(getSetupCode());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Slow down password guessing: after 5 failures, lock sign-in for a growing
+// period. Tries from this computer are counted apart from the rest, so
+// someone guessing through the public link can't lock the owner out at home.
+const locks = { local: { failures: 0, lockedUntil: 0 }, remote: { failures: 0, lockedUntil: 0 } };
+
+function lockoutRemainingMs(from = 'remote') {
+  return Math.max(0, locks[from].lockedUntil - Date.now());
+}
+
+function recordFailure(from = 'remote') {
+  const lock = locks[from];
+  lock.failures++;
+  if (lock.failures >= 5) {
+    lock.lockedUntil = Date.now() + Math.min(15 * 60, 30 * 2 ** (lock.failures - 5)) * 1000;
   }
 }
 
-function recordSuccess() {
-  failures = 0;
-  lockedUntil = 0;
+function recordSuccess(from = 'remote') {
+  locks[from].failures = 0;
+  locks[from].lockedUntil = 0;
 }
 
 module.exports = {
   hashPassword, verifyPassword, issueToken, verifyToken, requireOwner,
-  lockoutRemainingMs, recordFailure, recordSuccess,
+  lockoutRemainingMs, recordFailure, recordSuccess, fromThisComputer, getSetupCode, setupCodeOk,
 };

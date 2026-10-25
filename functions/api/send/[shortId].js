@@ -12,7 +12,7 @@
 //                          the server doesn't learn who sent it, even to itself
 import {
   getDb, verifyToken, decryptStr, encryptStr, getUserTag, ensureFileColumns,
-  signInRequired, branchFrom, randomId, hmacHex, tokensMatch, findLiveFile, findUser
+  signInRequired, branchFrom, randomId, LINK_ID_LENGTH, hmacHex, tokensMatch, findLiveFile, findUser
 } from '../../_turso.js';
 import { spendToken } from '../../_tokens.js';
 import { isSealed } from '../../../public/sealed.js';
@@ -93,7 +93,7 @@ export async function onRequestPost(context) {
   // The recipient's copy is a branch of the sender's link (deleting that link
   // withdraws it) and stays inactive until they accept it, so every viewing
   // endpoint treats it as not found until then.
-  const newId = randomId(8);
+  const newId = randomId(LINK_ID_LENGTH);
   const copy = async col => file.e2e ? file[col] : encryptStr(await decryptStr(file[col], null, env, params.shortId), null, env, newId);
   const branch = await branchFrom(file, newId, env);
 

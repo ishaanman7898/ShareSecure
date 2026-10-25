@@ -145,11 +145,24 @@ export async function findUser(db, username, columns = 'id') {
 
 // ── small helpers ────────────────────────────────────────────────────────────
 
-// A random id from letters and digits (links, delete keys, tokens).
+// A random id from letters and digits (links, delete keys, tokens). Bytes of
+// 248 and up are skipped (248 is the largest multiple of 62 under 256), so
+// every character is equally likely.
 export function randomId(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)), b => chars[b % chars.length]).join('');
+  let out = '';
+  while (out.length < length) {
+    for (const b of crypto.getRandomValues(new Uint8Array(length))) {
+      if (b < 248 && out.length < length) out += chars[b % 62];
+    }
+  }
+  return out;
 }
+
+// A link's id is all it takes to open a file shared with end-to-end
+// encryption off, so it has to be too long to guess: 12 characters is about
+// 71 bits. Older links have 8 and keep working.
+export const LINK_ID_LENGTH = 12;
 
 const hex = buf => Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
 
@@ -352,6 +365,16 @@ export async function decryptStr(stored, key, env, id) {
   return new TextDecoder().decode(await decryptField(stored, key, env, id));
 }
 
+// Opens something this server sealed and handed to a browser to bring back
+// (the state between the two halves of signing in). Unlike decryptStr, which
+// passes through text that was never encrypted, it refuses anything not sealed
+// here: otherwise a browser could send plain JSON of its own making and have
+// it taken as the server's word.
+export async function openOwnSeal(stored, env, id) {
+  if (typeof stored !== 'string' || !stored.startsWith('enc2:')) throw new Error('not sealed by this server');
+  return decryptStr(stored, null, env, id);
+}
+
 // ── links and branches ───────────────────────────────────────────────────────
 // A reshare, or a copy sent to someone, is a "branch" of the link it came from.
 // It doesn't store that link's id, only a keyed hash of it, and its pointer to
@@ -399,14 +422,27 @@ export async function deleteBranch(db, shortId, env) {
     sql: 'SELECT short_id, parent_key, parent_short_id FROM files WHERE short_id = ?', args: [shortId]
   })).rows[0];
   if (!file) return null;
-  // walk down the tree of branches
+  // Walk down the tree of branches a level at a time, up to 100 links per
+  // query. One query per link would run out of the database calls a request
+  // may make (Cloudflare caps them), so anyone who reshared a link a few dozen
+  // times could stop its owner from deleting it.
   const ids = [shortId];
-  for (let i = 0; i < ids.length && ids.length < 5000; i++) {
-    const kids = (await db.execute({
-      sql: 'SELECT short_id FROM files WHERE parent_key = ? OR parent_short_id = ?',
-      args: [await parentKey(env, ids[i]), ids[i]]
-    })).rows;
-    for (const k of kids) if (!ids.includes(k.short_id)) ids.push(k.short_id);
+  const seen = new Set(ids);
+  for (let level = [shortId]; level.length && ids.length < 5000;) {
+    const next = [];
+    for (let i = 0; i < level.length; i += 100) {
+      const chunk = level.slice(i, i + 100);
+      const keys = await Promise.all(chunk.map(id => parentKey(env, id)));
+      const marks = list => list.map(() => '?').join(',');
+      const kids = (await db.execute({
+        sql: `SELECT short_id FROM files WHERE parent_key IN (${marks(keys)}) OR parent_short_id IN (${marks(chunk)})`,
+        args: [...keys, ...chunk]
+      })).rows;
+      for (const { short_id } of kids) {
+        if (!seen.has(short_id)) { seen.add(short_id); ids.push(short_id); next.push(short_id); }
+      }
+    }
+    level = next;
   }
   const original = !file.parent_key && !file.parent_short_id;
   // links made before branches were tracked are grouped under the original

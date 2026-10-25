@@ -41,6 +41,10 @@
           <label for="auth-confirm">Confirm password <span class="req" aria-hidden="true">*</span></label>
           <input type="password" id="auth-confirm" name="confirm" autocomplete="new-password" />
         </div>
+        <div class="form-group hidden" id="setup-code-group">
+          <label for="auth-setup-code">Setup code <span class="req" aria-hidden="true">*</span> <span class="label-hint">shown where ShareSecure is running</span></label>
+          <input type="text" id="auth-setup-code" name="setup_code" autocomplete="off" autocapitalize="none" spellcheck="false" />
+        </div>
         <p class="auth-error" id="auth-error" role="alert"></p>
         <button type="submit" class="btn btn-primary btn-full btn-lg" id="auth-submit">Sign in</button>
         <p class="auth-note hidden" id="auth-note"></p>

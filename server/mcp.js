@@ -23,6 +23,7 @@ const { decryptString, getEncKey } = require('./utils');
 const { purgeLink } = require('./purge');
 const { storeFile } = require('./routes/files');
 const { sendToCloud } = require('./routes/cloud');
+const { fromThisComputer } = require('./session');
 
 const router = express.Router();
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -64,13 +65,6 @@ function tokenOk(header) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Requests through the public tunnel carry the tunnel's host name.
-function fromThisComputer(req) {
-  const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
-  const addr = String(req.socket.remoteAddress || '');
-  const loopback = addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
-  return loopback && ['localhost', '127.0.0.1', '::1'].includes(host);
-}
 
 const baseUrl = () => (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
 

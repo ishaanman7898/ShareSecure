@@ -2,7 +2,7 @@
 // made it. It points at the original's bytes instead of copying them, and it's
 // a branch of the link it came from: deleting that link deletes this one too.
 // Which link it came from isn't stored in the clear (see branchFrom).
-import { getDb, decryptStr, encryptStr, ensureFileColumns, signInRequired, branchFrom, randomId, findLiveFile } from '../../_turso.js';
+import { getDb, decryptStr, encryptStr, ensureFileColumns, signInRequired, branchFrom, randomId, LINK_ID_LENGTH, findLiveFile } from '../../_turso.js';
 
 export async function onRequestPost(context) {
   const { params, env, request } = context;
@@ -21,7 +21,7 @@ export async function onRequestPost(context) {
     return Response.json({ error: 'This link works once, so it can’t be shared on.', code: 'once' }, { status: 403 });
   }
 
-  const newId = randomId(8);
+  const newId = randomId(LINK_ID_LENGTH);
   const deleteToken = randomId(24);
   // The name and type are re-encrypted under the new link's key. A sealed
   // (end-to-end) name is copied as it is: the same file key opens it.

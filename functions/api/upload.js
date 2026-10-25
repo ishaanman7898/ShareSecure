@@ -11,7 +11,7 @@
 //                           server knows a real account sent it, not which one
 import {
   getDb, purgeExpired, verifyToken, encryptField, encryptStr, getUserTag,
-  countUploadsToday, ensureFileColumns, randomId, bufToB64
+  countUploadsToday, ensureFileColumns, randomId, LINK_ID_LENGTH, bufToB64
 } from '../_turso.js';
 import { spendToken, issuerAccount, issuedToday, DAILY } from '../_tokens.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../../public/filetypes.js';
@@ -46,7 +46,7 @@ export async function onRequestPost(context) {
   if (!auth && !anonymous) return Response.json({ error: 'Sign in to share files.' }, { status: 401 });
 
   const buffer = await file.arrayBuffer();
-  const shortId = randomId(8);
+  const shortId = randomId(LINK_ID_LENGTH);
   let row;
 
   if (e2e) {

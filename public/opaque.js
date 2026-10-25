@@ -142,7 +142,7 @@ async function step(post, path, body, headers) {
 
 // Makes the account's record: what the server keeps instead of a password.
 // path is /api/auth/register (new account) or /api/auth/upgrade (an older
-// account moving to this sign-in). → { record, exportKey }
+// account moving to this sign-in). → { record, exportKey, state }
 async function makeRecord(post, path, username, password, headers) {
   const { r, blinded } = await blind(password);
   const start = await step(post, `${path}/start`, { username, blinded: toB64url(blinded) }, headers);
@@ -153,6 +153,8 @@ async function makeRecord(post, path, username, password, headers) {
   const envelope = join(nonce, await hmac(authKey, join(nonce, cleartext(serverPublic, clientPublic, username))));
   return {
     exportKey,
+    // a new account hands this back, so the server knows it went through start
+    state: start.state,
     record: {
       client_public_key: toB64url(clientPublic),
       masking_key: toB64url(await hkdfExpand(rpw, 'MaskingKey', 32)),
@@ -164,8 +166,8 @@ async function makeRecord(post, path, username, password, headers) {
 // New account. `afterKeys(exportKey)` returns extra fields to save with it
 // (the end-to-end key pair).
 export async function register(post, username, password, afterKeys) {
-  const { record, exportKey } = await makeRecord(post, '/api/auth/register', username, password);
-  await step(post, '/api/auth/register/finish', { username, record, ...(afterKeys ? await afterKeys(exportKey) : {}) });
+  const { record, exportKey, state } = await makeRecord(post, '/api/auth/register', username, password);
+  await step(post, '/api/auth/register/finish', { username, state, record, ...(afterKeys ? await afterKeys(exportKey) : {}) });
 }
 
 // Proves the password to the server without sending it. Returns the proof

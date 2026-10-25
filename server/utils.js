@@ -4,11 +4,21 @@ const zlib = require('zlib');
 
 const toBuffer = b => Buffer.isBuffer(b) ? b : Buffer.from(b);
 
-// random letters and digits
+// random letters and digits, each equally likely (bytes of 248 and up, past
+// the last whole multiple of 62, are skipped)
 function generateId(length = 8) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  return Array.from(crypto.randomBytes(length), b => chars[b % chars.length]).join('');
+  let out = '';
+  while (out.length < length) {
+    for (const b of crypto.randomBytes(length)) {
+      if (b < 248 && out.length < length) out += chars[b % 62];
+    }
+  }
+  return out;
 }
+
+// a link's id is all it takes to open a file, so it's too long to guess (about 71 bits)
+const LINK_ID_LENGTH = 12;
 
 const compress = buffer => zlib.deflateSync(toBuffer(buffer));
 const decompress = buffer => zlib.inflateSync(toBuffer(buffer));
@@ -280,7 +290,7 @@ function stripPdfMetadata(buf) {
 }
 
 module.exports = {
-  generateId, hmacHex, compress, decompress, getEncKey,
+  generateId, LINK_ID_LENGTH, hmacHex, compress, decompress, getEncKey,
   encryptString, decryptString, quantizeToHour, padSize, randomHex,
   encryptWithPerFileKey, decryptWithPerFileKey, stripDocxMetadata, stripPdfMetadata,
 };

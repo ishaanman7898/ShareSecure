@@ -29,6 +29,8 @@ const errorEl = $('auth-error');
 let mode = 'signin';
 let selfHost = false;
 let minLength = 10;
+// setting up a self-hosted ShareSecure from another device takes the code in its console
+let needsSetupCode = false;
 
 const COPY = {
   signin: {
@@ -71,6 +73,7 @@ function render() {
   $('auth-note').textContent = c.note || '';
   $('auth-note').classList.toggle('hidden', !c.note);
   $('confirm-group').classList.toggle('hidden', !creating);
+  $('setup-code-group').classList.toggle('hidden', !(mode === 'setup' && needsSetupCode));
   $('password-hint').textContent = creating ? `at least ${minLength} characters` : '';
   password.autocomplete = creating ? 'new-password' : 'current-password';
   $('auth-back').classList.toggle('hidden', selfHost);
@@ -168,7 +171,8 @@ form.addEventListener('submit', async e => {
   try {
     if (selfHost) {
       if (creating) {
-        const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass });
+        const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass, setup_code: $('auth-setup-code').value });
+        if (data.code === 'setup_code' && !needsSetupCode) { needsSetupCode = true; render(); $('auth-setup-code').focus(); }
         if (!ok) throw new Error(data.error || 'Couldn’t create the account. Try again.');
       }
       await signInSelfHosted(user, pass);
@@ -193,6 +197,7 @@ form.addEventListener('submit', async e => {
     if (selfHost) {
       minLength = 8;
       mode = info.setupRequired ? 'setup' : 'owner-signin';
+      needsSetupCode = info.setupCodeNeeded === true;
     } else {
       mode = new URLSearchParams(location.search).has('new') ? 'signup' : 'signin';
     }

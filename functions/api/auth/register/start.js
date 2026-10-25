@@ -1,7 +1,7 @@
 // POST /api/auth/register/start { username, blinded } — the first half of
 // making an account. The password never leaves the browser.
 import { getDb } from '../../../_turso.js';
-import { USERNAME, startRecord, ensureAuthTables, attemptKeys, tooManyTries, readJson, fail } from '../../../_auth.js';
+import { USERNAME, startRecord, registerState, ensureAuthTables, attemptKeys, tooManyTries, readJson, fail } from '../../../_auth.js';
 
 export async function onRequestPost(context) {
   const { env, request } = context;
@@ -11,14 +11,17 @@ export async function onRequestPost(context) {
 
   const db = getDb(env);
   await ensureAuthTables(db);
-  // a few new accounts per address, so nobody can make thousands
-  if (await tooManyTries(db, await attemptKeys(request, '*', env, 'register'), context)) {
+  // a few new accounts per address, so nobody can make thousands. Only the
+  // per-address counts: one count for everyone would let a handful of
+  // addresses stop anyone at all from signing up.
+  const tries = (await attemptKeys(request, '*', env, 'register')).filter(k => !k.anywhere);
+  if (await tooManyTries(db, tries, context)) {
     return fail('Too many new accounts from here. Try again later.', 429);
   }
   const taken = (await db.execute({ sql: 'SELECT id FROM users WHERE lower(username) = lower(?) LIMIT 1', args: [username] })).rows[0];
   if (taken) return fail('Username already exists');
   try {
-    return Response.json(await startRecord(env, username, body.blinded));
+    return Response.json({ ...(await startRecord(env, username, body.blinded)), state: await registerState(env, username) });
   } catch {
     return fail('That request is malformed.');
   }
