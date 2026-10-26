@@ -1,9 +1,11 @@
 'use strict';
 // ShareSecure desktop. On first launch you choose how to use it:
 //   account  sign in to your ShareSecure account (the website, in its own window)
-//   local    run a private ShareSecure on this computer; closing the window keeps
-//            it running in the tray, because share links only work while it's up
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, net: electronNet } = require('electron');
+//   local    run a private ShareSecure on this computer. Its server runs in a
+//            process of its own, which outlives the app: share links keep
+//            working after you quit, until the last one expires
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, ipcMain, net: electronNet } = require('electron');
+const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
@@ -19,6 +21,8 @@ if (!app.requestSingleInstanceLock()) {
 const CLOUD = 'https://sharesecure-du8.pages.dev';
 // set when the app restarts to create an account (see createAccount)
 const NEW_ACCOUNT_FLAG = '--new-account';
+// set when Windows starts the app at sign-in: bring the links back up, no window
+const BACKGROUND_FLAG = '--background';
 
 // Program files are read-only once packaged, so settings, the encryption key
 // and every stored file live in the user's app-data folder. It's a separate
@@ -27,6 +31,9 @@ const USER_DIR = app.getPath('userData');
 const DATA_DIR = path.join(USER_DIR, 'data');
 const PORT_FILE = path.join(USER_DIR, 'port.json');
 const MODE_FILE = path.join(USER_DIR, 'mode.json');
+// the running server's process id and port, so the next launch can find it
+const SERVER_FILE = path.join(USER_DIR, 'server.json');
+const UPDATES_FILE = path.join(USER_DIR, 'updates.json');
 // the full-bleed tile reads better at window and tray sizes than the Mac-grid one
 const ICON = path.join(__dirname, 'icon-win.png');
 
@@ -36,6 +43,8 @@ let quitting = false;
 let mode = null;     // 'account' | 'local' | null until chosen
 let origin = '';
 let toldAboutTray = false;
+let server = null;      // this computer's server process, while the app runs it
+let publicBase = null;  // the public address share links are made with (the tunnel)
 
 function readMode() {
   try {
@@ -86,17 +95,87 @@ async function waitForServer(url) {
   throw new Error('ShareSecure didn’t start');
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function isRunning(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+// A server left running after the app quit (keeping links up) has no line back
+// to this app. Stop it, and start one this app can talk to, on the same port.
+async function stopLeftoverServer() {
+  let saved = null;
+  try { saved = JSON.parse(fs.readFileSync(SERVER_FILE, 'utf8')); } catch {}
+  if (!saved?.pid || !isRunning(saved.pid)) return;
+  // only if ShareSecure is what answers on its port, not some process that got its id
+  try {
+    const res = await fetch(`http://localhost:${saved.port}/api/mode`, { signal: AbortSignal.timeout(2000) });
+    if (!(await res.json()).selfHostMode) return;
+  } catch { return; }
+  try { process.kill(saved.pid); } catch { return; }
+  for (let i = 0; i < 50 && (isRunning(saved.pid) || !(await portFree(saved.port))); i++) await sleep(100);
+}
+
 async function startServer() {
+  await stopLeftoverServer();
   const port = await choosePort();
-  process.env.PORT = String(port);
-  process.env.DATA_DIR = DATA_DIR;
-  process.env.ENV_FILE = path.join(DATA_DIR, '.env');
-  process.env.SHARESECURE_DESKTOP = '1';
-  // where sending to a username goes, once you link your ShareSecure account
-  process.env.SHARESECURE_CLOUD = CLOUD;
-  require('../server/index.js');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const log = fs.openSync(path.join(USER_DIR, 'server.log'), 'w');
+  // the app's own binary run as Node, detached so it can outlive the app
+  server = fork(path.join(__dirname, 'server-process.js'), [], {
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      PORT: String(port),
+      DATA_DIR,
+      ENV_FILE: path.join(DATA_DIR, '.env'),
+      SHARESECURE_DESKTOP: '1',
+      // where sending to a username goes, once you link your ShareSecure account
+      SHARESECURE_CLOUD: CLOUD,
+    },
+    stdio: ['ignore', log, log, 'ipc'],
+    detached: true,
+    windowsHide: true,
+  });
+  fs.closeSync(log);
+  server.unref();
+  fs.writeFileSync(SERVER_FILE, JSON.stringify({ pid: server.pid, port }));
+  const started = server;
+  let ready = false;
+  started.once('exit', () => {
+    if (server === started) server = null;
+    // it stopped while the app still needs it: start it again
+    if (ready && !quitting && mode === 'local') {
+      startServer().then(() => win?.loadURL(origin)).catch(err => dialog.showErrorBox('ShareSecure stopped', err.message));
+    }
+  });
   origin = `http://localhost:${port}`;
   await waitForServer(origin);
+  ready = true;
+  await refreshPublicBase();
+}
+
+function stopServer() {
+  if (server?.connected) server.send('stop');
+}
+
+// Share links point at the public tunnel, whose address the server picks.
+async function refreshPublicBase() {
+  try {
+    const res = await fetch(`${origin}/api/mode`);
+    publicBase = (await res.json()).publicUrl || publicBase;
+  } catch {}
+}
+setInterval(() => { if (server) refreshPublicBase(); }, 30 * 1000);
+
+// Whether any link is still live, that is, whether quitting leaves the server sharing.
+function hasLiveLinks() {
+  if (!server?.connected) return Promise.resolve(false);
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(false), 1000);
+    server.once('message', message => { clearTimeout(timer); resolve(message?.live === true); });
+    server.send('live?');
+  });
 }
 
 // Links that belong in the app window. In local mode, share links point at the
@@ -105,7 +184,7 @@ function inApp(url) {
   try {
     const u = new URL(url);
     if (mode === 'account') return u.origin === CLOUD ? url : null;
-    const base = process.env.BASE_URL && new URL(process.env.BASE_URL);
+    const base = publicBase && new URL(publicBase);
     if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (base && u.host === base.host)) {
       return origin + u.pathname + u.search + u.hash;
     }
@@ -139,7 +218,7 @@ function openWindow(url, size) {
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true },
+    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   wireLinks(w.webContents);
   w.once('ready-to-show', () => w.show());
@@ -163,7 +242,7 @@ function createMain(url) {
       toldAboutTray = true;
       new Notification({
         title: 'ShareSecure is still running',
-        body: 'Your links keep working while it runs. Quit from the tray icon to stop it.',
+        body: 'Your links keep working, even after you quit, until they expire. To stop them, choose Stop sharing and quit from the tray icon.',
         icon: ICON,
       }).show();
     }
@@ -201,6 +280,8 @@ function showWelcome() {
 
 async function start(chosen) {
   mode = chosen;
+  startAtSignIn(mode === 'local');
+  if (updater) updater.autoInstallOnAppQuit = mode !== 'local';
   if (mode === 'local') {
     try {
       await startServer();
@@ -240,6 +321,7 @@ async function createAccount() {
   });
   if (response !== 0) return;
   saveMode('account');
+  stopServer();
   quitting = true;
   app.relaunch({ args: [...process.argv.slice(1).filter(a => a !== NEW_ACCOUNT_FLAG), NEW_ACCOUNT_FLAG] });
   app.exit(0);
@@ -258,6 +340,7 @@ async function changeMode() {
   });
   if (response !== 0) return;
   try { fs.unlinkSync(MODE_FILE); } catch {}
+  stopServer();
   quitting = true;
   app.relaunch();
   app.exit(0);
@@ -274,27 +357,130 @@ function buildTrayMenu() {
     { label: 'Privacy policy', click: () => openWindow(`${origin || CLOUD}/privacy`, { width: 900, height: 820 }) },
     { label: 'Terms', click: () => openWindow(`${origin || CLOUD}/terms`, { width: 900, height: 820 }) },
     { type: 'separator' },
-    { label: 'Quit ShareSecure', click: () => { quitting = true; app.quit(); } },
+    { label: 'Quit ShareSecure', click: quit },
+    ...(mode === 'local' ? [{ label: 'Stop sharing and quit', click: () => { stopServer(); quit(); } }] : []),
   ]));
 }
 
+async function quit() {
+  quitting = true;
+  if (mode === 'local' && await hasLiveLinks() && Notification.isSupported()) {
+    new Notification({
+      title: 'Your links keep working',
+      body: 'ShareSecure keeps sharing in the background until your links expire, then stops by itself.',
+      icon: ICON,
+    }).show();
+  }
+  app.quit();
+}
+
+// Windows starts the app at sign-in, in the background, so links on this
+// computer come back after a restart. With none live, it exits right away.
+function startAtSignIn(on) {
+  if (process.platform !== 'win32' || !app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin: on, args: [BACKGROUND_FLAG] });
+}
+
 function createTray() {
-  const image = nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 });
+  // the folder without most of the tile's margin, so it reads at tray size
+  const full = nativeImage.createFromPath(ICON);
+  const { width } = full.getSize();
+  const inset = Math.round(width * 0.16);
+  const image = full.crop({ x: inset, y: inset, width: width - 2 * inset, height: width - 2 * inset })
+    .resize({ width: 16, height: 16, quality: 'best' });
   tray = new Tray(image);
   tray.setToolTip('ShareSecure');
   buildTrayMenu();
   tray.on('click', showMain);
 }
 
-function checkForUpdates() {
-  if (!app.isPackaged) return;
-  try {
-    const { autoUpdater } = require('electron-updater');
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-  } catch { /* updates are best effort */ }
+// ── updates ─────────────────────────────────────────────────────────────────
+// Shown under Updates in the account menu (see preload.js). In local mode an
+// update waits for "Restart to update" instead of installing on quit: quitting
+// leaves the server sharing, and installing would stop it.
+const updates = {
+  current: app.getVersion(),
+  status: app.isPackaged ? 'idle' : 'development',
+  latest: null,
+  progress: 0,
+  error: null,
+  autoUpdate: true,
+};
+let updater = null;
+
+const updateState = () => ({ ...updates, local: mode === 'local' });
+
+function setUpdates(patch) {
+  Object.assign(updates, patch);
+  for (const w of BrowserWindow.getAllWindows()) w.webContents.send('updates:status', updateState());
 }
 
-app.on('second-instance', showMain);
+function checkForUpdates() {
+  if (!updater || ['downloading', 'downloaded'].includes(updates.status)) return Promise.resolve();
+  return updater.checkForUpdates().catch(() => {});
+}
+
+function downloadUpdate() {
+  setUpdates({ status: 'downloading', progress: 0 });
+  updater.downloadUpdate().catch(() => {});
+}
+
+function initUpdates() {
+  try { updates.autoUpdate = JSON.parse(fs.readFileSync(UPDATES_FILE, 'utf8')).autoUpdate !== false; } catch {}
+  if (!app.isPackaged) return;
+  try {
+    ({ autoUpdater: updater } = require('electron-updater'));
+  } catch { return; /* updates are best effort */ }
+  updater.autoDownload = updates.autoUpdate;
+  updater.autoInstallOnAppQuit = mode !== 'local';
+  updater.on('checking-for-update', () => setUpdates({ status: 'checking', error: null }));
+  updater.on('update-not-available', info => setUpdates({ status: 'up-to-date', latest: info.version }));
+  updater.on('update-available', info => setUpdates({ status: updater.autoDownload ? 'downloading' : 'available', latest: info.version, progress: 0 }));
+  updater.on('download-progress', p => setUpdates({ status: 'downloading', progress: Math.round(p.percent) }));
+  updater.on('update-downloaded', info => setUpdates({ status: 'downloaded', latest: info.version }));
+  updater.on('error', err => setUpdates({ status: 'error', error: String(err?.message || 'Something went wrong').split('\n')[0].slice(0, 160) }));
+  checkForUpdates();
+  setInterval(checkForUpdates, 6 * 60 * 60 * 1000);
+}
+
+// Only the app's own pages, in the top frame, may ask.
+function fromApp(event) {
+  const frame = event.senderFrame;
+  if (!frame || frame.parent) return false;
+  try {
+    const from = new URL(frame.url).origin;
+    return from === CLOUD || (origin !== '' && from === new URL(origin).origin);
+  } catch { return false; }
+}
+
+ipcMain.handle('updates:status', e => (fromApp(e) ? updateState() : null));
+ipcMain.handle('updates:check', async e => {
+  if (!fromApp(e)) return null;
+  await checkForUpdates();
+  return updateState();
+});
+ipcMain.handle('updates:install', e => {
+  if (!fromApp(e) || !updater) return null;
+  if (updates.status === 'available') downloadUpdate();
+  else if (updates.status === 'downloaded') {
+    // the server stops for the install, and starts again when the app reopens
+    setImmediate(() => { quitting = true; stopServer(); updater.quitAndInstall(true, true); });
+  }
+  return updateState();
+});
+ipcMain.handle('updates:auto', (e, on) => {
+  if (!fromApp(e)) return null;
+  updates.autoUpdate = on === true;
+  try { fs.writeFileSync(UPDATES_FILE, JSON.stringify({ autoUpdate: updates.autoUpdate })); } catch {}
+  if (updater) {
+    updater.autoDownload = updates.autoUpdate;
+    if (updates.autoUpdate && updates.status === 'available') downloadUpdate();
+  }
+  setUpdates({});
+  return updateState();
+});
+
+app.on('second-instance', (_e, argv) => { if (!argv.includes(BACKGROUND_FLAG)) showMain(); });
 app.on('activate', showMain);
 app.on('before-quit', () => { quitting = true; });
 // in local mode stay alive in the tray when every window is closed
@@ -340,9 +526,15 @@ app.whenReady().then(async () => {
   // lets pages hide their "get the app" and "host it yourself" links in here
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
   const saved = readMode();
+  if (process.argv.includes(BACKGROUND_FLAG)) {
+    // started at sign-in: start the server and leave it sharing on its own
+    if (saved === 'local') await start(saved);
+    app.exit(0);
+    return;
+  }
   if (saved) await start(saved);
   createTray();
   if (mode === 'account' && process.argv.includes(NEW_ACCOUNT_FLAG)) createMain(mainUrl(true));
   else showMain();
-  checkForUpdates();
+  initUpdates();
 });

@@ -21,7 +21,7 @@ Upload a PDF, Word document, image or text file, choose how long the link lasts 
 |---|---|---|---|
 | **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day, 10 MB each |
 | **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: sign in | Same as the website | Any time until they expire | Same as the website |
-| **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: this computer | Only your computer | While the app is running | 10 MB each, no daily limit |
+| **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: this computer | Only your computer | Until they expire, while the computer is on | 10 MB each, no daily limit |
 | **[Self-hosted](#self-hosting)** (command line or Docker) | Only your machine or server | While the server is running | 10 MB each, no daily limit |
 
 The desktop app asks which one you want the first time it opens. You can switch later from its tray icon. The installers aren't code-signed yet: on Windows choose **More info → Run anyway**, and on a Mac open the app once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.

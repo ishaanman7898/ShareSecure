@@ -1554,6 +1554,8 @@ function initAuth() {
     setTimeout(checkOwnKey, 2000 + Math.random() * 4000);
     updateDashboard();
     startInboxPolling();
+    // the desktop app's version and updates, in the account menu
+    if (desktopUpdates) initUpdates();
   } else {
     if (userToken) logout();
     document.body.classList.remove('is-logged-in');
@@ -2243,6 +2245,8 @@ async function updateCall(path, body) {
 function renderUpdates(s) {
   updateVersion.textContent = `Version ${s.current}`;
   document.getElementById('menu-update-badge').classList.toggle('hidden', !s.updateAvailable);
+  document.getElementById('menu-version').textContent = `v${s.current}`;
+  document.getElementById('menu-version').classList.toggle('hidden', !!s.updateAvailable);
   autoUpdateInput.checked = !!s.autoUpdate;
   autoUpdateInput.disabled = !s.canUpdate;
   updateBtn.classList.add('hidden');
@@ -2301,9 +2305,49 @@ async function waitForRestart(fromVersion) {
   updateStatus.textContent = 'ShareSecure is taking a while to restart. Reload the page in a minute.';
 }
 
+// In the desktop app the app itself has the version and installs updates, with
+// an account or on this computer (see desktop/preload.js).
+const desktopUpdates = window.shareSecureDesktop?.updates;
+
+function renderDesktopUpdates(s) {
+  if (!s) return;
+  const ready = s.status === 'available' || s.status === 'downloaded';
+  updateVersion.textContent = `Version ${s.current}`;
+  document.getElementById('menu-update-badge').classList.toggle('hidden', !ready);
+  document.getElementById('menu-version').textContent = `v${s.current}`;
+  document.getElementById('menu-version').classList.toggle('hidden', ready);
+  autoUpdateInput.closest('.switch').classList.toggle('hidden', s.status === 'development');
+  autoUpdateInput.closest('.switch').querySelector('.switch-text').textContent = 'Download updates automatically';
+  autoUpdateInput.checked = s.autoUpdate;
+  autoUpdateInput.disabled = false;
+  updateCheckBtn.classList.toggle('hidden', s.status === 'development');
+  updateCheckBtn.disabled = s.status === 'checking' || s.status === 'downloading';
+  updateBtn.disabled = false;
+  updateStatus.textContent = {
+    development: 'This is a development copy, so it doesn’t update itself.',
+    idle: 'Checking for updates…',
+    checking: 'Checking for updates…',
+    'up-to-date': 'You’re up to date.',
+    available: `Version ${s.latest} is available.`,
+    downloading: `Downloading version ${s.latest}… ${s.progress}%`,
+    // on this computer, quitting leaves your links up, so the update waits for a restart
+    downloaded: s.local
+      ? `Version ${s.latest} is ready. Restart ShareSecure to install it.`
+      : `Version ${s.latest} is ready. It installs when you quit, or restart now.`,
+    error: `Couldn’t check for updates: ${s.error}`,
+  }[s.status] || '';
+  updateBtn.textContent = s.status === 'downloaded' ? 'Restart to update' : `Update to ${s.latest}`;
+  updateBtn.classList.toggle('hidden', !ready);
+}
+
 async function initUpdates() {
   if (!updatesMenu) return;
   updatesMenu.classList.remove('hidden');
+  if (desktopUpdates) {
+    desktopUpdates.onChange(renderDesktopUpdates);
+    renderDesktopUpdates(await desktopUpdates.status().catch(() => null));
+    return;
+  }
   try {
     let s = await updateCall('/api/update/status');
     renderUpdates(s);
@@ -2316,12 +2360,20 @@ async function initUpdates() {
 updateCheckBtn?.addEventListener('click', async () => {
   updateCheckBtn.disabled = true;
   updateStatus.textContent = 'Checking for updates…';
+  if (desktopUpdates) {
+    renderDesktopUpdates(await desktopUpdates.check().catch(() => null));
+    return;
+  }
   try { renderUpdates(await updateCall('/api/update/check', {})); } catch {}
   updateCheckBtn.disabled = false;
 });
 
 updateBtn?.addEventListener('click', async () => {
   updateBtn.disabled = true;
+  if (desktopUpdates) {
+    renderDesktopUpdates(await desktopUpdates.install().catch(() => null));
+    return;
+  }
   updateStatus.textContent = 'Downloading and installing the update…';
   try {
     const before = updateVersion.textContent.replace('Version ', '');
@@ -2335,6 +2387,11 @@ updateBtn?.addEventListener('click', async () => {
 });
 
 autoUpdateInput?.addEventListener('change', async () => {
+  if (desktopUpdates) {
+    renderDesktopUpdates(await desktopUpdates.setAuto(autoUpdateInput.checked).catch(() => null));
+    showToast(autoUpdateInput.checked ? 'Updates will download automatically.' : 'Automatic updates turned off.', 'success', 2500);
+    return;
+  }
   try {
     renderUpdates(await updateCall('/api/update/settings', { autoUpdate: autoUpdateInput.checked }));
     showToast(autoUpdateInput.checked ? 'Updates will install automatically.' : 'Automatic updates turned off.', 'success', 2500);

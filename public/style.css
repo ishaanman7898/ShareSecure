@@ -1198,6 +1198,8 @@ select:focus,
 .menu-item-danger:hover,
 .menu-item-danger:focus-visible { background: var(--danger-soft) !important; }
 a.menu-item { text-decoration: none; }
+.menu-meta { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.menu-meta:empty { display: none; }
 
 .menu-count {
   min-width: 20px;
