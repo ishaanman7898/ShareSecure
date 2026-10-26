@@ -4,7 +4,7 @@
 //   local    run a private ShareSecure on this computer. Its server runs in a
 //            process of its own, which outlives the app: share links keep
 //            working after you quit, until the last one expires
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, ipcMain, net: electronNet } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, ipcMain, safeStorage, net: electronNet } = require('electron');
 const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -34,6 +34,8 @@ const MODE_FILE = path.join(USER_DIR, 'mode.json');
 // the running server's process id and port, so the next launch can find it
 const SERVER_FILE = path.join(USER_DIR, 'server.json');
 const UPDATES_FILE = path.join(USER_DIR, 'updates.json');
+// your saved sign-in, encrypted by the operating system (see saved sign-in below)
+const SIGNIN_FILE = path.join(USER_DIR, 'signin.json');
 // the full-bleed tile reads better at window and tray sizes than the Mac-grid one
 const ICON = path.join(__dirname, 'icon-win.png');
 
@@ -208,7 +210,7 @@ function wireLinks(contents) {
   });
 }
 
-function openWindow(url, size) {
+function openWindow(url, { maximize = false, ...size }) {
   const w = new BrowserWindow({
     ...size,
     minWidth: 380,
@@ -221,7 +223,10 @@ function openWindow(url, size) {
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   wireLinks(w.webContents);
-  w.once('ready-to-show', () => w.show());
+  w.once('ready-to-show', () => {
+    if (maximize) w.maximize();
+    w.show();
+  });
   if (url) w.loadURL(url);
   return w;
 }
@@ -232,7 +237,8 @@ function mainUrl(newAccount = false) {
 }
 
 function createMain(url) {
-  win = openWindow(url, { width: 1240, height: 820 });
+  // fills the screen at launch; un-maximizing goes back to this size
+  win = openWindow(url, { width: 1240, height: 820, maximize: true });
   win.on('close', e => {
     // with an account there's no server to keep alive, so closing quits
     if (quitting || mode !== 'local') return;
@@ -478,6 +484,52 @@ ipcMain.handle('updates:auto', (e, on) => {
   }
   setUpdates({});
   return updateState();
+});
+
+// ── saved sign-in ───────────────────────────────────────────────────────────
+// The app remembers your username and password so it signs you in at launch.
+// They're encrypted with the operating system's key store (safeStorage), one
+// per site: your account and this computer's ShareSecure each have their own.
+// Signing out or deleting the account forgets them.
+function canEncrypt() {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  // on Linux without a keyring this would be a fixed, public key
+  return process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text';
+}
+
+function readSignIns() {
+  try { return JSON.parse(fs.readFileSync(SIGNIN_FILE, 'utf8')); } catch { return {}; }
+}
+
+function writeSignIns(all) {
+  fs.mkdirSync(USER_DIR, { recursive: true });
+  fs.writeFileSync(SIGNIN_FILE, JSON.stringify(all), { mode: 0o600 });
+}
+
+const siteOf = event => new URL(event.senderFrame.url).origin;
+
+ipcMain.handle('signin:load', e => {
+  if (!fromApp(e) || !canEncrypt()) return null;
+  const saved = readSignIns()[siteOf(e)];
+  if (!saved) return null;
+  try {
+    const { username, password } = JSON.parse(safeStorage.decryptString(Buffer.from(saved, 'base64')));
+    return typeof username === 'string' && typeof password === 'string' ? { username, password } : null;
+  } catch { return null; }
+});
+ipcMain.handle('signin:save', (e, username, password) => {
+  if (!fromApp(e) || !canEncrypt() || typeof username !== 'string' || typeof password !== 'string') return false;
+  const all = readSignIns();
+  all[siteOf(e)] = safeStorage.encryptString(JSON.stringify({ username, password })).toString('base64');
+  writeSignIns(all);
+  return true;
+});
+ipcMain.handle('signin:forget', e => {
+  if (!fromApp(e)) return false;
+  const all = readSignIns();
+  delete all[siteOf(e)];
+  writeSignIns(all);
+  return true;
 });
 
 app.on('second-instance', (_e, argv) => { if (!argv.includes(BACKGROUND_FLAG)) showMain(); });

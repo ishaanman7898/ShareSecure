@@ -903,14 +903,12 @@ document.addEventListener('click', e => {
   if (!profile.contains(e.target)) closeMenu(false);
 });
 
-document.getElementById('menu-inbox').addEventListener('click', () => {
-  closeMenu(false);
-  const title = document.getElementById('inbox-title');
-  title?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  title?.focus({ preventScroll: true });
+// Signing out yourself also stops the desktop app signing you in at launch.
+// An expired session signs out without it, so the app signs straight back in.
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  await window.shareSecureDesktop?.signIn?.forget().catch(() => {});
+  logout();
 });
-
-document.getElementById('logout-btn').addEventListener('click', logout);
 
 // Every other browser, app and device signed in to this account is signed
 // out; this one gets a new session and stays in.
@@ -1508,6 +1506,7 @@ deleteForm.addEventListener('submit', async e => {
     } catch {}
     userToken = null;
     sessionStorage.clear();
+    await window.shareSecureDesktop?.signIn?.forget().catch(() => {});
     sessionStorage.setItem('account_deleted', '1');
     location.replace(selfHostMode ? '/signin' : '/');
   } catch (err) {
@@ -1759,9 +1758,6 @@ notifyToggle?.addEventListener('click', async () => {
 
 function setPendingBadge(count) {
   pendingCount = count;
-  const menuCount = document.getElementById('menu-inbox-count');
-  menuCount.textContent = count > 9 ? '9+' : String(count);
-  menuCount.classList.toggle('hidden', count === 0);
   document.getElementById('profile-dot').classList.toggle('hidden', count === 0);
   const name = document.getElementById('profile-name').textContent;
   profileBtn.setAttribute('aria-label', count

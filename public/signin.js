@@ -38,6 +38,11 @@ function afterSignIn() {
 }
 const errorEl = $('auth-error');
 
+// The desktop app keeps your sign-in, encrypted by the operating system, and
+// signs you in with it at launch (see saved sign-in in desktop/main.js).
+const savedSignIn = window.shareSecureDesktop?.signIn;
+let autoSignIn = false;
+
 // signin | signup (browser version) | setup | owner-signin (self-hosted)
 let mode = 'signin';
 let selfHost = false;
@@ -207,8 +212,12 @@ form.addEventListener('submit', async e => {
       if (creating) await opaqueRegister(send, user, pass, newKeyFields);
       await signInWebsite(user, pass);
     }
+    await savedSignIn?.save(user, pass).catch(() => {});
     location.replace(afterSignIn());
   } catch (err) {
+    // a saved password that no longer works is forgotten, so it isn't tried again
+    if (autoSignIn) await savedSignIn?.forget().catch(() => {});
+    autoSignIn = false;
     errorEl.textContent = err.message || 'Something went wrong. Try again.';
     submit.disabled = false;
     submit.textContent = label;
@@ -237,4 +246,13 @@ form.addEventListener('submit', async e => {
     $('auth-sub').textContent = 'The account and its files were deleted. Set up a new owner account to use ShareSecure again.';
   }
   username.focus();
+  if (savedSignIn && (mode === 'signin' || mode === 'owner-signin')) {
+    const saved = await savedSignIn.load().catch(() => null);
+    if (saved) {
+      username.value = saved.username;
+      password.value = saved.password;
+      autoSignIn = true;
+      form.requestSubmit();
+    }
+  }
 })();
