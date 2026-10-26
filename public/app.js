@@ -352,7 +352,10 @@ customExpiryInput.addEventListener('change', () => {
   }
 });
 
-const MAX_BYTES = 10 * 1024 * 1024;
+// The website takes 10 MB; a ShareSecure on your own computer says how much it
+// takes in /api/mode (see detectSelfHostMode).
+const WEBSITE_MAX_BYTES = 10 * 1024 * 1024;
+let maxBytes = WEBSITE_MAX_BYTES;
 let selectedFile = null;
 let countdownInterval = null;
 
@@ -420,8 +423,8 @@ const ALLOWED_MIMES = [
 ];
 
 function setFile(file) {
-  if (file.size > MAX_BYTES) {
-    showToast(`File too large (${formatSize(file.size)}). Max is 10 MB.`, 'error');
+  if (file.size > maxBytes) {
+    showToast(`File too large (${formatSize(file.size)}). Max is ${formatSize(maxBytes)}.`, 'error');
     return;
   }
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
@@ -587,6 +590,11 @@ uploadBtn.addEventListener('click', async () => {
   if (sendTo && selfHostMode && !cloudState.linked) {
     showToast('Link your ShareSecure account to send to usernames.', 'info', 5000);
     openCloudModal();
+    return;
+  }
+  // sending goes through the website, so it's held to the website's size
+  if (sendTo && selectedFile.size > WEBSITE_MAX_BYTES) {
+    showToast('Files over 10 MB can’t be sent to usernames. Clear the names to make a link instead.', 'error', 6000);
     return;
   }
 
@@ -2414,6 +2422,11 @@ async function detectSelfHostMode() {
     if (res.ok) {
       const data = await res.json();
       publicBase = data.publicUrl || null;
+      if (data.selfHostMode === true && data.maxUpload > 0) {
+        maxBytes = data.maxUpload;
+        const limit = document.querySelector('#drop-zone .drop-limit');
+        if (limit) limit.textContent = limit.textContent.replace('10 MB', formatSize(maxBytes).replace('.0 ', ' '));
+      }
       return data.selfHostMode === true;
     }
   } catch {}

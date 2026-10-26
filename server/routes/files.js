@@ -30,7 +30,10 @@ function goneIfExpired(file, res, asJson = true) {
   return false;
 }
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+// The website keeps files to 10 MB, but here they're on the owner's own disk,
+// so they can be bigger. Each one is still read into memory to strip, compress
+// and encrypt it, so there's a cap.
+const MAX_BYTES = 100 * 1024 * 1024; // 100 MB
 
 // ── file types ───────────────────────────────────────────────────────────────
 // The website's own checks (public/filetypes.js), from the bytes, never the name.
@@ -404,3 +407,4 @@ router.post('/annotations/:shortId', (req, res) => {
 module.exports = router;
 module.exports.storeFile = storeFile;
 module.exports.upload = upload;
+module.exports.MAX_BYTES = MAX_BYTES;

@@ -50,6 +50,8 @@ function showShield(message, autohideMs) {
 }
 
 function hideShield() {
+  // blacked out because you left: only coming back and clicking lifts it
+  if (away) return;
   const shield = document.getElementById('screenshot-shield');
   if (shield) shield.classList.add('hidden');
   if (shieldBlankTimeout) { clearTimeout(shieldBlankTimeout); shieldBlankTimeout = null; }
@@ -195,28 +197,44 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Snapchat-style: black screen when page becomes hidden ─────────────────────
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    showShield('');
-  } else {
-    setTimeout(hideShield, 300);
-  }
-});
-
-// ── Blur-based protection ──────────────────────────────────────────────────────
+// ── black screen when you leave ───────────────────────────────────────────────
+// Switching to another tab, window or app blacks out the document, and it
+// stays black when you come back until you click (or press Enter), so it's
+// never left showing while you're away.
+let away = false;
 let blurBlankTimeout = null;
 
+function blackOut() {
+  if (blurBlankTimeout) { clearTimeout(blurBlankTimeout); blurBlankTimeout = null; }
+  showShield('Click to show the document');
+  away = true;
+  document.getElementById('screenshot-shield')?.classList.add('away');
+}
+
+function comeBack() {
+  if (!away) return;
+  away = false;
+  document.getElementById('screenshot-shield')?.classList.remove('away');
+  hideShield();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) blackOut();
+});
+
+// a short wait, so a blur that's immediately followed by focus doesn't flash
 window.addEventListener('blur', () => {
-  blurBlankTimeout = setTimeout(() => {
-    showShield('');
-  }, 150);
+  blurBlankTimeout = setTimeout(blackOut, 150);
 });
 
 window.addEventListener('focus', () => {
   if (blurBlankTimeout) { clearTimeout(blurBlankTimeout); blurBlankTimeout = null; }
-  hideShield();
 });
+
+document.getElementById('screenshot-shield')?.addEventListener('click', comeBack);
+document.addEventListener('keydown', e => {
+  if (away && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); comeBack(); }
+}, true);
 
 window.addEventListener('beforeprint', () => {
   document.body.innerHTML = '<div style="padding:40px;font-size:1.2rem;font-family:sans-serif;">Printing is disabled for this document.</div>';

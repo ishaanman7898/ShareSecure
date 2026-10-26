@@ -192,8 +192,10 @@ function cloudCopy(shortId, token) {
 
     // sealed here: a fresh key, the file padded and locked with it, and the
     // name and type locked too
-    const { newFileKey, lockFile, lockMeta, sealKey, nameFor, isAllowedType, toB64url } = await lib();
+    const { newFileKey, lockFile, lockMeta, sealKey, nameFor, isAllowedType, toB64url, MAX_FILE } = await lib();
     if (!isAllowedType(mime)) return { status: 415, error: 'That kind of file can’t be sent.' };
+    // sending goes through the website, which takes 10 MB; bigger files are link-only
+    if (bytes.length > MAX_FILE) return { status: 413, error: 'Files over 10 MB can’t be sent to usernames. Share the link instead.' };
     const key = newFileKey();
     const form = new FormData();
     form.append('file', new Blob([await lockFile(key, new Uint8Array(bytes))]), 'sealed.bin');

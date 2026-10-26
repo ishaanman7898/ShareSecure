@@ -122,7 +122,9 @@ app.use(express.static(PUBLIC_DIR, { maxAge: 0, etag: true }));
 // ── api routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api', require('./routes/inbox'));
-app.use('/api', require('./routes/files'));
+const filesRouter = require('./routes/files');
+const MAX_UPLOAD = filesRouter.MAX_BYTES;
+app.use('/api', filesRouter);
 // the linked ShareSecure account, for sending to usernames
 app.use('/api', require('./routes/cloud'));
 // assistants (Claude Code, Codex, …) connect here to share files
@@ -138,7 +140,7 @@ app.get('/api/mode', (req, res) => {
   // the public https address links are made with (the tunnel, or your domain), so
   // the app never hands out a localhost link it can't be opened from elsewhere
   const publicUrl = /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null;
-  res.json({ selfHostMode: true, setupRequired, setupCodeNeeded: setupRequired && !fromThisComputer(req), version: updater.status().current, publicUrl });
+  res.json({ selfHostMode: true, setupRequired, setupCodeNeeded: setupRequired && !fromThisComputer(req), version: updater.status().current, publicUrl, maxUpload: MAX_UPLOAD });
 });
 
 // ── updates (owner only) ──────────────────────────────────────────────────────
@@ -210,6 +212,7 @@ app.use((_req, res) => res.status(404).sendFile(path.join(PUBLIC_DIR, '404.html'
 // a body that's too big or isn't JSON gets a short answer, not a stack trace
 app.use((err, _req, res, next) => {
   if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'That request is too big.' });
+  if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: `File too large. Max ${MAX_UPLOAD / 1024 / 1024} MB.` });
   if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'That request isn’t valid JSON.' });
   next(err);
 });

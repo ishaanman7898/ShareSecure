@@ -342,6 +342,7 @@ body.viewer {
 
 /* ── screenshot shield ── */
 #screenshot-shield { position: fixed; inset: 0; z-index: 9999; background: #000; pointer-events: none; }
+#screenshot-shield.away { pointer-events: auto; cursor: pointer; }
 
 @media print {
   body > * { display: none !important; }
