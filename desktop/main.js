@@ -341,21 +341,26 @@ async function createAccount() {
 }
 
 // Switching needs a fresh start: a local server can't be stopped in place.
-async function changeMode() {
-  const { response } = await dialog.showMessageBox({
+// From the tray, the account menu or Settings (mode:switch below).
+async function switchMode() {
+  if (!mode) return;
+  const toLocal = mode === 'account';
+  const { response } = await dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
     type: 'question',
     title: 'ShareSecure',
-    buttons: ['Choose again', 'Cancel'],
+    buttons: [toLocal ? 'Run it on this computer' : 'Use my account', 'Cancel'],
     defaultId: 0,
     cancelId: 1,
-    message: 'Choose how to use ShareSecure',
-    detail: 'ShareSecure will restart and ask whether to sign in to your account or run it on this computer. Nothing is deleted.',
+    message: toLocal ? 'Run ShareSecure on this computer?' : 'Use your ShareSecure account?',
+    detail: toLocal
+      ? 'ShareSecure restarts and runs privately on this computer: free, no upload limit, and your files never leave it. Your account stays as it is, and you can switch back any time.'
+      : 'ShareSecure restarts and signs in to your account. The files on this computer stay, but their links stop working until you switch back.',
   });
   if (response !== 0) return;
-  try { fs.unlinkSync(MODE_FILE); } catch {}
+  saveMode(toLocal ? 'local' : 'account');
   stopServer();
   quitting = true;
-  app.relaunch();
+  app.relaunch({ args: process.argv.slice(1).filter(a => a !== NEW_ACCOUNT_FLAG) });
   app.exit(0);
 }
 
@@ -364,7 +369,7 @@ function buildTrayMenu() {
     { label: 'Open ShareSecure', click: showMain },
     { label: 'Create a ShareSecure account…', click: createAccount },
     ...(mode === 'local' ? [{ label: 'Open data folder', click: () => shell.openPath(DATA_DIR) }] : []),
-    { label: 'Switch between account and this computer…', click: changeMode, enabled: Boolean(mode) },
+    ...(mode ? [{ label: mode === 'local' ? 'Use your ShareSecure account…' : 'Run it on this computer…', click: switchMode }] : []),
     { type: 'separator' },
     // reachable from the welcome screen too, before anything is set up
     { label: 'Privacy policy', click: () => openWindow(`${origin || CLOUD}/privacy`, { width: 900, height: 820 }) },
@@ -556,6 +561,13 @@ function fromApp(event) {
     return from === CLOUD || (origin !== '' && from === new URL(origin).origin);
   } catch { return false; }
 }
+
+ipcMain.handle('mode:get', e => (fromApp(e) ? mode : null));
+ipcMain.handle('mode:switch', e => {
+  if (!fromApp(e)) return false;
+  setImmediate(switchMode);
+  return true;
+});
 
 ipcMain.handle('updates:status', e => (fromApp(e) ? updateState() : null));
 ipcMain.handle('updates:check', async e => {

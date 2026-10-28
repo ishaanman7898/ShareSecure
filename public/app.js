@@ -14,7 +14,8 @@ import { mountGradientASCII } from './gradient-ascii.js';
 import { syncBrackets, bracketsWanted, setBracketsWanted } from './brackets.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
-if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
+const IN_DESKTOP = /ShareSecureDesktop\//.test(navigator.userAgent);
+if (IN_DESKTOP) document.documentElement.classList.add('is-desktop');
 
 // The QR code library is only needed after an upload, so it loads on first use
 // instead of slowing down every page.
@@ -729,7 +730,7 @@ uploadBtn.addEventListener('click', async () => {
     showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
     logout();
   } else if (result.status === 429) {
-    showToast(`${result.body.error || 'Upload limit reached.'} Try again tomorrow${planState?.id === 'pro' ? '' : ', or go Pro for more'}.`, 'warn', 6000);
+    showToast(`${result.body.error || 'Upload limit reached.'} Try again tomorrow.`, 'warn', 6000);
     resetUploadButton();
   } else if (result.status === 0) {
     showToast('Couldn’t reach the server. Check your connection and try again.', 'error');
@@ -2578,10 +2579,13 @@ async function loadPlan() {
     if (!res.ok) return null;
     planInfo = await res.json();
     planState = planInfo.plan;
-    document.getElementById('menu-plan-name').textContent = planState.name;
-    document.getElementById('menu-plan')?.classList.remove('hidden');
-    document.getElementById('menu-teams')?.classList.remove('hidden');
-    document.getElementById('settings-teams')?.classList.remove('hidden');
+    document.getElementById('menu-plan-name').textContent = 'Coming soon';
+    // the desktop app shows nothing that's paid for: Plan, and Teams (part of Pro)
+    if (!IN_DESKTOP) {
+      document.getElementById('menu-plan')?.classList.remove('hidden');
+      document.getElementById('menu-teams')?.classList.remove('hidden');
+      document.getElementById('settings-teams')?.classList.remove('hidden');
+    }
     return planInfo;
   } catch { return null; }
 }
@@ -2606,13 +2610,11 @@ function renderPlan() {
   manage.classList.toggle('hidden', plan.id !== 'pro');
 }
 
-async function openPlan() {
+// Paid plans aren't on sale yet, so Plan says so instead of opening its page.
+document.getElementById('menu-plan')?.addEventListener('click', () => {
   closeMenu();
-  await loadPlan();
-  renderPlan();
-  openModal(planModal);
-}
-document.getElementById('menu-plan')?.addEventListener('click', openPlan);
+  showToast('Paid plans are coming soon. Everything you have now stays free.', 'info', 4000);
+});
 
 document.getElementById('plan-upgrade')?.addEventListener('click', () => {
   if (!planInfo?.checkoutUrl) return;
@@ -2653,7 +2655,7 @@ document.addEventListener('sharesecure:ready', () => {
   setTimeout(async () => {
     await loadPlan();
     redeemClaim();
-    if (wantsPlan && planInfo) { renderPlan(); openModal(planModal); }
+    if (wantsPlan && planInfo) showToast('Paid plans are coming soon.', 'info', 4000);
   }, 600);
 }, { once: true });
 
@@ -2737,7 +2739,7 @@ function openSettings() {
   closeMenu();
   if (!document.body.classList.contains('is-logged-in')) return;
   document.getElementById('settings-username').textContent = tokenUsername() || '';
-  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo);
+  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo || IN_DESKTOP);
   document.getElementById('app-grid')?.classList.add('hidden');
   settingsView.classList.remove('hidden');
   document.body.classList.add('in-settings');
@@ -2796,6 +2798,26 @@ for (const pref of Object.keys(SHARE_DEFAULTS)) {
   });
 }
 applyShareDefaults();
+
+// ── the desktop app: your account, or this computer ─────────────────────────
+// One click from the account menu and from Settings, instead of the tray icon.
+// The app asks before it restarts (see switchMode in desktop/main.js).
+(async () => {
+  const desktopMode = window.shareSecureDesktop?.mode;
+  const current = await desktopMode?.get().catch(() => null);
+  if (!current) return;
+  const toLocal = current === 'account';
+  for (const id of ['menu-switch-mode', 'settings-switch-mode']) {
+    const btn = document.getElementById(id);
+    if (!btn) continue;
+    btn.querySelector('.switch-mode-label').textContent = toLocal ? 'Run it on this computer' : 'Use your ShareSecure account';
+    btn.classList.remove('hidden');
+    btn.addEventListener('click', () => { closeMenu(); desktopMode.switch(); });
+  }
+  document.getElementById('switch-mode-hint').textContent = toLocal
+    ? 'Private and free, with no upload limit: files never leave this computer. ShareSecure restarts.'
+    : 'The same account as the website. ShareSecure restarts; links on this computer stop until you switch back.';
+})();
 
 // ── corner brackets (brackets.js, on every page but the viewer) ──────────────
 const bracketsToggle = document.getElementById('crosshair-toggle');

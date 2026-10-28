@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
     setAuto: on => ipcRenderer.invoke('updates:auto', on === true),
     onChange: callback => ipcRenderer.on('updates:status', (_e, state) => callback(state)),
   },
+  // your account or this computer: which one, and switching (the app asks first)
+  mode: {
+    get: () => ipcRenderer.invoke('mode:get'),
+    switch: () => ipcRenderer.invoke('mode:switch'),
+  },
   // hiding windows that show files from screenshots (Windows and macOS)
   protection: {
     get: () => ipcRenderer.invoke('protection:get'),
