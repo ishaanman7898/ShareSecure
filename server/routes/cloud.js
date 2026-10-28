@@ -1,7 +1,11 @@
 'use strict';
-// Sending to ShareSecure usernames from a self-hosted ShareSecure.
+// Sending to ShareSecure usernames from a self-hosted ShareSecure, and
+// receiving files sent to yours.
 //
 // Usernames only exist on the website, so the owner links their account here.
+// The desktop app makes and links one with the owner's own username and
+// password when they set up or sign in (POST /cloud/auto), unless they've
+// linked another account or unlinked.
 // Sending uploads one copy of the share to the website, sealed end to end like
 // the website's own uploads (public/sealed.js), and asks it to deliver. People
 // can then open it while this computer is off; the copy expires with the share.
@@ -30,6 +34,36 @@ function cloudToken() {
 
 function status() {
   return { linked: Boolean(settings.get('cloudToken')), username: settings.get('cloudUsername') || null, cloudUrl: cloud() };
+}
+
+// The account's private key: files sent to your username are sealed to it.
+// Linking unlocks it once, with the export key signing in makes here, and it's
+// kept encrypted like everything else in settings.
+async function keepAccountKey(out, token) {
+  const { unlockPrivateKeyBytes, makeKeyPair, lockPrivateKey, toB64url } = await lib();
+  let box = out.privateKeyBox;
+  if (!box) {
+    // an account with no keys yet gets them now, as a browser would (public/keys.js)
+    const pair = await makeKeyPair();
+    const fields = { public_key: pair.publicKey, private_key_box: await lockPrivateKey(pair.privateKey, out.exportKey) };
+    const made = await cloudFetch('/api/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(fields),
+    });
+    if (made.status !== 200) return;
+    box = fields.private_key_box;
+  }
+  settings.set('cloudKey', encryptString(toB64url(await unlockPrivateKeyBytes(box, out.exportKey)), getEncKey()));
+}
+
+async function accountKey() {
+  const stored = settings.get('cloudKey');
+  if (!stored) return null;
+  try {
+    const { importPrivateKey, fromB64url } = await lib();
+    return await importPrivateKey(fromB64url(decryptString(stored, getEncKey())));
+  } catch { return null; }
 }
 
 // The website turned the token down (it expired, or the account was deleted).
@@ -400,40 +434,87 @@ router.get('/cloud', requireOwner, (_req, res) => res.json(status()));
 
 // ── owner: link an account with its username and password ────────────────────
 // Only the website's sign-in token is kept (encrypted), never the password.
-router.post('/cloud/link', requireOwner, async (req, res) => {
-  const username = String(req.body?.username || '').trim().replace(/^@/, '');
-  const accessCode = String(req.body?.access_code || '');
-  if (!username || !accessCode) return res.status(400).json({ error: 'Enter your username and password.' });
+const opaquePost = async () => {
+  const { postWith } = await import('../../public/opaque.js');
+  return postWith((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(120000) }), cloud());
+};
+const newKeysFor = async exportKey => {
+  const { makeKeyPair, lockPrivateKey } = await import('../../public/sealed.js');
+  const pair = await makeKeyPair();
+  return { public_key: pair.publicKey, private_key_box: await lockPrivateKey(pair.privateKey, exportKey) };
+};
 
+// → { status, body } with the same answers as POST /cloud/link
+async function link(username, accessCode) {
   // The website never sees the password: this computer proves it the same way
   // a browser does (OPAQUE, public/opaque.js). Older accounts send it once to
   // switch over, and make their end-to-end keys while they're at it.
   let out;
   try {
-    const { signIn, postWith } = await import('../../public/opaque.js');
-    const { makeKeyPair, lockPrivateKey } = await import('../../public/sealed.js');
-    const newKeys = async exportKey => {
-      const pair = await makeKeyPair();
-      return { public_key: pair.publicKey, private_key_box: await lockPrivateKey(pair.privateKey, exportKey) };
-    };
-    const post = postWith((url, init) => fetch(url, { ...init, signal: AbortSignal.timeout(120000) }), cloud());
-    out = { status: 200, body: await signIn(post, username, accessCode, newKeys) };
+    const { signIn } = await import('../../public/opaque.js');
+    out = await signIn(await opaquePost(), username, accessCode, newKeysFor);
   } catch (err) {
-    if (err.status === 429) return res.status(429).json({ error: err.message || 'Too many tries. Wait a few minutes and try again.' });
-    if (err.status === 401 || err.status === 400) return res.status(403).json({ error: 'Wrong username or password.' });
-    return res.status(502).json({ error: 'Couldn’t reach ShareSecure. Check your connection and try again.' });
+    if (err.status === 429) return { status: 429, body: { error: err.message || 'Too many tries. Wait a few minutes and try again.' } };
+    if (err.status === 401 || err.status === 400 || err.status === 404) return { status: 403, body: { error: 'Wrong username or password.' } };
+    return { status: 502, body: { error: 'Couldn’t reach ShareSecure. Check your connection and try again.' } };
   }
-  if (!out.body.token) return res.status(403).json({ error: 'Wrong username or password.' });
+  if (!out?.token) return { status: 403, body: { error: 'Wrong username or password.' } };
 
   // copies made with a different account are taken back; the same account's stay
-  const newName = out.body.username || username;
+  const newName = out.username || username;
   const oldName = settings.get('cloudUsername');
-  if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) forgetAllCloudCopies().catch(() => {});
-  settings.set('cloudToken', encryptString(out.body.token, getEncKey()));
+  if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+    forgetAllCloudCopies().catch(() => {});
+    settings.set('cloudImported', null);
+  }
+  settings.set('cloudToken', encryptString(out.token, getEncKey()));
   settings.set('cloudUsername', newName);
+  settings.set('cloudKey', null);
+  await keepAccountKey(out, out.token).catch(() => {});
   saveTokens([]);   // tokens belong to the account that got them
   refillLater();
-  res.json(status());
+  syncInbox().catch(() => {});
+  return { status: 200, body: status() };
+}
+
+router.post('/cloud/link', requireOwner, async (req, res) => {
+  const username = String(req.body?.username || '').trim().replace(/^@/, '');
+  const accessCode = String(req.body?.access_code || '');
+  if (!username || !accessCode) return res.status(400).json({ error: 'Enter your username and password.' });
+  // choosing an account by hand settles it: signing in here won't change it
+  settings.set('cloudAuto', 'off');
+  const out = await link(username, accessCode);
+  res.status(out.status).json(out.body);
+});
+
+// ── owner: an account to match, made or linked when you sign in here ─────────
+// The desktop app sends the owner's username and password after setting up or
+// signing in. If the website has no such account yet, it's made (OPAQUE, from
+// here, with its own key pair); if it has one with that password, it's linked.
+// Nothing happens once you've linked another account or unlinked, or when the
+// username belongs to someone else.
+router.post('/cloud/auto', requireOwner, async (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const accessCode = String(req.body?.access_code || '');
+  const linkedName = settings.get('cloudUsername');
+  if (!username || !accessCode || settings.get('cloudToken') || settings.get('cloudAuto') === 'off'
+    || (linkedName && linkedName.toLowerCase() !== username.toLowerCase())) {
+    return res.json(status());
+  }
+  let out = await link(username, accessCode);
+  if (out.status === 403) {
+    try {
+      const { register } = await import('../../public/opaque.js');
+      await register(await opaquePost(), username, accessCode, newKeysFor);
+    } catch (err) {
+      if (err.status === 429 || !err.status || err.status >= 500) return res.status(502).json({ error: 'Couldn’t reach ShareSecure. Try again later.' });
+      // taken by someone else, or a username the website doesn't allow
+      settings.set('cloudAuto', 'off');
+      return res.json({ ...status(), auto: 'unavailable' });
+    }
+    out = await link(username, accessCode);
+  }
+  res.status(out.status).json(out.status === 200 ? { ...out.body, auto: 'linked' } : out.body);
 });
 
 // ── owner: unlink ─────────────────────────────────────────────────────────────
@@ -443,9 +524,139 @@ router.delete('/cloud', requireOwner, (_req, res) => {
   forgetAllCloudCopies().catch(() => {});
   settings.set('cloudToken', null);
   settings.set('cloudUsername', null);
+  settings.set('cloudKey', null);
+  settings.set('cloudImported', null);
+  // and it stays unlinked: signing in here doesn't link it again
+  settings.set('cloudAuto', 'off');
+  cloudPending = [];
   saveTokens([]);
   res.json(status());
 });
+
+// ── files sent to your username ───────────────────────────────────────────────
+// They wait in the account's inbox on the website. Here they show in this
+// computer's inbox (routes/inbox.js): waiting ones to accept or decline, and
+// once accepted, each is fetched, opened with the account's key and kept on
+// this computer like a file sent here, with the sender's choices (view only,
+// watermark…), so it opens in this app's own viewer.
+let cloudPending = [];   // [{ row, opened }] waiting on the website
+let lastSync = 0;
+let syncing = null;
+
+// cloud short id → this computer's short id, for files already brought here
+function loadImported() {
+  try { return JSON.parse(decryptString(settings.get('cloudImported'), getEncKey())) || {}; } catch { return {}; }
+}
+function saveImported(map) {
+  settings.set('cloudImported', Object.keys(map).length ? encryptString(JSON.stringify(map), getEncKey()) : null);
+}
+
+// A row from the website's inbox, opened: its file key, name, type and note.
+async function openCloudRow(row, key) {
+  const { openKey, unlockMeta, unlockText } = await lib();
+  if (!row.e2e) return { fileKey: null, name: row.original_filename || 'file', type: row.mime_type || '', note: row.note || null };
+  const sealed = await openKey(key, row.inbox_key);
+  const fileKey = sealed.length === 64 ? sealed.subarray(32) : sealed;
+  const meta = await unlockMeta(fileKey, row.original_filename);
+  const note = row.note ? await unlockText(fileKey, row.note, 'note').catch(() => null) : null;
+  return { fileKey, ...meta, note };
+}
+
+// Brings an accepted file to this computer → its short id here, or null
+async function importRow(row, opened, token) {
+  const auth = { Authorization: `Bearer ${token}` };
+  const info = await cloudFetch(`/api/info/${encodeURIComponent(row.short_id)}`, { headers: auth });
+  if (info.status !== 200) return null;
+  // a link that works once would be erased by fetching it: it stays on the website
+  if (info.body.burnAfterReading) return 'website';
+  const res = await fetch(`${cloud()}/api/raw/${encodeURIComponent(row.short_id)}`, { headers: auth, signal: AbortSignal.timeout(120000) });
+  if (!res.ok) return null;
+  let bytes = new Uint8Array(await res.arrayBuffer());
+  if (opened.fileKey) bytes = await (await lib()).unlockFile(opened.fileKey, bytes);
+
+  const { storeFile } = require('./files');
+  const hours = Math.max(1 / 60, (new Date(row.expires_at).getTime() - Date.now()) / 3600000);
+  const stored = await storeFile(
+    { buffer: Buffer.from(bytes), originalname: opened.name, mimetype: opened.type, size: bytes.length },
+    { display_name: opened.name, expires_hours: String(hours), allow_download: info.body.allowDownload ? '1' : '0', allow_annotations: '0' },
+    { incoming: true, note: opened.note }
+  );
+  if (stored.error) return null;
+  const view = opened.fileKey ? { watermark: opened.watermark, discourage: opened.discourage } : (info.body.viewOpts || {});
+  db.prepare("UPDATE files SET is_active = 1, inbox_status = 'accepted', expires_at = ?, view_opts = ? WHERE short_id = ?").run(
+    row.expires_at, view.watermark || view.discourage
+      ? encryptString(JSON.stringify({ watermark: Boolean(view.watermark), discourage: Boolean(view.discourage) }), getEncKey()) : null,
+    stored.shortId
+  );
+  return stored.shortId;
+}
+
+async function syncInbox() {
+  const token = cloudToken();
+  const key = token && await accountKey();
+  if (!key) { cloudPending = []; return; }
+  const res = await cloudFetch('/api/inbox', { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) { forgetToken(); cloudPending = []; return; }
+  if (res.status !== 200) return;
+  const rows = res.body.files || [];
+  const imported = loadImported();
+  const pending = [];
+  for (const row of rows) {
+    if (imported[row.short_id]) continue;
+    const opened = await openCloudRow(row, key).catch(() => null);
+    if (!opened) continue;
+    if (row.status === 'pending') { pending.push({ row, opened }); continue; }
+    const here = await importRow(row, opened, token).catch(() => null);
+    if (here) imported[row.short_id] = here;
+  }
+  // forget the ones that have gone from the website (expired or deleted)
+  const live = new Set(rows.map(r => r.short_id));
+  for (const id of Object.keys(imported)) if (!live.has(id)) delete imported[id];
+  saveImported(imported);
+  cloudPending = pending;
+}
+
+// at most every 20 seconds; the inbox list waits a little for it
+function syncSoon() {
+  if (!syncing && Date.now() - lastSync > 20 * 1000) {
+    lastSync = Date.now();
+    syncing = syncInbox().catch(() => {}).finally(() => { syncing = null; });
+  }
+  return syncing || Promise.resolve();
+}
+
+// for the inbox list: waiting files from the website, shaped like the ones here
+const CLOUD_PREFIX = 'cloud-';
+const pendingFromCloud = () => cloudPending.map(({ row, opened }) => ({
+  short_id: CLOUD_PREFIX + row.short_id,
+  original_filename: opened.name,
+  mime_type: opened.type,
+  size_bytes: row.size_bytes,
+  expires_at: row.expires_at,
+  status: 'pending',
+  note: opened.note,
+  delete_token: null,
+}));
+
+// accept or decline one → { status, body }
+async function answerCloud(id, action) {
+  const cloudId = id.slice(CLOUD_PREFIX.length);
+  const token = cloudToken();
+  const waiting = cloudPending.find(p => p.row.short_id === cloudId);
+  if (!token || !waiting) return { status: 404, body: { error: 'Request not found' } };
+  const out = await cloudFetch(`/api/inbox/${encodeURIComponent(cloudId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action }),
+  });
+  if (out.status !== 200) return out;
+  cloudPending = cloudPending.filter(p => p !== waiting);
+  if (action === 'accept') {
+    const here = await importRow({ ...waiting.row, status: 'accepted' }, waiting.opened, token).catch(() => null);
+    if (here) saveImported({ ...loadImported(), [cloudId]: here });
+  }
+  return out;
+}
 
 // ── owner: send a share to a username ─────────────────────────────────────────
 // Same answers as the website's /api/send, plus 409 link_account and 401 link_expired.
@@ -467,3 +678,7 @@ module.exports.sendToCloud = sendToCloud;
 module.exports.forgetCloudCopy = forgetCloudCopy;
 module.exports.forgetAllCloudCopies = forgetAllCloudCopies;
 module.exports.refillTokens = refillTokens;
+module.exports.syncSoon = syncSoon;
+module.exports.pendingFromCloud = pendingFromCloud;
+module.exports.answerCloud = answerCloud;
+module.exports.CLOUD_PREFIX = CLOUD_PREFIX;

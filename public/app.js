@@ -2250,14 +2250,19 @@ const EMPTY_INBOX = `<div class="empty-msg">
   <p>No files received.</p><span>Files people send you wait here for you to accept.</span>
 </div>`;
 
-// On this computer nothing new arrives here: files sent to your username wait
-// in your inbox on the ShareSecure website.
+// On this computer, files sent to your username arrive here once a ShareSecure
+// account is linked (the desktop app links one with your username for you).
 function emptyInbox() {
   if (!selfHostMode) return EMPTY_INBOX;
-  const site = escapeHtml(cloudState.cloudUrl || 'https://sharesecure-du8.pages.dev');
+  if (cloudState.linked && cloudState.username) {
+    return `<div class="empty-msg">
+  ${INBOX_ICON}
+  <p>No files received.</p><span>Files sent to @${escapeHtml(cloudState.username)} arrive here for you to accept.</span>
+</div>`;
+  }
   return `<div class="empty-msg">
   ${INBOX_ICON}
-  <p>No files received here.</p><span>Files sent to your username arrive in your inbox on <a href="${site}/" target="_blank" rel="noopener noreferrer">the ShareSecure website</a>.</span>
+  <p>No files received.</p><span>Link a ShareSecure account in Settings and files sent to your username arrive here.</span>
 </div>`;
 }
 const SEND_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;

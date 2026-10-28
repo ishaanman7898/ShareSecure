@@ -56,7 +56,7 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 - **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
 - **Teams** (Pro, account menu → *Teams*): a shared inbox and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
 - **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
-- **From the desktop app**, link your ShareSecure account first (account menu → **ShareSecure account**). Sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
+- **From the desktop app**, sending and receiving use a ShareSecure account. The app makes one with your desktop username and password when you set it up or sign in (or links it, if the website already has that account with that password), so you never have to visit the website. Files sent to your username arrive in the app's inbox; once you accept one it's decrypted and kept on your computer, with the sender's settings. To use a different account, link it in **Settings → ShareSecure account**. Sending uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 
 **Privacy and security** ([how it works](#how-files-are-protected))
 

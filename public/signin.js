@@ -17,9 +17,6 @@ mountGradientASCII(document.getElementById('auth-gradient'), {
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 const inDesktop = /ShareSecureDesktop\//.test(navigator.userAgent);
 if (inDesktop) document.documentElement.classList.add('is-desktop');
-// On this computer's own ShareSecure, the desktop app catches this link and
-// restarts with a ShareSecure account instead (see createAccount in main.js).
-
 
 const $ = id => document.getElementById(id);
 const form = $('auth-form');
@@ -232,6 +229,18 @@ form.addEventListener('submit', async e => {
       await signInWebsite(user, pass);
     }
     await savedSignIn?.save(user, pass).catch(() => {});
+    // The desktop app: a ShareSecure account with the same username and
+    // password, made or linked by this computer, so files can be sent to your
+    // username and arrive here (POST /api/cloud/auto). It carries on after
+    // this page has gone.
+    if (selfHost && savedSignIn) {
+      fetch('/api/cloud/auto', {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('user_token')}` },
+        body: JSON.stringify({ username: user, access_code: pass }),
+      }).catch(() => {});
+    }
     // the next page skips its loading screen and its own look at /api/mode,
     // so signing in goes straight to your files (see page-loading.js)
     try { sessionStorage.setItem('signed_in_now', selfHost ? 'local' : 'web'); } catch {}

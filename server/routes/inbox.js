@@ -2,7 +2,8 @@
 // Files sent to the owner of a self-hosted ShareSecure.
 //
 // Each file arrives as a request (stored inactive, so no link can open it) and
-// waits until the owner accepts it; declining erases it right away. The public
+// waits until the owner accepts it; declining erases it right away. Files sent
+// to the owner's ShareSecure username show here too (routes/cloud.js). The public
 // page that let people send files here is gone, but requests it left behind can
 // still be accepted or declined.
 const express = require('express');
@@ -16,7 +17,10 @@ const { purgeOne } = require('../purge');
 const nowIso = () => new Date().toISOString();
 
 // ── owner: list files sent to you ─────────────────────────────────────────────
-router.get('/inbox', requireOwner, (_req, res) => {
+router.get('/inbox', requireOwner, async (_req, res) => {
+  const cloud = require('./cloud');
+  // what's new on the website, if it's quick
+  await Promise.race([cloud.syncSoon(), new Promise(r => setTimeout(r, 4000))]);
   const encKey = getEncKey();
   const rows = db.prepare(`
     SELECT short_id, original_filename, mime_type, size_bytes, expires_at, delete_token,
@@ -28,7 +32,7 @@ router.get('/inbox', requireOwner, (_req, res) => {
   `).all(nowIso());
 
   res.json({
-    files: rows.map(r => {
+    files: [...cloud.pendingFromCloud(), ...rows.map(r => {
       const pending = r.inbox_status === 'pending';
       return {
         short_id: r.short_id,
@@ -40,15 +44,20 @@ router.get('/inbox', requireOwner, (_req, res) => {
         note: r.inbox_note ? decryptString(r.inbox_note, encKey) : null,
         delete_token: pending ? null : r.delete_token,
       };
-    }),
+    })],
   });
 });
 
 // ── owner: accept or decline a request ───────────────────────────────────────
-router.post('/inbox/:shortId', requireOwner, (req, res) => {
+router.post('/inbox/:shortId', requireOwner, async (req, res) => {
   const action = req.body?.action;
   if (action !== 'accept' && action !== 'decline') {
     return res.status(400).json({ error: 'action must be accept or decline' });
+  }
+  const cloud = require('./cloud');
+  if (req.params.shortId.startsWith(cloud.CLOUD_PREFIX)) {
+    const out = await cloud.answerCloud(req.params.shortId, action).catch(() => ({ status: 502, body: { error: 'Couldn’t reach ShareSecure. Try again.' } }));
+    return res.status(out.status).json(out.body);
   }
   const row = db.prepare(
     "SELECT short_id FROM files WHERE short_id = ? AND inbox_status = 'pending' AND expires_at > ?"

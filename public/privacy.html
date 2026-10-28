@@ -152,7 +152,7 @@
       <h2>9. The desktop app and self-hosted copies</h2>
       <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer. We never receive any of it unless you link a ShareSecure account. A few things still reach the internet:</p>
       <ul>
-        <li>If you link a ShareSecure account to send files to usernames, each file you send is uploaded as an encrypted copy under that account, and this policy covers it.</li>
+        <li>The desktop app makes or links a ShareSecure account with your username when you set it up or sign in, unless you link another or unlink it. Each file you send to a username is uploaded as an encrypted copy under that account, and this policy covers it. Files sent to your username are fetched from the website and kept on your computer once you accept them; the account's private key is kept on your computer, encrypted, to open them.</li>
         <li>To make links work for other devices, the app uses a public relay (localtunnel at loca.lt), which can see traffic passing through it. You can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting if you have your own domain.</li>
         <li>The app checks GitHub for updates.</li>
       </ul>
