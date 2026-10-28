@@ -5,16 +5,19 @@
 import { getDb, verifyToken, getUserTag, countUploadsToday } from '../_turso.js';
 import { getIssuer, blindSign, issuerAccount, issuedToday, ensureTokenTables, DAILY, today } from '../_tokens.js';
 import { fromB64url, toB64url } from '../../public/sealed.js';
+import { planFor } from '../_plans.js';
 
 const fail = (error, status) => Response.json({ error }, { status });
 
 // What's left today. Uploads made while signed in count too, so the daily
-// limit is the same however a file is shared.
+// limit is the same however a file is shared. Pro accounts get more tokens a
+// day; the tokens themselves are the same as anyone's.
 async function left(db, auth, env) {
   const account = await issuerAccount(auth.userId, env);
+  const plan = await planFor(db, auth.userId);
   const uploads = await issuedToday(db, account, 'upload')
     + await countUploadsToday(auth.userId, await getUserTag(auth.userId, env), env);
-  return { upload: Math.max(0, DAILY.upload - uploads), send: Math.max(0, DAILY.send - await issuedToday(db, account, 'send')) };
+  return { upload: Math.max(0, plan.upload - uploads), send: Math.max(0, plan.send - await issuedToday(db, account, 'send')) };
 }
 
 // The key is the same for everyone and public, so anyone can check it (the
@@ -59,7 +62,7 @@ export async function onRequestPost(context) {
   const undo = () => db.execute({
     sql: 'UPDATE token_issued SET count = count - 1 WHERE account = ? AND kind = ? AND day = ?', args: [account, kind, today()]
   }).catch(() => {});
-  if ((await left(db, auth, env))[kind] < 0 || (await issuedToday(db, account, kind)) > DAILY[kind]) {
+  if ((await left(db, auth, env))[kind] < 0 || (await issuedToday(db, account, kind)) > (await planFor(db, auth.userId))[kind]) {
     await undo();
     return fail('That’s all for today.', 429);
   }

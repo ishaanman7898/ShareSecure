@@ -113,6 +113,12 @@ const migrations = [
   // files people send to the owner: 'pending' until accepted, then 'accepted'
   'ALTER TABLE files ADD COLUMN inbox_status TEXT',
   'ALTER TABLE files ADD COLUMN inbox_note TEXT',
+  // set when the sender asked to hear when the link is opened (see routes/files.js)
+  'ALTER TABLE files ADD COLUMN receipt_key TEXT',
+  `CREATE TABLE IF NOT EXISTS receipts (
+     short_id TEXT NOT NULL, owner TEXT NOT NULL, box TEXT NOT NULL, at TEXT NOT NULL, expires_at TEXT NOT NULL
+   )`,
+  'CREATE INDEX IF NOT EXISTS idx_receipts ON receipts(short_id, owner)',
 ];
 
 for (const sql of migrations) {

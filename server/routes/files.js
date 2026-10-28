@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 
 const { db, UPLOADS_DIR } = require('../db');
@@ -62,7 +63,8 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
 
   const allow_annotations = body.allow_annotations === '1' ? 1 : 0;
-  const allow_download    = body.allow_download    === '1' ? 1 : 0;
+  // a file the viewer can't show can always be saved, or it's no use at all
+  const allow_download    = body.allow_download === '1' || !types.canView(mimeType) ? 1 : 0;
   const displayName = types.nameFor(body.display_name, file.originalname, mimeType);
 
   const shortId     = generateId(LINK_ID_LENGTH);
@@ -71,7 +73,8 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
   // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
   // (text has none to strip)
   let rawBuffer = file.buffer;
-  if (mimeType === types.DOCX) rawBuffer = stripDocxMetadata(rawBuffer);
+  // Word, Excel and PowerPoint files all keep it in docProps/
+  if ([types.DOCX, types.XLSX, types.PPTX].includes(mimeType)) rawBuffer = stripDocxMetadata(rawBuffer);
   if (mimeType === 'application/pdf') rawBuffer = stripPdfMetadata(rawBuffer);
 
   // HMAC-SHA256 integrity hash (keyed — not searchable in public hash databases)
@@ -100,8 +103,8 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token,
       wrapped_key, cluster_id, allow_annotations, allow_download,
-      is_active, inbox_status, inbox_note
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_active, inbox_status, inbox_note, receipt_key
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     shortId, encryptString(displayName, encKey), encryptString(mimeType, encKey), paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
@@ -110,7 +113,8 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
     allow_annotations, allow_download,
     incoming ? 0 : 1,
     incoming ? 'pending' : null,
-    note ? encryptString(note, encKey) : null
+    note ? encryptString(note, encKey) : null,
+    incoming ? null : receiptKeyFrom(body.receipt_key)
   );
 
   return { shortId, deleteToken, expires_at, paddedSize, displayName };
@@ -141,7 +145,7 @@ router.get('/info/:shortId', (req, res) => {
   const file = db.prepare(`
     SELECT short_id, original_filename, mime_type, size_bytes,
            expires_at, download_count, integrity_hash,
-           allow_annotations, allow_download, cluster_id, parent_short_id
+           allow_annotations, allow_download, cluster_id, parent_short_id, receipt_key
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
 
@@ -162,7 +166,43 @@ router.get('/info/:shortId', (req, res) => {
     allowDownload:    file.allow_download    ?? 0,
     // the original upload: deleting it removes every link to the file
     isRoot: !file.parent_short_id && (!file.cluster_id || file.cluster_id === file.short_id),
+    receiptKey: file.receipt_key || null,
   });
+});
+
+// ── open receipts ─────────────────────────────────────────────────────────────
+// The same as the website's (functions/_receipts.js): the viewer seals a
+// receipt to the key the sender's browser made for this link, and only the
+// holder of the link's delete token can fetch them. No address is kept.
+const MAX_RECEIPTS = 100;
+const receiptKeyFrom = v => (/^[A-Za-z0-9_-]{87}$/.test(String(v || '')) ? String(v) : null);
+const tokenHash = t => crypto.createHash('sha256').update(String(t)).digest('hex');
+const isSealedBox = box => {
+  const parts = String(box || '').split('|');
+  return parts.length === 2 && parts.every(p => p.startsWith('e2e:')) && String(box).length <= 600;
+};
+
+router.post('/receipts/:shortId', (req, res) => {
+  if (!isSealedBox(req.body?.box)) return res.status(400).json({ error: 'A receipt has to be sealed.' });
+  const file = db.prepare('SELECT short_id, delete_token, receipt_key, expires_at FROM files WHERE short_id = ? AND is_active = 1').get(req.params.shortId);
+  if (!file || isExpired(file) || !file.receipt_key) return res.status(404).json({ error: 'This link doesn’t take receipts.' });
+  const now = new Date().toISOString();
+  db.prepare('DELETE FROM receipts WHERE expires_at <= ?').run(now);
+  const owner = tokenHash(file.delete_token);
+  if (db.prepare('SELECT COUNT(*) AS n FROM receipts WHERE short_id = ? AND owner = ?').get(file.short_id, owner).n >= MAX_RECEIPTS) {
+    return res.json({ recorded: false });
+  }
+  db.prepare('INSERT INTO receipts (short_id, owner, box, at, expires_at) VALUES (?, ?, ?, ?, ?)')
+    .run(file.short_id, owner, String(req.body.box), now.slice(0, 16) + ':00Z', file.expires_at);
+  res.json({ recorded: true });
+});
+
+router.get('/receipts/:shortId', (req, res) => {
+  const token = req.headers['x-delete-token'];
+  const receipts = token ? db.prepare('SELECT box, at FROM receipts WHERE short_id = ? AND owner = ? AND expires_at > ? ORDER BY at, rowid')
+    .all(req.params.shortId, tokenHash(token), new Date().toISOString()) : [];
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ receipts });
 });
 
 // ── internal: decompress + decrypt and send a file ───────────────────────────
@@ -196,7 +236,7 @@ function pipeFile(res, file, disposition) {
     // download: reveal original mime + filename (owner-only action).
     // Only the types we accept are named; anything else goes out as plain bytes.
     const filename = decryptString(file.original_filename, encKey);
-    const known = isText || ['application/pdf', 'image/png', 'image/jpeg', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(mimeType);
+    const known = isText || types.isAllowedType(mimeType);
     res.setHeader('Content-Type', isText ? `${mimeType}; charset=utf-8` : known ? mimeType : 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
   } else {

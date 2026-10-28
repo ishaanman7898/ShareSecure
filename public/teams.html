@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Teams | ShareSecure</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <a class="btn btn-ghost btn-small" href="/">Back to your files</a>
+  </header>
+
+  <main class="teams-main">
+    <!-- every team you're in, and making a new one -->
+    <section class="panel" id="teams-home" aria-labelledby="teams-title">
+      <div class="teams-head">
+        <h1 class="panel-title" id="teams-title">Teams</h1>
+        <span class="plan-chip" id="plan-chip"></span>
+      </div>
+      <p class="teams-sub">A team shares one inbox and its own request links, with your name, colour and logo on them. Files sent to a team are encrypted to the team’s key in the sender’s browser: any member can open them, ShareSecure can’t.</p>
+      <div class="file-list" id="team-list"></div>
+
+      <form class="teams-create" id="create-form" novalidate>
+        <h2 class="teams-h2">New team</h2>
+        <div class="field">
+          <label for="create-name">Name</label>
+          <input type="text" id="create-name" class="text-input" maxlength="60" placeholder="Acme Legal" autocomplete="organization" />
+        </div>
+        <div class="field">
+          <label for="create-color">Colour</label>
+          <input type="color" id="create-color" class="color-input" value="#1e3fd8" />
+        </div>
+        <p class="auth-error" id="create-error" role="alert"></p>
+        <button type="submit" class="btn btn-primary" id="create-btn">Make team</button>
+      </form>
+      <div class="teams-upsell hidden" id="upsell">
+        <p><strong>Teams come with Pro.</strong> Pro also gives you 100 shares a day instead of 5, 300 sends, and up to 50 open file requests.</p>
+        <a class="btn btn-primary" href="/?plan=1">See Pro</a>
+      </div>
+    </section>
+
+    <!-- one team -->
+    <section class="panel hidden" id="team-view" aria-labelledby="team-name">
+      <div class="team-banner" id="team-banner">
+        <img id="team-logo" class="team-logo hidden" alt="" width="44" height="44" />
+        <div>
+          <h1 class="panel-title" id="team-name"></h1>
+          <span class="file-item-meta" id="team-meta"></span>
+        </div>
+        <button class="btn btn-ghost btn-small" id="team-back" type="button">All teams</button>
+      </div>
+      <p class="auth-error" id="team-warning" role="alert"></p>
+
+      <nav class="team-tabs" role="tablist" aria-label="Team">
+        <button role="tab" class="team-tab" data-tab="inbox" aria-selected="true">Inbox</button>
+        <button role="tab" class="team-tab" data-tab="requests" aria-selected="false">Request links</button>
+        <button role="tab" class="team-tab" data-tab="members" aria-selected="false">People</button>
+        <button role="tab" class="team-tab admin-only" data-tab="settings" aria-selected="false">Settings</button>
+      </nav>
+
+      <div class="team-pane" data-pane="inbox">
+        <div class="file-list" id="team-inbox"></div>
+      </div>
+
+      <div class="team-pane hidden" data-pane="requests">
+        <form class="teams-create" id="request-form" novalidate>
+          <div class="field">
+            <label for="request-label">What you’re asking for</label>
+            <input type="text" id="request-label" class="text-input" maxlength="300" placeholder="Your signed engagement letter" />
+          </div>
+          <div class="teams-row">
+            <div class="field">
+              <label for="request-hours">Open for</label>
+              <select id="request-hours">
+                <option value="24">1 day</option>
+                <option value="72" selected>3 days</option>
+                <option value="168">7 days</option>
+                <option value="336">14 days</option>
+                <option value="720">30 days</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="request-max">Files it takes</label>
+              <select id="request-max">
+                <option value="1">1</option>
+                <option value="5" selected>5</option>
+                <option value="20">20</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+          </div>
+          <p class="auth-error" id="request-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary" id="request-btn">Make request link</button>
+        </form>
+        <div class="file-list" id="team-requests"></div>
+      </div>
+
+      <div class="team-pane hidden" data-pane="members">
+        <form class="teams-create admin-only" id="member-form" novalidate>
+          <div class="teams-row">
+            <div class="field">
+              <label for="member-name">Add someone</label>
+              <input type="text" id="member-name" class="text-input" placeholder="@username" autocomplete="off" autocapitalize="none" spellcheck="false" />
+            </div>
+            <div class="field">
+              <label for="member-role">Role</label>
+              <select id="member-role">
+                <option value="member" selected>Member</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <p class="field-hint">Their key is checked against the public key log, and the team’s key is sealed to it here before it’s sent.</p>
+          <p class="auth-error" id="member-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary" id="member-btn">Add</button>
+        </form>
+        <div class="file-list" id="team-members"></div>
+        <button class="btn btn-ghost btn-small" id="leave-btn" type="button">Leave this team</button>
+      </div>
+
+      <div class="team-pane hidden" data-pane="settings">
+        <form class="teams-create" id="settings-form" novalidate>
+          <div class="field">
+            <label for="settings-name">Name</label>
+            <input type="text" id="settings-name" class="text-input" maxlength="60" />
+          </div>
+          <div class="field">
+            <label for="settings-color">Colour</label>
+            <input type="color" id="settings-color" class="color-input" />
+          </div>
+          <div class="field">
+            <label for="settings-logo">Logo (PNG or JPEG, under 60 KB)</label>
+            <input type="file" id="settings-logo" accept="image/png,image/jpeg" />
+            <button type="button" class="btn btn-ghost btn-small" id="settings-logo-clear">Remove logo</button>
+          </div>
+          <div class="field">
+            <label for="settings-requests">Who can make request links</label>
+            <select id="settings-requests">
+              <option value="members">Everyone in the team</option>
+              <option value="admins">Admins only</option>
+            </select>
+          </div>
+          <p class="auth-error" id="settings-error" role="alert"></p>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+        <div class="teams-create">
+          <h2 class="teams-h2">Team key</h2>
+          <p class="field-hint">Security code: <span class="security-code is-small" id="team-code"></span></p>
+          <p class="field-hint">A new key is made by itself whenever someone leaves. You can also make one now.</p>
+          <button class="btn btn-ghost btn-small" id="rotate-btn" type="button">Make a new team key</button>
+        </div>
+        <div class="teams-create">
+          <h2 class="teams-h2">Delete team</h2>
+          <p class="field-hint">Erases its request links and every file in its inbox, for everyone.</p>
+          <button class="btn btn-ghost btn-small btn-danger-ghost" id="delete-team-btn" type="button">Delete team</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+  <script type="module" src="/teams.js"></script>
+</body>
+</html>

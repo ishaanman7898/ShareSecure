@@ -1,8 +1,9 @@
 import {
   newFileKey, lockFile, lockMeta, lockText, unlockText, linkWithKey, keyFromLink, sealKey, openKey, toB64url, fromB64url,
-  newPasscodeSalt, passcodeKey, sealText, openText
+  newPasscodeSalt, passcodeKey, sealText, openText, makeKeyPair, importPrivateKey
 } from './sealed.js';
-import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
+import { detectType, nameFor, canView, kindName, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
+import { makeZip, safeEntryName } from './zip.js';
 import { toRecipients } from './mcp-common.js';
 import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey, checkLogged } from './keys.js';
 import { refill, takeToken, forgetTokens } from './tokens.js';
@@ -207,6 +208,7 @@ function showToast(message, type = 'info', durationMs = 4000) {
 
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
+const folderInput = document.getElementById('folder-input');
 const filePreview = document.getElementById('file-preview');
 const fileName = document.getElementById('file-name');
 const fileSize = document.getElementById('file-size');
@@ -244,6 +246,7 @@ let currentShortId = null;
 let currentDeleteToken = null;
 let currentHistoryRecord = null;
 let userToken = sessionStorage.getItem('user_token');
+let planState = null;   // { id, until, upload, … } once known (see functions/_plans.js)
 let customExpiryHours = null;
 let selfHostMode = false;
 
@@ -357,6 +360,7 @@ customExpiryInput.addEventListener('change', () => {
 const WEBSITE_MAX_BYTES = 10 * 1024 * 1024;
 let maxBytes = WEBSITE_MAX_BYTES;
 let selectedFile = null;
+let selectedType = null;   // what the file really is, from its bytes
 let countdownInterval = null;
 
 function formatSize(bytes) {
@@ -411,36 +415,100 @@ function getFileIcon(mime) {
   return `<svg ${iconProps}><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`;
 }
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.txt', '.md', '.markdown', '.csv'];
-const ALLOWED_MIMES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'image/png',
-  'image/jpeg',
-  'text/plain',
-  'text/markdown',
-  'text/csv',
-];
+// Several files, or a folder, go as one share: they're packed into a ZIP here,
+// and the viewer opens it as a list of files. Anything else about the share
+// (encryption, sending, links that work once) works the same as for one file.
+async function bundleFiles(entries, folderName) {
+  const files = [];
+  for (const { file, path } of entries) {
+    const name = safeEntryName(path || file.name);
+    if (name) files.push({ name, bytes: new Uint8Array(await file.arrayBuffer()) });
+  }
+  // two files with the same path keep both: "a.pdf", "a (2).pdf"
+  const seen = new Map();
+  for (const f of files) {
+    const n = seen.get(f.name.toLowerCase()) || 0;
+    seen.set(f.name.toLowerCase(), n + 1);
+    if (n) f.name = f.name.replace(/(\.[^./]+)?$/, ` (${n + 1})$1`);
+  }
+  const zip = await makeZip(files);
+  const label = folderName || `${files.length} files`;
+  return new File([zip], `${label}.zip`, { type: 'application/zip' });
+}
 
-function setFile(file) {
-  if (file.size > maxBytes) {
-    showToast(`File too large (${formatSize(file.size)}). Max is ${formatSize(maxBytes)}.`, 'error');
+// Every file in a dropped folder, with its path inside it
+async function readDropped(items) {
+  const out = [];
+  const walk = async (entry, prefix) => {
+    if (entry.isFile) {
+      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      out.push({ file, path: prefix + file.name });
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      // a folder is read in batches until one comes back empty
+      for (let batch; (batch = await new Promise((resolve, reject) => reader.readEntries(resolve, reject))).length;) {
+        for (const child of batch) await walk(child, prefix + entry.name + '/');
+      }
+    }
+  };
+  const entries = [...items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
+  for (const entry of entries) await walk(entry, '');
+  const folder = entries.length === 1 && entries[0].isDirectory ? entries[0].name : null;
+  return { files: out, folder };
+}
+
+const MAX_BUNDLE_FILES = 500;
+
+// One file, or several (or a folder) to bundle → the share's file
+async function setFiles(list, folder = null) {
+  const entries = [...list].map(f => f.file ? f : { file: f, path: f.webkitRelativePath || f.name });
+  if (!entries.length) return;
+  if (entries.length > MAX_BUNDLE_FILES) {
+    showToast(`That’s ${entries.length} files. A share can hold up to ${MAX_BUNDLE_FILES}.`, 'error');
     return;
   }
-  const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
-  if (!ALLOWED_EXTENSIONS.includes(ext) && !ALLOWED_MIMES.includes(file.type)) {
-    showToast('Only PDF, DOCX, PNG, JPG, TXT, MD and CSV files are accepted.', 'error');
+  const total = entries.reduce((n, e) => n + e.file.size, 0);
+  if (total > maxBytes) {
+    showToast(`${entries.length > 1 ? 'Those files are' : 'File is'} too large (${formatSize(total)}). Max is ${formatSize(maxBytes)}.`, 'error');
     return;
   }
+  const single = entries.length === 1 && !folder;
+  let file = entries[0].file;
+  if (!single) {
+    // a folder from the picker carries its name at the start of each path
+    const top = entries[0].path.split('/')[0];
+    folder ||= entries[0].path.includes('/') && entries.every(e => e.path.split('/')[0] === top) ? top : null;
+    try { file = await bundleFiles(entries, folder); } catch {
+      showToast('Couldn’t pack those files together. Try again.', 'error');
+      return;
+    }
+    if (file.size > maxBytes) {
+      showToast(`Together those files are ${formatSize(file.size)}. Max is ${formatSize(maxBytes)}.`, 'error');
+      return;
+    }
+  }
+  const type = detectType(new Uint8Array(await file.arrayBuffer()), file.name, file.type);
+  if (!type || type === NOT_UTF8) {
+    showToast(type ? ENCODING_ERROR : TYPES_ERROR, 'error', 7000);
+    return;
+  }
+  setFile(file, type, single ? null : entries.length);
+}
+
+function setFile(file, type, bundled = null) {
   selectedFile = file;
+  selectedType = type;
   // fetch what "Create link" needs while the person fills in the form
   loadQRCode().catch(() => {});
   fileName.textContent = file.name;
-  fileSize.textContent = formatSize(file.size);
-  document.getElementById('file-icon').innerHTML = getFileIcon(file.type);
+  fileSize.textContent = bundled
+    ? `${bundled} files · ${formatSize(file.size)}`
+    : `${kindName(type)} · ${formatSize(file.size)}`;
+  document.getElementById('file-icon').innerHTML = getFileIcon(type);
   filePreview.classList.remove('hidden');
   dropZone.classList.add('hidden');
   uploadBtn.disabled = false;
+  syncSaveOnly();
 
   // Show rename field and pre-fill with filename minus extension
   const nameWrap = document.getElementById('display-name-wrap');
@@ -452,9 +520,25 @@ function setFile(file) {
   }
 }
 
+// Files the viewer can't show (a spreadsheet, an archive) are only any use
+// saved, so their shares always let people save them.
+function syncSaveOnly() {
+  const box = document.getElementById('allow-download');
+  const hint = document.getElementById('save-only-hint');
+  const saveOnly = Boolean(selectedType) && !canView(selectedType);
+  if (box) {
+    if (saveOnly) box.checked = true;
+    box.disabled = saveOnly || Boolean(document.getElementById('burn-toggle')?.checked);
+  }
+  if (hint) hint.textContent = saveOnly ? `${kindName(selectedType)} files can’t be previewed, so people who open the link can save it.` : '';
+  updateAdvancedState();
+}
+
 function clearSelection() {
   selectedFile = null;
+  selectedType = null;
   fileInput.value = '';
+  if (folderInput) folderInput.value = '';
   filePreview.classList.add('hidden');
   dropZone.classList.remove('hidden');
   uploadBtn.disabled = true;
@@ -465,7 +549,7 @@ function clearSelection() {
   if (nameInput) nameInput.value = '';
   const passcodeInput = document.getElementById('passcode-input');
   if (passcodeInput) passcodeInput.value = '';
-  updateAdvancedState();
+  syncSaveOnly();
   updateUploadLabel();
 }
 
@@ -485,16 +569,20 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) setFile(file);
+  const items = e.dataTransfer.items;
+  const hasFolder = [...(items || [])].some(i => i.webkitGetAsEntry?.()?.isDirectory);
+  if (hasFolder) readDropped(items).then(({ files, folder }) => setFiles(files, folder)).catch(() => showToast('Couldn’t read that folder.', 'error'));
+  else setFiles(e.dataTransfer.files);
 });
-dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', e => {
+  if (e.target.closest('#folder-browse')) { e.stopPropagation(); folderInput?.click(); return; }
+  fileInput.click();
+});
 dropZone.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
 });
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) setFile(fileInput.files[0]);
-});
+fileInput.addEventListener('change', () => setFiles(fileInput.files));
+folderInput?.addEventListener('change', () => setFiles(folderInput.files));
 clearFile.addEventListener('click', clearSelection);
 
 // upload
@@ -510,10 +598,20 @@ async function buildUploadForm() {
   if (!selfHostMode && document.getElementById('burn-toggle')?.checked) form.append('burn', '1');
   const displayName = document.getElementById('display-name-input')?.value.trim() || '';
 
+  // Open receipts: a key pair made just for this share. The server keeps the
+  // public half with the link; the private half stays in Your shares, so only
+  // you can read who-opened-it-when (see functions/_receipts.js).
+  let receiptSecret = null;
+  if (document.getElementById('receipts-toggle')?.checked) {
+    const pair = await makeKeyPair();
+    form.append('receipt_key', pair.publicKey);
+    receiptSecret = toB64url(new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey)));
+  }
+
   if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
     form.append('file', selectedFile);
     if (displayName) form.append('display_name', displayName);
-    return { form, key: null };
+    return { form, key: null, receiptSecret };
   }
 
   const bytes = new Uint8Array(await selectedFile.arrayBuffer());
@@ -533,7 +631,7 @@ async function buildUploadForm() {
   // also sealed to you, so the link shows up in Your shares on any device
   const me = await myKeys();
   if (me?.publicKey) form.append('owner_key', await sealKey(me.publicKey, ownerKeys(linkKey, key)));
-  return { form, key, linkKey, name, type };
+  return { form, key, linkKey, name, type, receiptSecret };
 }
 
 // Sends one upload and resolves with { status, body }. status is 0 if the
@@ -632,7 +730,7 @@ uploadBtn.addEventListener('click', async () => {
     showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
     logout();
   } else if (result.status === 429) {
-    showToast('Upload limit reached (5 files per 24h). Try again tomorrow.', 'warn', 6000);
+    showToast(`${result.body.error || 'Upload limit reached.'} Try again tomorrow${planState?.id === 'pro' ? '' : ', or go Pro for more'}.`, 'warn', 6000);
     resetUploadButton();
   } else if (result.status === 0) {
     showToast('Couldn’t reach the server. Check your connection and try again.', 'error');
@@ -673,6 +771,8 @@ function showResult(data, file, delivery, built = {}) {
     delete_token:      data.deleteToken || null,
     // with a passcode, the file's key isn't in the link; keep it to send it on
     full_key:          built.key && built.key !== built.linkKey ? toB64url(built.key) : null,
+    // opens the receipts people's browsers seal to this share
+    receipt_secret:    built.receiptSecret || null,
   };
   saveUploadToHistory(record);
   vaultChanged();
@@ -1393,7 +1493,7 @@ document.getElementById('burn-toggle')?.addEventListener('change', e => {
     if (e.target.checked) box.checked = false;
     box.disabled = e.target.checked;
   }
-  updateAdvancedState();
+  syncSaveOnly();
 });
 
 // ── your own entry in the public key log ─────────────────────────────────────
@@ -2124,6 +2224,73 @@ function forgetShare(shortId) {
   if (!fileList.querySelector('.file-item')) fileList.innerHTML = EMPTY_LIST;
 }
 
+// ── open receipts ────────────────────────────────────────────────────────────
+// Shares made with "Tell me when it's opened" show how often they've been
+// opened, and on how many devices. Each receipt is sealed to the share's own
+// key, so it's opened here; the server only ever has the sealed box.
+const receiptText = new Map();   // short_id → what its row says
+let receiptTimer = null;
+
+function sinceText(iso) {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+async function readReceipts(f) {
+  const token = f.delete_token || localStorage.getItem('owner_' + f.short_id);
+  if (!token) return null;
+  const res = await fetch(`/api/receipts/${encodeURIComponent(f.short_id)}`, { headers: { 'X-Delete-Token': token } });
+  if (!res.ok) return null;
+  const { receipts } = await res.json();
+  const key = await importPrivateKey(fromB64url(f.receipt_secret));
+  const seen = new Set();
+  const opens = [];
+  for (const r of receipts || []) {
+    try {
+      const { d } = JSON.parse(await openText(key, r.box, 'receipt'));
+      opens.push({ at: r.at, newDevice: !seen.has(d) });
+      seen.add(d);
+    } catch {}
+  }
+  return { opens, devices: seen.size };
+}
+
+function describeReceipts({ opens, devices }) {
+  if (!opens.length) return 'Not opened yet';
+  const last = opens[opens.length - 1];
+  if (opens.length === 1) return `Opened once · ${sinceText(last.at)}`;
+  const where = devices === 1 ? 'on one device' : `on ${devices} devices`;
+  return `Opened ${opens.length} times ${where} · last ${sinceText(last.at)}${last.newDevice ? ', from a new device' : ''}`;
+}
+
+async function showReceipts(files) {
+  if (receiptTimer) { clearInterval(receiptTimer); receiptTimer = null; }
+  const watched = files.filter(f => f.receipt_secret);
+  if (!watched.length) return;
+  const update = async () => {
+    for (const f of watched) {
+      const found = await readReceipts(f).catch(() => null);
+      if (!found) continue;
+      const text = describeReceipts(found);
+      const before = receiptText.get(f.short_id);
+      receiptText.set(f.short_id, text);
+      const row = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"] .file-item-receipt`);
+      if (row) {
+        row.textContent = text;
+        row.title = found.opens.map(o => `${new Date(o.at).toLocaleString()}${o.newDevice ? ' · new device' : ''}`).join('\n');
+      }
+      // say so when it happens, not only when someone looks
+      if (before && before !== text && found.opens.length) showToast(`“${f.original_filename}” was just opened${found.opens.at(-1).newDevice && found.opens.length > 1 ? ' on a new device' : ''}.`, 'info', 5000);
+    }
+  };
+  update();
+  receiptTimer = setInterval(update, 60 * 1000);
+}
+
 function renderFileList(files) {
   if (listTimer) { clearInterval(listTimer); listTimer = null; }
   if (!files || files.length === 0) {
@@ -2137,6 +2304,7 @@ function renderFileList(files) {
       <div class="file-item-info">
         <span class="file-item-name">${escapeHtml(f.original_filename)}</span>
         <span class="file-item-time" data-expires="${escapeHtml(f.expires_at)}"></span>
+        ${f.receipt_secret ? `<span class="file-item-receipt">${escapeHtml(receiptText.get(f.short_id) || 'Checking who opened it…')}</span>` : ''}
         <span class="expiry-bar" aria-hidden="true"><span></span></span>
       </div>
       <div class="file-item-actions">
@@ -2148,6 +2316,8 @@ function renderFileList(files) {
       </div>
     </div>
   `).join('');
+
+  showReceipts(files);
 
   // opens the share's dialog, ready to send it to someone
   fileList.querySelectorAll('.send-file-btn').forEach(btn => {
@@ -2412,6 +2582,99 @@ document.addEventListener('keydown', (e) => {
   if (!resultCard.classList.contains('hidden')) closeResult();
 });
 
+// ── plan: Free or Pro ────────────────────────────────────────────────────────
+// Paying starts with a random claim code made here. Checkout carries it, so
+// the payment company never learns your username, and the server only links
+// the payment to your account when this browser hands the code in.
+const planModal = document.getElementById('plan-modal');
+const CLAIM_KEY = 'plan_claim';
+let planInfo = null;
+
+async function loadPlan() {
+  if (!userToken || selfHostMode) return null;
+  try {
+    const res = await fetch('/api/plan', { headers: authHeaders() });
+    if (!res.ok) return null;
+    planInfo = await res.json();
+    planState = planInfo.plan;
+    document.getElementById('menu-plan-name').textContent = planState.name;
+    document.getElementById('menu-plan')?.classList.remove('hidden');
+    document.getElementById('menu-teams')?.classList.remove('hidden');
+    return planInfo;
+  } catch { return null; }
+}
+
+function renderPlan() {
+  if (!planInfo) return;
+  const { plan, plans, checkoutUrl, manageUrl } = planInfo;
+  for (const el of planModal.querySelectorAll('[data-limit]')) {
+    const [id, key] = el.dataset.limit.split('.');
+    if (plans?.[id]?.[key] !== undefined) el.textContent = plans[id][key];
+  }
+  document.getElementById('plan-card-free').classList.toggle('is-current', plan.id === 'free');
+  document.getElementById('plan-card-pro').classList.toggle('is-current', plan.id === 'pro');
+  const until = plan.until ? new Date(plan.until).toLocaleDateString() : null;
+  document.getElementById('plan-status').textContent = plan.id === 'pro'
+    ? `You’re on Pro${until ? `, paid until ${until}` : ''}.`
+    : checkoutUrl ? 'You’re on Free.' : 'You’re on Free. Pro isn’t available to buy yet.';
+  const upgrade = document.getElementById('plan-upgrade');
+  upgrade.classList.toggle('hidden', plan.id === 'pro' || !checkoutUrl);
+  const manage = document.getElementById('plan-manage');
+  manage.href = manageUrl || '#';
+  manage.classList.toggle('hidden', plan.id !== 'pro');
+}
+
+async function openPlan() {
+  closeMenu();
+  await loadPlan();
+  renderPlan();
+  openModal(planModal);
+}
+document.getElementById('menu-plan')?.addEventListener('click', openPlan);
+
+document.getElementById('plan-upgrade')?.addEventListener('click', () => {
+  if (!planInfo?.checkoutUrl) return;
+  const code = toB64url(crypto.getRandomValues(new Uint8Array(32)));
+  try { localStorage.setItem(CLAIM_KEY, code); } catch {}
+  const url = new URL(planInfo.checkoutUrl);
+  url.searchParams.set('checkout[custom][claim]', code);
+  location.href = url.href;
+});
+
+// Back from checkout (or any later visit while a code is waiting): hand the
+// code in. The payment can reach the server a little after you do.
+async function redeemClaim() {
+  let code = null;
+  try { code = localStorage.getItem(CLAIM_KEY); } catch {}
+  if (!code || !userToken || selfHostMode) return;
+  for (let i = 0; i < 12; i++) {
+    const res = await fetch('/api/plan/claim', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ code }),
+    }).catch(() => null);
+    if (res?.ok) {
+      try { localStorage.removeItem(CLAIM_KEY); } catch {}
+      await loadPlan();
+      refill(tokenUsername(), authHeaders());
+      showToast('You’re on Pro. Thank you!', 'success', 6000);
+      return;
+    }
+    if (res?.status !== 202) return;
+    await new Promise(r => setTimeout(r, 5000));
+  }
+}
+
+document.addEventListener('sharesecure:ready', () => {
+  const params = new URLSearchParams(location.search);
+  const wantsPlan = params.has('plan');
+  if (wantsPlan) history.replaceState(null, '', location.pathname);
+  // wait for sign-in to settle, then pick up the plan and any waiting payment
+  setTimeout(async () => {
+    await loadPlan();
+    redeemClaim();
+    if (wantsPlan && planInfo) { renderPlan(); openModal(planModal); }
+  }, 600);
+}, { once: true });
+
 // ── mode detection + app initialisation ──────────────────────────────────────
 const tcModal = document.getElementById('tc-modal');
 const acceptTcBtn = document.getElementById('accept-tc-btn');
@@ -2424,8 +2687,8 @@ async function detectSelfHostMode() {
       publicBase = data.publicUrl || null;
       if (data.selfHostMode === true && data.maxUpload > 0) {
         maxBytes = data.maxUpload;
-        const limit = document.querySelector('#drop-zone .drop-limit');
-        if (limit) limit.textContent = limit.textContent.replace('10 MB', formatSize(maxBytes).replace('.0 ', ' '));
+        const limit = document.getElementById('drop-limit-size');
+        if (limit) limit.textContent = formatSize(maxBytes).replace('.0 ', ' ');
       }
       return data.selfHostMode === true;
     }
@@ -2474,3 +2737,45 @@ acceptTcBtn?.addEventListener('click', () => {
 });
 
 initApp();
+
+// ── the phone's Share button ─────────────────────────────────────────────────
+// Installed from the website ("Add to Home screen"), ShareSecure shows up in
+// the phone's Share menu (manifest.webmanifest, sw.js). What's shared waits on
+// the phone until you're signed in here, then fills in the upload form;
+// nothing goes up until you choose to share it.
+if ('serviceWorker' in navigator && location.protocol === 'https:' && !/ShareSecureDesktop\//.test(navigator.userAgent)) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+async function takeShared() {
+  const state = new URLSearchParams(location.search).get('shared');
+  if (state) history.replaceState(null, '', location.pathname);
+  if (state === 'failed') showToast('That didn’t come through. Try sharing it again.', 'warn', 6000);
+  if (typeof caches === 'undefined') return;
+  let cache, waiting;
+  try {
+    cache = await caches.open('shared-to-app');
+    waiting = await cache.keys();
+  } catch { return; }
+  if (!waiting.length) return;
+  // wait for the upload form: signed in, or this computer's own server
+  const ready = () => (selfHostMode || document.body.classList.contains('is-logged-in')) && !uploadCard.classList.contains('hidden');
+  for (let i = 0; i < 40 && !ready(); i++) await new Promise(r => setTimeout(r, 250));
+  if (!ready()) {
+    showToast('Sign in to share what you sent to ShareSecure. It’ll be waiting.', 'info', 7000);
+    return;
+  }
+  const files = [];
+  for (const req of waiting) {
+    const res = await cache.match(req);
+    if (res) {
+      const name = decodeURIComponent(res.headers.get('X-Name') || 'file');
+      files.push(new File([await res.blob()], name, { type: res.headers.get('Content-Type') || '' }));
+    }
+    await cache.delete(req);
+  }
+  if (!files.length) return;
+  await setFiles(files);
+  uploadCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+document.addEventListener('sharesecure:ready', () => { takeShared().catch(() => {}); }, { once: true });

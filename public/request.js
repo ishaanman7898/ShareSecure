@@ -5,6 +5,7 @@
 // swap itself in. No account is needed.
 import { newFileKey, lockFile, lockMeta, lockText, unlockText, sealKey, fromB64url, isPublicKey, fingerprint } from './sealed.js';
 import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
+import { makeZip, safeEntryName } from './zip.js';
 
 const $ = id => document.getElementById(id);
 const id = location.pathname.split('/q/')[1] || '';
@@ -26,28 +27,56 @@ async function load() {
   let label = '';
   try { label = await unlockText(requestKey, info.label, 'request'); } catch { stop('This link doesn’t match its request. Ask for the link again.'); return; }
   remaining = info.remaining;
-  asker = info.username;
+  // a team's link shows the team's own name, colour and logo
+  asker = info.team ? info.team.name : `@${info.username}`;
+  if (info.team) showTeam(info.team);
   until = new Date(info.expires_at).toLocaleString();
   showRemaining();
   $('req-label').textContent = label;
   $('req-label').classList.toggle('hidden', !label);
-  $('req-who').textContent = `@${info.username}`;
+  $('req-who').textContent = asker;
   $('req-code').textContent = await fingerprint(ownerKey);
   $('req-form').classList.remove('hidden');
 }
 
 function showRemaining() {
   $('req-sub').textContent = remaining > 0
-    ? `@${asker} asked for a file. ${remaining === 1 ? 'One file' : `Up to ${remaining} files`} can be sent, until ${until}.`
-    : `@${asker} asked for a file.`;
+    ? `${asker} asked for a file. ${remaining === 1 ? 'One file' : `Up to ${remaining} files`} can be sent, until ${until}.`
+    : `${asker} asked for a file.`;
 }
 
-function pick(f) {
+function showTeam(team) {
+  $('req-brand-name').textContent = team.name;
+  // the server only keeps PNG and JPEG logos, checked from their bytes
+  if (team.logo && /^data:image\/(png|jpeg);base64,/.test(team.logo)) {
+    $('req-brand-logo').src = team.logo;
+    $('req-brand-logo').classList.remove('hidden');
+  }
+  if (team.color && /^#[0-9a-f]{6}$/i.test(team.color)) {
+    const n = parseInt(team.color.slice(1), 16);
+    const light = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150;
+    const root = document.documentElement.style;
+    root.setProperty('--accent', team.color);
+    root.setProperty('--accent-strong', team.color);
+    root.setProperty('--on-accent', light ? '#000000' : '#ffffff');
+  }
+  $('req-brand').classList.remove('hidden');
+}
+
+// Several files go as one, packed into a ZIP here, so they use one place.
+async function pick(list) {
   $('req-error').textContent = '';
-  if (!f) return;
-  if (f.size > 10 * 1024 * 1024) { $('req-error').textContent = 'That file is over 10 MB.'; return; }
+  const files = [...(list || [])];
+  if (!files.length) return;
+  if (files.reduce((n, f) => n + f.size, 0) > 10 * 1024 * 1024) { $('req-error').textContent = files.length > 1 ? 'Together those files are over 10 MB.' : 'That file is over 10 MB.'; return; }
+  let f = files[0];
+  if (files.length > 1) {
+    const packed = [];
+    for (const one of files) packed.push({ name: safeEntryName(one.webkitRelativePath || one.name), bytes: new Uint8Array(await one.arrayBuffer()) });
+    f = new File([await makeZip(packed)], `${files.length} files.zip`, { type: 'application/zip' });
+  }
   file = f;
-  $('req-file-label').textContent = f.name;
+  $('req-file-label').textContent = files.length > 1 ? `${files.length} files, sent together` : f.name;
   $('req-submit').disabled = false;
 }
 
@@ -56,8 +85,8 @@ zone.addEventListener('click', () => input.click());
 zone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
 zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
 zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); pick(e.dataTransfer.files[0]); });
-input.addEventListener('change', () => pick(input.files[0]));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragover'); pick(e.dataTransfer.files); });
+input.addEventListener('change', () => pick(input.files));
 
 $('req-form').addEventListener('submit', async e => {
   e.preventDefault();

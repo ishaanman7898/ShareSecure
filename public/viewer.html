@@ -33,7 +33,7 @@
       <a class="v-home" href="/" aria-label="ShareSecure home"><img src="/rosette.svg" alt="" width="26" height="26" /></a>
       <div class="v-doc">
         <span class="v-title" id="doc-title">Loading…</span>
-        <span class="v-meta"><span id="doc-meta"></span><span class="countdown-wrap" id="countdown-wrap"><span id="countdown-text"></span></span></span>
+        <span class="v-meta"><span id="doc-meta"></span><span class="v-receipt hidden" id="receipt-note" title="Whoever shared this link is told when it’s opened, and whether this device opened it before. Not who you are or where: nobody, ShareSecure included, learns that.">Sender sees when it’s opened</span><span class="countdown-wrap" id="countdown-wrap"><span id="countdown-text"></span></span></span>
       </div>
     </div>
 
@@ -113,6 +113,11 @@
       <img class="loader-rosette" src="/rosette-loading.svg" alt="" width="72" height="72" />
     </div>
 
+    <div class="bundle-back hidden" id="bundle-back">
+      <button class="btn btn-ghost btn-sm" id="bundle-back-btn" type="button">← All files</button>
+      <span class="bundle-back-name" id="bundle-back-name"></span>
+    </div>
+
     <div class="pdf-scroll-container hidden" id="pdf-container"></div>
 
     <div class="img-container hidden" id="img-container">
@@ -123,9 +128,27 @@
       <div class="docx-content" id="docx-content"></div>
     </div>
 
+    <div class="media-container hidden" id="media-container"></div>
+
+    <section class="bundle-container hidden" id="bundle-container" aria-label="Files in this share">
+      <header class="bundle-head">
+        <span class="bundle-count" id="bundle-count"></span>
+        <button class="btn btn-primary btn-sm hidden" id="bundle-save-all" type="button">Save all (ZIP)</button>
+      </header>
+      <ul class="bundle-list" id="bundle-list"></ul>
+    </section>
+
+    <div class="save-card hidden" id="save-card">
+      <p class="save-kind" id="save-kind"></p>
+      <p class="save-name" id="save-name"></p>
+      <p class="save-size" id="save-size"></p>
+      <button class="btn btn-primary" id="save-btn" type="button">Save file</button>
+      <p class="save-note">This kind of file can’t be shown in the browser. Saving it puts a copy on this device.</p>
+    </div>
+
     <div class="unsupported hidden" id="unsupported">
       <p class="unsupported-title" id="unsupported-title"></p>
-      <p class="unsupported-sub">This file couldn’t be displayed. Try reloading the page.</p>
+      <p class="unsupported-sub" id="unsupported-sub">This file couldn’t be displayed. Try reloading the page.</p>
     </div>
 
     <div class="unsupported hidden" id="signin-needed">

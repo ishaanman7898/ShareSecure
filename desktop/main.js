@@ -546,7 +546,7 @@ app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const { bundledFile: findFile, TYPES } = require('./site-files');
 const PAGE_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; " +
+  "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; " +
   "frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
 const bundledFile = pathname => findFile(PUBLIC_DIR, pathname);

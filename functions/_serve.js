@@ -3,6 +3,7 @@
 import { getDb, purgeExpired, decryptStr, ensureFileColumns, loadFileBytes, signInRequired, findLiveFile } from './_turso.js';
 import { takeView, burn, noteTry } from './_burn.js';
 import { overPublicLimit } from './_auth.js';
+import { isAllowedType } from '../public/filetypes.js';
 
 // RFC 6266: a plain ASCII name, plus the real one for browsers that read it
 function contentDisposition(type, filename) {
@@ -12,15 +13,11 @@ function contentDisposition(type, filename) {
 
 // Only the types uploads accept are sent as themselves. Text is plain UTF-8
 // text in the viewer (never HTML), and anything else is just bytes.
-const SERVED_TYPES = new Set([
-  'application/pdf', 'image/png', 'image/jpeg', 'image/jpg',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-]);
 const TEXT_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv']);
 
 function contentType(type, disposition) {
   if (TEXT_TYPES.has(type)) return `${disposition === 'inline' ? 'text/plain' : type}; charset=utf-8`;
-  return SERVED_TYPES.has(type) ? type : 'application/octet-stream';
+  return isAllowedType(type) ? type : 'application/octet-stream';
 }
 
 export async function serveFile(context, { disposition }) {

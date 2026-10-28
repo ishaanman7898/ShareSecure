@@ -42,7 +42,7 @@ const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 
 // Git on Windows may check text files out with CRLF line endings; the deploy
 // has LF, so compare the LF form of text files.
-const TEXT = /\.(html|js|mjs|css|json|svg|txt|sh|ps1)$/;
+const TEXT = /\.(html|js|mjs|css|json|webmanifest|svg|txt|sh|ps1)$/;
 const normalize = (rel, bytes) => TEXT.test(rel) ? Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n')) : bytes;
 
 async function check() {

@@ -95,6 +95,9 @@ const FILE_COLUMNS = [
   'ALTER TABLE files ADD COLUMN passcode_salt TEXT',         // set when the link also needs a passcode
   'ALTER TABLE files ADD COLUMN via_request TEXT',           // the file request it was uploaded to
   'ALTER TABLE files ADD COLUMN max_views INTEGER',          // 1 = erased once it's opened (see _burn.js)
+  'ALTER TABLE files ADD COLUMN receipt_key TEXT',           // set when the sender asked for open receipts (_receipts.js)
+  'ALTER TABLE files ADD COLUMN team_id TEXT',               // came in through a team's request link (_teams.js)
+  'CREATE INDEX IF NOT EXISTS idx_files_team ON files(team_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent_key ON files(parent_key)',
   'CREATE INDEX IF NOT EXISTS idx_files_cluster ON files(cluster_id)',
@@ -468,9 +471,16 @@ export async function deleteBranch(db, shortId, env) {
 // Some links only open for signed-in people, or for the one person they were
 // sent to. → the response to send back, or null when the viewer may continue.
 export async function signInRequired(file, request, env) {
-  if (!file?.require_account && !file?.recipient_user_tag) return null;
+  if (!file?.require_account && !file?.recipient_user_tag && !file?.team_id) return null;
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   if (!auth) return Response.json({ error: 'Sign in to ShareSecure to open this file.', code: 'sign_in_required' }, { status: 401 });
+  // a file that came in through a team's request link opens for its members
+  if (file.team_id) {
+    const member = (await getDb(env).execute({
+      sql: 'SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?', args: [file.team_id, auth.userId],
+    })).rows.length > 0;
+    return member ? null : Response.json({ error: 'This file belongs to a team you’re not in.', code: 'recipient_required' }, { status: 403 });
+  }
   if (!file.recipient_user_tag || file.recipient_user_tag === await getUserTag(auth.userId, env)) return null;
   return Response.json({ error: 'This file was sent to another account.', code: 'recipient_required' }, { status: 403 });
 }

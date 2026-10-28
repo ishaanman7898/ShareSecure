@@ -14,10 +14,12 @@ import {
   countUploadsToday, ensureFileColumns, randomId, LINK_ID_LENGTH, bufToB64
 } from '../_turso.js';
 import { spendToken, issuerAccount, issuedToday, DAILY } from '../_tokens.js';
-import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../../public/filetypes.js';
+import { detectType, nameFor, canView, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../../public/filetypes.js';
 import { isSealed, MAX_FILE, MAX_SEALED_FILE, BOX_OVERHEAD } from '../../public/sealed.js';
+import { receiptKeyFrom } from '../_receipts.js';
+import { planFor } from '../_plans.js';
 
-const limitReached = () => Response.json({ error: `Upload limit reached (${DAILY.upload} files per 24h)` }, { status: 429 });
+const limitReached = n => Response.json({ error: `Upload limit reached (${n} files per 24h)` }, { status: 429 });
 
 // uploads an account made today: tagged ones, plus anonymous tokens it was given
 async function usedToday(db, auth, userTag, env) {
@@ -80,6 +82,8 @@ export async function onRequestPost(context) {
       ownerKey: null,
       salt: null,
       plainName: name,
+      // a file the viewer can't show can always be saved, or it's no use at all
+      saveOnly: !canView(type),
     };
   }
 
@@ -87,7 +91,8 @@ export async function onRequestPost(context) {
   await ensureFileColumns(db);
 
   const userTag = auth ? await getUserTag(auth.userId, env) : null;
-  if (auth && await usedToday(db, auth, userTag, env) >= DAILY.upload) return limitReached();
+  const daily = auth ? (await planFor(db, auth.userId)).upload : DAILY.upload;
+  if (auth && await usedToday(db, auth, userTag, env) >= daily) return limitReached(daily);
 
   // anything from a minute to 10 days
   const hours = Math.min(Math.max(parseFloat(form.get('expires_hours')) || 1, 1 / 60), 240);
@@ -103,18 +108,18 @@ export async function onRequestPost(context) {
   await db.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token,
             user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download, require_account,
-            e2e, owner_key, passcode_salt, max_views)
-          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            e2e, owner_key, passcode_salt, max_views, receipt_key)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [shortId, row.name, row.type, row.size, row.data, expiresAt, deleteToken,
-      userTag, shortId, once ? 0 : flag('allow_annotations'), once ? 0 : flag('allow_download'), flag('require_account'),
-      e2e ? 1 : 0, row.ownerKey, row.salt, once ? 1 : null]
+      userTag, shortId, once ? 0 : flag('allow_annotations'), once ? 0 : (row.saveOnly ? 1 : flag('allow_download')), flag('require_account'),
+      e2e ? 1 : 0, row.ownerKey, row.salt, once ? 1 : null, receiptKeyFrom(form.get('receipt_key'))]
   });
 
   // Count again now this one is in, so several uploads at once can't all slip
   // under the limit. One that went over is taken back out.
-  if (auth && await usedToday(db, auth, userTag, env) > DAILY.upload) {
+  if (auth && await usedToday(db, auth, userTag, env) > daily) {
     await db.execute({ sql: 'DELETE FROM files WHERE short_id = ?', args: [shortId] });
-    return limitReached();
+    return limitReached(daily);
   }
 
   const baseUrl = env.BASE_URL || new URL(request.url).origin;

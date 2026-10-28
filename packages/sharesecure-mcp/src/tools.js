@@ -490,7 +490,7 @@ export const TOOLS = [
   {
     name: 'share_file',
     title: 'Share a file',
-    description: 'Share a file on this computer (PDF, DOCX, PNG, JPG, or UTF-8 text: .txt, .md, .csv; up to 10 MB) through a private link that expires. It’s encrypted here before upload, and the link (which holds the key) goes straight to the user’s clipboard, not to you. Optionally send it to ShareSecure usernames.',
+    description: 'Share a file on this computer (a document such as PDF, Word, Excel or PowerPoint; an image, video or audio file; a ZIP or other archive; or UTF-8 text: .txt, .md, .csv; up to 10 MB) through a private link that expires. It’s encrypted here before upload, and the link (which holds the key) goes straight to the user’s clipboard, not to you. Optionally send it to ShareSecure usernames.',
     inputSchema: { type: 'object', required: ['path'], properties: { path: { type: 'string', description: 'Path to the file.' }, ...COMMON } },
     annotations: SHARING,
   },

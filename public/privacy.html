@@ -65,6 +65,12 @@
       <p>When you make a link for someone to send you a file, we store it under your account with what you asked for sealed so we can't read it, how many files it takes, and when it expires. Files sent through it arrive sealed to your key, like any end-to-end encrypted file.</p>
       <h3>Sends waiting for your OK</h3>
       <p>When an assistant sends a file to someone not on your list, the send waits, sealed to your own key, for up to a week. Your list of people is sealed the same way. We can't read either.</p>
+      <h3>Open receipts</h3>
+      <p>Only if the sender turns on “Tell me when it’s opened”. Each time the link is opened, we store a receipt sealed to a key only the sender has, and the minute it arrived. Inside it is a code that’s the same each time one device opens that one link, and different for every other link, so the sender can tell a new device from a repeat but nobody can follow a device from link to link. We can’t read the receipt, and we don’t store an IP address or browser details with it. People opening such a link are told receipts are on. Receipts are erased when the link would have expired.</p>
+      <h3>Teams</h3>
+      <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team’s keys, sealed to each member so we can’t open them. Files sent through a team’s request links are sealed to the team’s key in the sender’s browser; we store them like any end-to-end encrypted file, marked as the team’s. We do know who is in which team.</p>
+      <h3>Pro</h3>
+      <p>Lemon Squeezy takes the payment and handles your card and email; we never see them. We keep only that your account is on Pro, until when, and a keyed code standing in for the subscription, so renewals and cancellations reach your account. Pro gives your account more anonymous tokens a day, and those tokens look like anyone else’s, so being on Pro doesn’t tie any share to you.</p>
       <h3>Links that work once</h3>
       <p>After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
     </section>
@@ -80,6 +86,7 @@
         <li><strong>Cloudflare</strong> hosts the site and handles every request. Like any web host it sees your IP address and basic request details, under <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">its privacy policy</a>.</li>
         <li><strong>Turso</strong> stores the database, including the encrypted files.</li>
         <li><strong>GitHub</strong> hosts the source code and desktop app downloads.</li>
+        <li><strong>Lemon Squeezy</strong>, only if you buy Pro, takes the payment as the seller of record, under <a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noopener noreferrer">its privacy policy</a>. It isn’t told your ShareSecure username.</li>
         <li><strong>AI assistants you connect</strong>, like Claude or ChatGPT, see the links, file names and share details they handle for you, under their own privacy policies. If an assistant gives us a public link to a file, we download it from there to share it. The assistant on your own computer keeps links out of the chat.</li>
       </ul>
       <p>We don't sell or share your data with anyone else.</p>

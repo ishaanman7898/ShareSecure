@@ -428,7 +428,7 @@ function toolsFrom(c) {
       name: 'share_file',
       title: 'Share a file',
       description: [
-        'Share a file (PDF, DOCX, PNG, JPG, or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
+        'Share a file (a document such as PDF, Word, Excel or PowerPoint; an image, video or audio file; a ZIP or other archive; or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
         '1. content_base64 + filename: the file’s bytes, when you can read them. For a file you made or opened in a code sandbox, base64 it there and pass the result. Up to 2 MB, but base64 costs many tokens, so it’s best under about 100 KB.',
         '2. source_url: a public https link to the file; ShareSecure downloads it.',
         '3. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',

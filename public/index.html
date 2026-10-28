@@ -9,6 +9,11 @@
   <title>ShareSecure</title>
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="ShareSecure" />
   <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="/gradient-ascii.css" />
   <link rel="stylesheet" href="/style.css" />
@@ -69,6 +74,15 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span>Security code</span>
           </button>
+          <button class="menu-item web-only-item hidden" role="menuitem" id="menu-plan">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span>Plan</span>
+            <span class="menu-meta" id="menu-plan-name"></span>
+          </button>
+          <a class="menu-item web-only-item hidden" role="menuitem" href="/teams" id="menu-teams">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Teams</span>
+          </a>
           <button class="menu-item" role="menuitem" id="menu-mcp">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
             <span>Connect an AI assistant</span>
@@ -127,12 +141,13 @@
       <section class="panel" id="upload-card" aria-labelledby="upload-title">
         <h2 class="panel-title" id="upload-title">New share</h2>
 
-        <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose a file to share">
+        <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Choose files to share">
           <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
-          <p class="drop-label drop-label-fine">Drop a file here, or <span class="drop-browse">browse</span></p>
-          <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose a file</span></p>
-          <p class="drop-limit">PDF, DOCX, PNG, JPG or text (.txt, .md, .csv), up to 10 MB</p>
-          <input type="file" id="file-input" accept=".pdf,.docx,.png,.jpg,.jpeg,.txt,.md,.markdown,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,text/plain,text/markdown,text/csv" hidden />
+          <p class="drop-label drop-label-fine">Drop files or a folder here, or <span class="drop-browse">browse</span></p>
+          <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose files</span></p>
+          <p class="drop-limit">Documents, spreadsheets, images, video, ZIPs and more, up to <span id="drop-limit-size">10 MB</span> · <button type="button" class="drop-browse drop-folder" id="folder-browse">choose a folder</button></p>
+          <input type="file" id="file-input" multiple hidden />
+          <input type="file" id="folder-input" webkitdirectory hidden />
         </div>
 
         <div class="file-preview hidden" id="file-preview">
@@ -204,10 +219,16 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Let viewers download the file</span>
           </label>
+          <span class="field-hint" id="save-only-hint"></span>
           <label class="switch hidden" id="burn-wrap" title="The file is erased the moment it's opened. If anyone tries the link after that, you're told: it may have been passed on.">
             <input type="checkbox" id="burn-toggle" />
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Works once: erase it as soon as it’s opened</span>
+          </label>
+          <label class="switch" id="receipts-wrap" title="You see when the link is opened, how many times, and whether it was on a device that opened it before. Not who opened it or where: nobody, ShareSecure included, learns that.">
+            <input type="checkbox" id="receipts-toggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Tell me when it’s opened</span>
           </label>
           <label class="switch hidden" id="require-account-wrap">
             <input type="checkbox" id="require-account" />
@@ -420,6 +441,43 @@
       <div class="modal-block hidden" id="ask-done">
         <div class="code-box"><code id="ask-link"></code><button class="btn btn-ghost btn-copy" data-copy="ask-link">Copy</button></div>
         <p class="field-hint">Send this link to whoever has the file. What you asked for is in the part after #, so ShareSecure never sees it, and so is your public key, so their browser locks the file to you and nobody can swap in another key.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="plan-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="plan-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="plan-title">Your plan</h2>
+        <button class="btn-icon" data-close aria-label="Close">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="plan-cards">
+        <div class="plan-card" id="plan-card-free">
+          <h3>Free</h3>
+          <ul>
+            <li><span data-limit="free.upload">5</span> shares a day</li>
+            <li><span data-limit="free.send">60</span> sends a day</li>
+            <li><span data-limit="free.requests">10</span> open file requests</li>
+            <li>Every file type, folders, open receipts</li>
+          </ul>
+        </div>
+        <div class="plan-card" id="plan-card-pro">
+          <h3>Pro</h3>
+          <ul>
+            <li><span data-limit="pro.upload">100</span> shares a day</li>
+            <li><span data-limit="pro.send">300</span> sends a day</li>
+            <li><span data-limit="pro.requests">50</span> open file requests</li>
+            <li>Teams: a shared inbox, request links with your name and logo, admins</li>
+          </ul>
+        </div>
+      </div>
+      <p class="modal-text" id="plan-status"></p>
+      <p class="modal-text field-hint">Paying doesn’t tie your shares to you. Shares still go up with anonymous tokens, and a Pro token looks the same as anyone’s. ShareSecure knows your account is Pro; the payment company knows who paid; neither knows what you share. ShareSecure never sees your card or email.</p>
+      <div class="modal-actions">
+        <a class="btn btn-ghost hidden" id="plan-manage" target="_blank" rel="noopener noreferrer">Manage or cancel</a>
+        <button type="button" class="btn btn-primary hidden" id="plan-upgrade">Go Pro</button>
       </div>
     </div>
   </div>

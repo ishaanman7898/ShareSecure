@@ -12,7 +12,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'sharesecure-audit-'));
 fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module","version":"0.0.0-test"}');
 fs.cpSync(path.join(root, 'functions'), path.join(temp, 'functions'), { recursive: true });
 // the API and the local MCP package share these modules with the browser
-const SHARED = ['sealed.js', 'filetypes.js', 'mcp-common.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js'];
+const SHARED = ['sealed.js', 'filetypes.js', 'zip.js', 'mcp-common.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js'];
 fs.mkdirSync(path.join(temp, 'public'));
 for (const f of SHARED) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
 // Cloudflare's bundler reads package.json on its own; Node needs to be told it's JSON
@@ -1323,4 +1323,190 @@ test('a send that fails after the upload still returns the share, so the assista
   } finally {
     failingPaths.clear();
   }
+});
+
+test('open receipts: sealed to the sender, readable only with the delete token, and they tell devices apart without tracking them', async () => {
+  freshDay();
+  const { makeKeyPair, sealText, openText } = await sealedLib();
+  const receipts = await load('api/receipts/[shortId].js');
+  const pair = await makeKeyPair();
+  const form = new FormData(); form.set('file', new File(['Watch me'], 'watched.txt')); form.set('expires_hours', '24'); form.set('receipt_key', pair.publicKey);
+  const share = await (await uploadHandler(context('/api/upload', { body: form }))).json();
+  const info = await (await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }))).json();
+  assert.equal(info.receiptKey, pair.publicKey);
+
+  const post = box => receipts.onRequestPost(context('/api/receipts/' + share.shortId, { user: null, params: { shortId: share.shortId }, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box }) }));
+  const get = token => receipts.onRequestGet(context('/api/receipts/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId }, headers: token ? { 'X-Delete-Token': token } : {} })).then(r => r.json());
+  const phone = await sealText(info.receiptKey, JSON.stringify({ d: 'phone-tag' }), 'receipt');
+  const laptop = await sealText(info.receiptKey, JSON.stringify({ d: 'laptop-tag' }), 'receipt');
+  for (const box of [phone, phone, laptop]) assert.equal((await post(box)).status, 200);
+
+  // the server keeps sealed boxes and the minute, never an address
+  const stored = db.prepare('SELECT * FROM receipts WHERE short_id = ?').all(share.shortId);
+  assert.deepEqual(Object.keys(stored[0]).sort(), ['at', 'box', 'expires_at', 'owner', 'short_id']);
+  assert(stored.every(r => !r.box.includes('tag') && r.owner !== share.deleteToken && /:00Z$/.test(r.at)));
+
+  // only the delete token gets them, and only the sender's key opens them
+  assert.deepEqual((await get()).receipts, []);
+  assert.deepEqual((await get('wrong-token-wrong-token!')).receipts, []);
+  const mine = (await get(share.deleteToken)).receipts;
+  assert.equal(mine.length, 3);
+  const tags = await Promise.all(mine.map(async r => JSON.parse(await openText(pair.privateKey, r.box, 'receipt')).d));
+  assert.deepEqual(tags, ['phone-tag', 'phone-tag', 'laptop-tag']);
+  const stranger = await makeKeyPair();
+  await assert.rejects(openText(stranger.privateKey, mine[0].box, 'receipt'));
+
+  // anything that isn't a sealed receipt is refused, and links that didn't ask take none
+  assert.equal((await post('opened by 203.0.113.9')).status, 400);
+  assert.equal((await post(phone + 'x'.repeat(600))).status, 400);
+  const plain = await upload('quiet.txt', 'No receipts here');
+  assert.equal((await receipts.onRequestPost(context('/api/receipts/' + plain.shortId, { user: null, params: { shortId: plain.shortId }, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box: phone }) }))).status, 404);
+
+  // a link can't be flooded: after 100, opens aren't recorded
+  for (let i = 0; i < 100; i++) await post(laptop);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM receipts WHERE short_id = ?').get(share.shortId).n, 100);
+});
+
+// ── plans and teams ─────────────────────────────────────────────────────────
+const planEnv = { ...env, LEMONSQUEEZY_WEBHOOK_SECRET: 'test-only-webhook-secret', LEMONSQUEEZY_CHECKOUT_URL: 'https://shop.invalid/buy/1' };
+const planCall = (pathParts, { user = null, method = 'GET', body, headers = {} } = {}) => load('api/plan/[[path]].js').then(m => m.onRequest({
+  env: planEnv, waitUntil: p => p.catch(() => {}), params: { path: pathParts },
+  request: new Request('https://sharesecure.test/api/plan/' + pathParts.join('/'), { method, headers: { ...(user ? { Authorization: 'Bearer ' + tokens[user] } : {}), ...headers }, ...(body === undefined ? {} : { body }) }),
+}));
+async function webhook(event, secret = planEnv.LEMONSQUEEZY_WEBHOOK_SECRET) {
+  const body = JSON.stringify(event);
+  const sig = require('node:crypto').createHmac('sha256', secret).update(body).digest('hex');
+  return planCall(['webhook'], { method: 'POST', body, headers: { 'X-Signature': sig, 'Content-Type': 'application/json' } });
+}
+const subEvent = (name, status, claim) => ({
+  meta: { event_name: name, custom_data: claim ? { claim } : undefined },
+  data: { id: '4242', attributes: { status, renews_at: new Date(Date.now() + 30 * 86400000).toISOString(), ends_at: null, user_email: 'payer@example.invalid' } },
+});
+const claimAs = (user, code) => planCall(['claim'], { user, method: 'POST', body: JSON.stringify({ code }), headers: { 'Content-Type': 'application/json' } });
+
+test('plans: a payment reaches the account only through its claim code, nothing about the payer is kept, and Pro gives more tokens', async () => {
+  const before = await (await planCall([], { user: 'alice' })).json();
+  assert.equal(before.plan.id, 'free');
+  assert.equal(before.checkoutUrl, 'https://shop.invalid/buy/1');
+
+  const code = sealed.toB64url(sealed.newFileKey());
+  // an unsigned or wrongly signed webhook does nothing
+  assert.equal((await webhook(subEvent('subscription_created', 'active', code), 'wrong-secret')).status, 401);
+  assert.equal((await claimAs('alice', code)).status, 202);
+
+  assert.equal((await webhook(subEvent('subscription_created', 'active', code))).status, 200);
+  // nothing that names the payer is stored, and the subscription id only as a keyed hash
+  const kept = JSON.stringify(db.prepare('SELECT * FROM plan_claims').all());
+  assert(!kept.includes('payer@') && !kept.includes('4242') && !kept.includes(code));
+
+  // someone without the code gets nothing; alice's browser hands hers in
+  assert.equal((await claimAs('mallory', sealed.toB64url(sealed.newFileKey()))).status, 202);
+  const claimed = await claimAs('alice', code);
+  assert.equal(claimed.status, 200);
+  assert.equal((await claimed.json()).plan.id, 'pro');
+  // a code works once
+  assert.equal((await claimAs('mallory', code)).status, 202);
+
+  // Pro means more tokens a day; the tokens are the same as anyone's
+  const tokensApi = await load('api/tokens.js');
+  const left = async user => (await (await tokensApi.onRequestGet(context('/api/tokens', { user, method: 'GET' }))).json()).left;
+  assert((await left('alice')).upload > 50);
+  assert((await left('mallory')).upload <= 5);
+
+  // renewals keep it; when the subscription expires, Pro ends
+  await webhook(subEvent('subscription_payment_success', 'active', code));
+  assert.equal((await (await planCall([], { user: 'alice' })).json()).plan.id, 'pro');
+  await webhook(subEvent('subscription_expired', 'expired', code));
+  assert.equal((await (await planCall([], { user: 'alice' })).json()).plan.id, 'free');
+  // the claim code isn't kept again once an account has it
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM plan_claims').get().n, 0);
+  // back on Pro for the team tests
+  db.prepare("UPDATE users SET plan = 'pro', plan_until = ? WHERE username = 'alice'").run(new Date(Date.now() + 30 * 86400000).toISOString());
+});
+
+test('teams: only members open team files, branding is checked, admins decide, and removing someone shuts them out', async () => {
+  freshDay();
+  const teamsApi = (await load('api/teams/[[path]].js')).onRequest;
+  const call = (pathParts, { user = 'alice', method = 'GET', body } = {}) => teamsApi({
+    env, waitUntil: p => p.catch(() => {}), params: { path: pathParts },
+    request: new Request('https://sharesecure.test/api/teams/' + pathParts.join('/'), { method, headers: { Authorization: 'Bearer ' + tokens[user], 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }),
+  });
+  const json = { 'Content-Type': 'application/json' };
+  const team = await sealed.makeKeyPair();
+  const pkcs8 = sealed.toB64url(new Uint8Array(await crypto.subtle.exportKey('pkcs8', team.privateKey)));
+  const ringFor = publicKey => sealed.sealText(publicKey, JSON.stringify({ keys: [pkcs8] }), 'team');
+
+  // teams need Pro, and the key has to arrive sealed
+  assert.equal((await call([], { user: 'bob', method: 'POST', body: { name: 'Bob and Co', public_key: team.publicKey, key_box: await ringFor(keyPairs.bob.publicKey) } })).status, 402);
+  assert.equal((await call([], { method: 'POST', body: { name: 'Acme', public_key: team.publicKey, key_box: pkcs8 } })).status, 400);
+  // a logo has to really be a PNG or JPEG: SVG (which can carry script) is refused
+  const svg = 'data:image/png;base64,' + Buffer.from('<svg onload="alert(1)"/>').toString('base64');
+  assert.equal((await call([], { method: 'POST', body: { name: 'Acme', public_key: team.publicKey, key_box: await ringFor(keyPairs.alice.publicKey), logo: svg } })).status, 400);
+  const made = await call([], { method: 'POST', body: { name: 'Acme Legal', color: '#1E3FD8', public_key: team.publicKey, key_box: await ringFor(keyPairs.alice.publicKey) } });
+  assert.equal(made.status, 200, await made.clone().text());
+  const { id } = await made.json();
+
+  // only admins add people; the key ring is sealed to the person added
+  assert.equal((await call([id, 'members'], { user: 'mallory', method: 'POST', body: { username: 'mallory', key_box: await ringFor(keyPairs.alice.publicKey) } })).status, 404);
+  assert.equal((await call([id, 'members'], { method: 'POST', body: { username: 'bob', role: 'member', key_box: await ringFor(keyPairs.bob.publicKey) } })).status, 200);
+  const bobsView = (await (await call([], { user: 'bob' })).json()).teams.find(t => t.id === id);
+  assert.equal(bobsView.role, 'member'); assert.equal(bobsView.paid, true);
+  assert.deepEqual(JSON.parse(await sealed.openText(keyPairs.bob.privateKey, bobsView.key_box, 'team')).keys, [pkcs8]);
+  // members can't change the team or remove people
+  assert.equal((await call([id], { user: 'bob', method: 'PATCH', body: { name: 'Bobs' } })).status, 403);
+  assert.equal((await call([id, 'members', 'alice'], { user: 'bob', method: 'DELETE' })).status, 403);
+
+  // bob makes a team request link; the page shows the team, not who made it
+  const key = sealed.newFileKey();
+  const teamRequest = async user => requestCall([], { user, method: 'POST', headers: json,
+    body: JSON.stringify({ team_id: id, label: await sealed.lockText(key, 'Engagement letter', 'request'), owner_box: await sealed.sealKey(team.publicKey, key), max_files: 5, hours: 24 }) });
+  const opened = await teamRequest('bob');
+  assert.equal(opened.status, 200, await opened.clone().text());
+  const rid = (await opened.json()).id;
+  const info = await (await requestCall([rid])).json();
+  assert.equal(info.username, null);
+  assert.deepEqual(info.team, { name: 'Acme Legal', color: '#1e3fd8', logo: null });
+  // mallory isn't in the team, so she can't make its links or see them
+  assert.equal((await teamRequest('mallory')).status, 404);
+  assert.deepEqual((await (await requestCall([], { user: 'mallory' })).json()).requests.filter(r => r.id === rid), []);
+
+  // a client sends a file: it lands in the team inbox, sealed to the team
+  const link = `https://sharesecure.test/q/${rid}#r=${sealed.toB64url(key)}&pk=${team.publicKey}`;
+  assert.equal((await sendThroughRequest(link, 'Signed letter', 'letter.txt')).status, 200);
+  const inbox = await (await call([id, 'inbox'], { user: 'bob' })).json();
+  assert.equal(inbox.files.length, 1);
+  const file = inbox.files[0];
+  const fileKey = await sealed.openKey(team.privateKey, file.inbox_key);
+  assert.equal((await sealed.unlockMeta(fileKey, file.original_filename)).name, 'letter.txt');
+  assert.equal((await call([id, 'inbox'], { user: 'mallory' })).status, 404);
+  // it's in nobody's personal inbox
+  const alicesInbox = await (await (await load('api/inbox/index.js')).onRequestGet(context('/api/inbox', { user: 'alice', method: 'GET' }))).json();
+  assert(!alicesInbox.files.some(f => f.short_id === file.short_id));
+
+  // members open it; nobody else can, even with the id, and it can't be reshared
+  const raw = user => rawHandler(context('/api/raw/' + file.short_id, { user, method: 'GET', params: { shortId: file.short_id } }));
+  assert.equal(new TextDecoder().decode(await sealed.unlockFile(fileKey, new Uint8Array(await (await raw('bob')).arrayBuffer()))), 'Signed letter');
+  assert.equal((await raw('mallory')).status, 403);
+  assert.equal((await raw(null)).status, 401);
+  assert.equal((await reshareHandler(context('/api/reshare/' + file.short_id, { user: 'bob', params: { shortId: file.short_id } }))).status, 403);
+  assert.equal((await infoHandler(context('/api/info/' + file.short_id, { user: 'mallory', method: 'GET', params: { shortId: file.short_id } }))).status, 403);
+
+  // making links can be limited to admins
+  assert.equal((await call([id], { method: 'PATCH', body: { requests_by: 'admins' } })).status, 200);
+  assert.equal((await teamRequest('bob')).status, 403);
+
+  // a key change has to cover everyone still in
+  const next = await sealed.makeKeyPair();
+  assert.equal((await call([id, 'keys'], { method: 'PUT', body: { public_key: next.publicKey, boxes: { alice: await ringFor(keyPairs.alice.publicKey) } } })).status, 409);
+  // the last admin can't leave; once bob is removed he's shut out
+  assert.equal((await call([id, 'members', 'alice'], { method: 'DELETE' })).status, 409);
+  assert.equal((await call([id, 'members', 'bob'], { method: 'DELETE' })).status, 200);
+  assert.equal((await raw('bob')).status, 403);
+  assert.equal((await call([id, 'inbox'], { user: 'bob' })).status, 404);
+  assert.equal((await call([id, 'keys'], { method: 'PUT', body: { public_key: next.publicKey, boxes: { alice: await ringFor(keyPairs.alice.publicKey) } } })).status, 200);
+
+  // deleting the team erases its inbox and links
+  assert.equal((await call([id], { method: 'DELETE' })).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE team_id = ?').get(id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM file_requests WHERE team_id = ?').get(id).n, 0);
 });

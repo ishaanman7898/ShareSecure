@@ -28,7 +28,7 @@ export function nameForBytes(bytes, filename, fallback = 'file') {
   const magic = magicOf(bytes);
   if (magic) {
     const ok = magic.ext === 'jpg' ? /\.jpe?g$/i : new RegExp(`\\.${magic.ext}$`, 'i');
-    if (!ok.test(name)) name = `${name.replace(/\.(pdf|docx|png|jpe?g|txt|md|markdown|csv)$/i, '')}.${magic.ext}`;
+    if (!ok.test(name)) name = `${name.replace(BINARY_EXT, '').replace(/\.(txt|md|markdown|csv)$/i, '')}.${magic.ext}`;
     return { name, text: false };
   }
   const binary = BINARY_EXT.exec(name);
@@ -37,7 +37,7 @@ export function nameForBytes(bytes, filename, fallback = 'file') {
     return {
       error: looksLikeHtml(bytes)
         ? `That isn’t a real ${kind}: it’s a web page (often a preview or sign-in page). Use the file’s direct download link, or its actual bytes.`
-        : `That isn’t a real ${kind}: its contents don’t match the name. ShareSecure can share PDF, DOCX, PNG, JPG and text.`
+        : `That isn’t a real ${kind}: its contents don’t match the name. ShareSecure can share documents, spreadsheets, images, video, audio, archives and text.`
     };
   }
   if (!/\.[a-z0-9]{1,10}$/i.test(name)) name += '.txt';

@@ -1,6 +1,7 @@
 import * as pdfjsLib from '/vendor/pdf.min.mjs';
-import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey } from './sealed.js';
-import { contentMatches, isAllowedType, nameFor } from './filetypes.js';
+import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey, sealText, toB64url, fromB64url } from './sealed.js';
+import { contentMatches, isAllowedType, nameFor, canView, kindName, detectType, extFor, ZIP, NOT_UTF8 } from './filetypes.js';
+import { listEntries, readEntry } from './zip.js';
 import { sealFor } from './keys.js';
 import { takeToken } from './tokens.js';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -206,6 +207,7 @@ let blurBlankTimeout = null;
 
 function blackOut() {
   if (blurBlankTimeout) { clearTimeout(blurBlankTimeout); blurBlankTimeout = null; }
+  document.querySelectorAll('video, audio').forEach(m => m.pause());
   showShield('Click to show the document');
   away = true;
   document.getElementById('screenshot-shield')?.classList.add('away');
@@ -264,6 +266,8 @@ function checkOwnership() {
 
 let myDeleteToken = checkOwnership();
 let isOwner = !!myDeleteToken;
+// whoever shared the link, opening it themselves, doesn't count as an open
+const sharedByMe = isOwner;
 
 const $ = id => document.getElementById(id);
 
@@ -291,9 +295,14 @@ async function apiFetch(url, init = {}) {
   return res;
 }
 
+// A file inside a bundle is already here, unpacked; the loaders read it
+// instead of fetching the share again.
+let heldBytes = null;
+
 // The file itself. One retry covers a brief hiccup on the server, which used to
 // show "couldn't be displayed" until the page was reloaded.
 async function fetchFileBytes(url) {
+  if (heldBytes) return heldBytes.buffer.slice(heldBytes.byteOffset, heldBytes.byteOffset + heldBytes.byteLength);
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await apiFetch(url);
@@ -352,6 +361,7 @@ function updateZoomLabel() {
 }
 
 function adjustZoom(delta) {
+  if (!pdfDoc && $('img-viewer')?.naturalWidth && !$('img-container').classList.contains('hidden')) { zoomImage(delta > 0 ? 1.25 : 0.8); return; }
   zoomScale = Math.min(4, Math.max(0.4, zoomScale + delta));
   fitMode = null;
   $('fit-btn')?.classList.remove('active');
@@ -361,7 +371,7 @@ function adjustZoom(delta) {
 
 // ── mouse wheel zoom (Ctrl + scroll) ──────────────────────────────────────────
 document.addEventListener('wheel', e => {
-  if (!pdfDoc) return;
+  if (!pdfDoc && $('img-container')?.classList.contains('hidden')) return;
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
     adjustZoom(e.deltaY < 0 ? 0.15 : -0.15);
@@ -550,6 +560,7 @@ let pdfDoc = null;
 let zoomScale = 1.3;
 const currentRotation = 0;
 let isRendering = false;
+let pdfSetUp = false;
 
 async function loadPDF(url) {
   try {
@@ -565,10 +576,13 @@ async function loadPDF(url) {
     show('page-nav');
 
     await renderAllPages();
-    setupPageTracking();
-    setupMobileToolbar();
-    setupPinchToZoom();
-    setupScrollAutoHide();
+    if (!pdfSetUp) {
+      pdfSetUp = true;
+      setupPageTracking();
+      setupMobileToolbar();
+      setupPinchToZoom();
+      setupScrollAutoHide();
+    }
   } catch (err) {
     showUnsupported();
   }
@@ -595,14 +609,22 @@ async function renderAllPages() {
     wrapper.style.width = `${vp.width}px`;
     wrapper.style.height = `${vp.height}px`;
 
+    // Drawn at the screen's real pixel density: a page drawn at CSS size and
+    // stretched to a 2x or 3x screen (phones, most laptops) looks blurry.
+    // Capped so a big page at high zoom doesn't make an enormous canvas.
+    const density = Math.min(window.devicePixelRatio || 1, 3, 16384 / Math.max(vp.width, vp.height));
     const pdfCanvas = document.createElement('canvas');
-    pdfCanvas.width = vp.width; pdfCanvas.height = vp.height;
+    pdfCanvas.width = Math.floor(vp.width * density); pdfCanvas.height = Math.floor(vp.height * density);
+    pdfCanvas.style.width = `${vp.width}px`; pdfCanvas.style.height = `${vp.height}px`;
     pdfCanvas.className = 'pdf-page-canvas';
 
     wrapper.appendChild(pdfCanvas);
     container.appendChild(wrapper);
 
-    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
+    await page.render({
+      canvasContext: pdfCanvas.getContext('2d'), viewport: vp,
+      transform: density === 1 ? null : [density, 0, 0, density, 0, 0],
+    }).promise;
     if (annEnabled) attachAnnCanvas(wrapper, n);
   }
 
@@ -730,7 +752,7 @@ $('fit-btn')?.addEventListener('click', toggleFitToWidth);
 async function loadImage(url) {
   const img = $('img-viewer');
   try {
-    img.src = URL.createObjectURL(new Blob([await fetchFileBytes(url)], { type: fileInfo?.mimeType || 'image/*' }));
+    img.src = URL.createObjectURL(new Blob([await fetchFileBytes(url)], { type: currentType() || 'image/*' }));
   } catch {
     showUnsupported();
     return;
@@ -738,6 +760,8 @@ async function loadImage(url) {
   img.onload = () => {
     hide('loader');
     show('img-container');
+    imageZoom = null;
+    fitImage();
     if (annEnabled) {
       const container = $('img-container');
       const wrapper = document.createElement('div');
@@ -749,8 +773,41 @@ async function loadImage(url) {
     }
   };
   img.onerror = () => showUnsupported();
-  hide('zoom-group');
 }
+
+// Images open fitted to the window, and zoom like PDFs (buttons, Ctrl+scroll,
+// pinch, or a click to see it at full size), so small print in a photo or a
+// scan can be read instead of staying squeezed into the window.
+let imageZoom = null;   // null = fitted to the window, otherwise a scale of the real size
+
+function fitImage() {
+  const img = $('img-viewer');
+  if (!img.naturalWidth) return;
+  const fitted = Math.min(1, ($('viewer-shell').clientWidth - 32) / img.naturalWidth);
+  const scale = imageZoom ?? fitted;
+  img.style.width = `${Math.round(img.naturalWidth * scale)}px`;
+  img.style.maxWidth = imageZoom === null ? '100%' : 'none';
+  img.style.cursor = scale < 1 || imageZoom === null ? 'zoom-in' : 'zoom-out';
+  if ($('zoom-label')) $('zoom-label').textContent = Math.round(scale * 100) + '%';
+}
+
+function zoomImage(factor) {
+  const img = $('img-viewer');
+  if (!img.naturalWidth) return;
+  const current = imageZoom ?? Math.min(1, ($('viewer-shell').clientWidth - 32) / img.naturalWidth);
+  imageZoom = Math.min(8, Math.max(0.05, current * factor));
+  $('img-container').classList.add('is-zoomed');
+  fitImage();
+}
+
+$('img-viewer')?.addEventListener('click', () => {
+  if (annEnabled && annTool !== 'cursor') return;
+  // fitted → full size; anything else → back to fitted
+  imageZoom = imageZoom === null ? 1 : null;
+  $('img-container').classList.toggle('is-zoomed', imageZoom !== null);
+  fitImage();
+});
+window.addEventListener('resize', () => { if (imageZoom === null) fitImage(); });
 
 // ── docx ──────────────────────────────────────────────────────────────────────
 // Whoever shared the file wrote this HTML, so it's rebuilt from an allowlist
@@ -853,10 +910,238 @@ async function loadText(url) {
   }
 }
 
+// ── video and audio ───────────────────────────────────────────────────────────
+// Played from memory, with the browser's own save and picture-in-picture
+// options turned off. They pause when the page blacks out.
+async function loadMedia(url, kind) {
+  try {
+    const el = document.createElement(kind);
+    el.controls = true;
+    el.preload = 'metadata';
+    el.className = 'media-player';
+    el.setAttribute('controlsList', 'nodownload noremoteplayback');
+    if (kind === 'video') { el.disablePictureInPicture = true; el.playsInline = true; }
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    el.src = URL.createObjectURL(new Blob([await fetchFileBytes(url)], { type: currentType() }));
+    el.addEventListener('error', () => showUnsupported('This browser can’t play this file.'), { once: true });
+    $('media-container').replaceChildren(el);
+    hide('loader');
+    show('media-container');
+    hide('zoom-group');
+  } catch {
+    showUnsupported();
+  }
+}
+
+// ── files that can't be shown ─────────────────────────────────────────────────
+// Spreadsheets, presentations and archives are offered to save. Their bytes
+// are fetched once (for a link that works once, that's its one opening) and
+// kept, so saving again doesn't need the link.
+function saveBytes(bytes, name, type) {
+  const url = URL.createObjectURL(new Blob([bytes], { type: type || 'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function showSaveCard(url) {
+  hide('loader');
+  hide('zoom-group');
+  $('save-kind').textContent = kindName(fileInfo.mimeType);
+  $('save-name').textContent = fileInfo.filename;
+  $('save-size').textContent = formatSize(fileInfo.size);
+  show('save-card');
+  let bytes = null;
+  $('save-btn').addEventListener('click', async () => {
+    const btn = $('save-btn');
+    btn.disabled = true;
+    try {
+      bytes ||= await fetchFileBytes(url);
+      saveBytes(bytes, fileInfo.filename, fileInfo.mimeType);
+    } catch {
+      showKbToast('Couldn’t get the file. Try again.');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
+// ── ZIPs and bundles ──────────────────────────────────────────────────────────
+// Several files shared together arrive as a ZIP. It's listed here, and each
+// file in it that the viewer can show opens in place. Saving follows the
+// share's download setting; one file is saved under a name that ends in what
+// it really is, and anything that isn't a type ShareSecure knows only comes
+// out with the whole ZIP.
+let zipBytes = null;
+let zipName = '';
+const currentType = () => openEntryType || fileInfo?.mimeType;
+let openEntryType = null;
+const PREVIEW_EXT = /\.(pdf|docx|png|jpe?g|gif|webp|mp4|mov|webm|mp3|m4a|wav|txt|md|markdown|csv)$/i;
+
+async function loadZip(url) {
+  let entries;
+  try {
+    zipBytes = new Uint8Array(await fetchFileBytes(url));
+    entries = listEntries(zipBytes);
+  } catch {}
+  if (!entries) { showUnsupported(); return; }
+  zipName = fileInfo.filename;
+  const files = entries.filter(e => !e.dir).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const canSave = Boolean(fileInfo.allowDownload);
+
+  $('bundle-count').textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+  const saveAll = $('bundle-save-all');
+  saveAll.classList.toggle('hidden', !canSave);
+  saveAll.onclick = () => saveBytes(zipBytes, zipName, ZIP);
+
+  const list = $('bundle-list');
+  list.replaceChildren();
+  for (const entry of files) {
+    const li = document.createElement('li');
+    li.className = 'bundle-row';
+    const slash = entry.name.lastIndexOf('/');
+    const where = document.createElement('span');
+    where.className = 'bundle-path';
+    where.textContent = slash >= 0 ? entry.name.slice(0, slash + 1) : '';
+    const name = document.createElement('span');
+    name.className = 'bundle-name';
+    name.textContent = entry.name.slice(slash + 1);
+    const label = document.createElement('span');
+    label.className = 'bundle-label';
+    label.append(where, name);
+    const size = document.createElement('span');
+    size.className = 'bundle-size';
+    size.textContent = formatSize(entry.size);
+    const actions = document.createElement('span');
+    actions.className = 'bundle-actions';
+    if (PREVIEW_EXT.test(entry.name)) {
+      const open = document.createElement('button');
+      open.className = 'btn btn-ghost btn-sm';
+      open.textContent = 'Open';
+      open.addEventListener('click', () => openEntry(entry));
+      actions.appendChild(open);
+    }
+    if (canSave) {
+      const save = document.createElement('button');
+      save.className = 'btn btn-ghost btn-sm';
+      save.textContent = 'Save';
+      save.addEventListener('click', () => saveEntry(entry));
+      actions.appendChild(save);
+    }
+    li.append(label, size, actions);
+    list.appendChild(li);
+  }
+  hide('loader');
+  hide('zoom-group');
+  show('bundle-container');
+}
+
+async function unpack(entry) {
+  const bytes = await readEntry(zipBytes, entry);
+  const base = entry.name.slice(entry.name.lastIndexOf('/') + 1);
+  const type = detectType(bytes, base, '');
+  return { bytes, base, type: type && type !== NOT_UTF8 ? type : null };
+}
+
+async function saveEntry(entry) {
+  try {
+    const { bytes, base, type } = await unpack(entry);
+    if (!type) { showKbToast('Save the whole ZIP to get this one.'); return; }
+    saveBytes(bytes, nameFor(base, '', type), type);
+  } catch (err) {
+    showKbToast(err.message || 'Couldn’t open that file.');
+  }
+}
+
+async function openEntry(entry) {
+  let unpacked;
+  try { unpacked = await unpack(entry); } catch (err) { showKbToast(err.message || 'Couldn’t open that file.'); return; }
+  const { bytes, base, type } = unpacked;
+  if (!type || !canView(type) || type === ZIP) { showKbToast('This one can’t be shown here.'); return; }
+  heldBytes = bytes;
+  openEntryType = type;
+  hide('bundle-container');
+  $('bundle-back-name').textContent = nameFor(base, '', type);
+  show('bundle-back');
+  show('loader');
+  await showByType(type, null);
+  heldBytes = null;
+}
+
+function closeEntry() {
+  for (const id of ['pdf-container', 'img-container', 'docx-container', 'media-container', 'unsupported', 'page-nav', 'bundle-back']) hide(id);
+  document.querySelectorAll('#media-container video, #media-container audio').forEach(m => { m.pause(); URL.revokeObjectURL(m.src); });
+  $('media-container').replaceChildren();
+  $('pdf-container').replaceChildren();
+  $('docx-content').classList.remove('is-text');
+  $('docx-content').replaceChildren();
+  const img = $('img-viewer');
+  if (img.src) URL.revokeObjectURL(img.src);
+  img.removeAttribute('src');
+  pdfDoc = null;
+  openEntryType = null;
+  show('bundle-container');
+  $('viewer-shell').scrollTop = 0;
+}
+$('bundle-back-btn')?.addEventListener('click', closeEntry);
+
+// Picks the loader for a type. rawUrl is null for a file inside a bundle.
+async function showByType(type, rawUrl) {
+  if (type === 'application/pdf') await loadPDF(rawUrl);
+  else if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') await loadDocx(rawUrl);
+  else if (TEXT_TYPES.includes(type)) await loadText(rawUrl);
+  else if (type.startsWith('image/')) await loadImage(rawUrl);
+  else if (type.startsWith('video/')) await loadMedia(rawUrl, 'video');
+  else if (type.startsWith('audio/')) await loadMedia(rawUrl, 'audio');
+  else if (type === ZIP) await loadZip(rawUrl);
+  else if (isAllowedType(type)) showSaveCard(rawUrl);
+  else showUnsupported();
+}
+
+// ── open receipts ─────────────────────────────────────────────────────────────
+// If the sender asked to hear when this link is opened, this browser tells
+// them, sealed so only they can read it: just a tag that's the same each time
+// this device opens this link, and unrelated to the tag for any other link. It
+// goes before the file is fetched, so a link that works once still sends it.
+async function sendReceipt() {
+  if (sharedByMe) return;
+  // Opening a link makes you your own branch of it, and a branch carries
+  // nothing that ties it to the link it came from, receipt key included; so
+  // the key comes from the link you were given.
+  let receiptKey = fileInfo?.receiptKey || null;
+  if (!receiptKey && myShortId !== rawShortId) {
+    receiptKey = (await apiFetch(`/api/info/${encodeURIComponent(rawShortId)}`).then(r => (r.ok ? r.json() : null)).catch(() => null))?.receiptKey || null;
+  }
+  if (!receiptKey) return;
+  show('receipt-note');
+  try {
+    let secret = null;
+    try { secret = localStorage.getItem('receipt_device'); } catch {}
+    if (!secret) {
+      secret = toB64url(crypto.getRandomValues(new Uint8Array(32)));
+      try { localStorage.setItem('receipt_device', secret); } catch {}
+    }
+    const hmac = await crypto.subtle.importKey('raw', fromB64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const mark = await crypto.subtle.sign('HMAC', hmac, new TextEncoder().encode(receiptKey));
+    const box = await sealText(receiptKey, JSON.stringify({ d: toB64url(new Uint8Array(mark).subarray(0, 12)) }), 'receipt');
+    await Promise.race([
+      fetch(`/api/receipts/${encodeURIComponent(rawShortId)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box }),
+      }),
+      new Promise(resolve => setTimeout(resolve, 4000)),
+    ]);
+  } catch {}
+}
+
 // ── unsupported ───────────────────────────────────────────────────────────────
-function showUnsupported() {
+function showUnsupported(why) {
   hide('loader');
   $('unsupported-title').textContent = fileInfo?.filename || 'Unknown file';
+  $('unsupported-sub').textContent = why || 'This file couldn’t be displayed. Try reloading the page.';
   show('unsupported');
   hide('zoom-group');
 }
@@ -1423,10 +1708,6 @@ function askPasscode(info) {
     try { localStorage.setItem(openedKey(), '1'); } catch {}
   }
 
-  if (baseMime === 'application/pdf') {
-    await loadPDF(rawUrl);
-  } else if (baseMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') { await loadDocx(rawUrl); }
-  else if (TEXT_TYPES.includes(baseMime)) { await loadText(rawUrl); }
-  else if (baseMime.startsWith('image/')) { await loadImage(rawUrl); }
-  else { showUnsupported(); }
+  await sendReceipt();
+  await showByType(baseMime, rawUrl);
 })();

@@ -9,7 +9,7 @@ import { newFileKey, sealKey, openKey, lockText, unlockText, isSealed } from './
 import { myKeys } from './keys.js';
 
 // What's kept of each share: enough to show it, open it and delete it.
-const FIELDS = ['short_id', 'short_url', 'original_filename', 'mime_type', 'size_bytes', 'expires_at', 'uploaded_at', 'delete_token'];
+const FIELDS = ['short_id', 'short_url', 'original_filename', 'mime_type', 'size_bytes', 'expires_at', 'uploaded_at', 'delete_token', 'receipt_secret'];
 
 // → the list, [] when there's none yet, or null when it can't be opened here
 export async function loadVault(authHeaders) {

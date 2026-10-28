@@ -842,13 +842,13 @@ const TOOLS = [
     name: 'share_file',
     title: 'Share a file',
     description: [
-      'Share a file (PDF, DOCX, PNG, JPG, or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
+      'Share a file (a document such as PDF, Word, Excel or PowerPoint; an image, video or audio file; a ZIP or other archive; or text such as .txt, .md or .csv; up to 10 MB) through a private link that expires, and optionally send it straight to ShareSecure usernames. Do it yourself: don’t ask the user to download, save or upload anything. Give the file one of these ways:',
       '1. path: a file on a computer where you can run shell commands (including a document you generated in your code sandbox). Returns a one-time curl command; run it yourself. This keeps the original file exactly and keeps base64 out of the conversation.',
       '2. content_base64 + filename: when you can read the file but can’t make the upload request. Compute the base64 with code, never by hand. Up to 2 MB; best under about 100 KB.',
       '3. source_url: a public https link to the file; ShareSecure downloads it.',
       '4. Bigger files you can read in code: begin_upload, upload_chunk, finish_upload.',
       'For text you wrote, use share_text instead. A file the user attached in a chat app is usually in your code sandbox if you have one; otherwise it reached you as text or images, so share its content with share_text.',
-      'Use ask_user only when the user explicitly asks to upload it themselves. Never claim something was shared until the result says so, and never quietly swap a requested PDF or DOCX for text. Counts toward the 5 shares a day.',
+      'Use ask_user only when the user explicitly asks to upload it themselves. Never claim something was shared until the result says so, and never quietly swap a requested PDF, DOCX or XLSX for text. Counts toward the 5 shares a day.',
     ].join('\n'),
     inputSchema: {
       type: 'object',

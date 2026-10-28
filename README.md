@@ -13,13 +13,13 @@
 
 ---
 
-Upload a PDF, Word document, image or text file, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, pages are never indexed, and when the link expires the file is erased.
+Upload almost any file (documents, spreadsheets, images, video, ZIPs), several files or a whole folder at once, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, pages are never indexed, and when the link expires the file is erased.
 
 ## Ways to use it
 
 | | Where your files live | Links work | Limits |
 |---|---|---|---|
-| **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day, 10 MB each |
+| **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day (Pro: 100), 10 MB each |
 | **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: sign in | Same as the website | Any time until they expire | Same as the website |
 | **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: this computer | Only your computer | Until they expire, while the computer is on | 100 MB each (10 MB to send to usernames), no daily limit |
 | **[Self-hosted](#self-hosting)** (command line or Docker) | Only your machine or server | While the server is running | 100 MB each (10 MB to send to usernames), no daily limit |
@@ -30,7 +30,9 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 **Sharing**
 
-- **Files:** PDF, Word (DOCX), PNG, JPG, plain text, Markdown and CSV, up to 10 MB. Types are checked from the file's contents, and the name people see always ends in the real type, so a PDF can't arrive looking like an `.exe`.
+- **Files:** PDF, Word, Excel, PowerPoint and OpenDocument files, PNG, JPG, GIF, WebP, MP4, MOV, WebM, MP3, M4A, WAV, ZIP, 7z, gzip, RAR, tar, plain text, Markdown and CSV, up to 10 MB on the website and 100 MB on your own computer. Types are checked from the file's contents, and the name people see always ends in the real type, so a PDF can't arrive looking like an `.exe`. Programs and scripts can't be shared on their own.
+- **Several files or a folder** go as one share: they're packed into a ZIP in your browser, and the viewer lists them and opens each one in place. Video and audio play in the viewer; spreadsheets, presentations and archives are offered to save.
+- **Open receipts.** Turn on *Tell me when it's opened* and *Your shares* says how many times the link was opened, on how many devices, and when, including “from a new device”. Receipts are sealed to a key only you have, carry no address or browser details, and can't link a device across links. People opening the link are told receipts are on.
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **Links that work once.** Turn on *Works once* and the file is erased the moment it's opened. If anyone tries the link after that, you're told: it was probably passed on.
 - **Passcodes.** Add one and the link alone isn't enough to open the file.
@@ -44,6 +46,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Each person gets their own copy as a request to accept or decline, and isn't told who sent it.
 - **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
+- **Teams** (Pro, account menu → *Teams*): a shared inbox and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
 - **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
 - **From the desktop app** in “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**). Sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 
@@ -66,7 +69,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 **Apps and hosting**
 
-- **Website**, on phones too, in light and dark mode.
+- **Website**, on phones too, in light and dark mode. Add it to your home screen and, on Android, ShareSecure appears in the Share menu, so you can share straight from any app. What you share waits on the phone until you choose to send it.
 - **Desktop app** for Windows, macOS and Linux: sign in to your account or keep files on your computer only. It runs in the tray and updates itself.
 - **Self-hosted** with one command or Docker. Only you can upload, and files are erased within 30 seconds of expiring.
 
@@ -234,7 +237,7 @@ npm run icons       # re-render the app icons from desktop/logo.js
 npm run rosette     # re-draw the rosette logo from desktop/rosette.js
 ```
 
-Releases are `vX.Y.Z` tags. Pushing one builds the Windows, macOS and Linux installers in GitHub Actions and attaches them to the release. Self-hosted installs and the desktop app update from the latest release. Signing the macOS build is described in [docs/SIGNING.md](docs/SIGNING.md).
+Releases are `vX.Y.Z` tags. Pushing one builds the Windows, macOS and Linux installers in GitHub Actions and attaches them to the release. Self-hosted installs and the desktop app update from the latest release. Signing (macOS with a Developer ID, Windows through SignPath Foundation) is described in [docs/SIGNING.md](docs/SIGNING.md).
 
 The website runs on Cloudflare Pages with a Turso database. It needs these
 settings (as encrypted secrets, under Pages → Settings → Variables and Secrets):
@@ -246,6 +249,10 @@ settings (as encrypted secrets, under Pages → Settings → Variables and Secre
 | `TOKEN_SECRET` | Signs sessions. Any long random string. |
 | `TAG_SECRET` | Optional. Keys the hashes that stand in for account ids; defaults to `TOKEN_SECRET`. |
 | `TOKEN_ISSUER_KEY` | Signs anonymous tokens (`npm run token-key`). Pin its id in `public/tokens.js`. |
+| `LEMONSQUEEZY_CHECKOUT_URL` | Optional. The Pro product's checkout link. Without it, Pro can't be bought. |
+| `LEMONSQUEEZY_WEBHOOK_SECRET` | Optional. Signing secret of a Lemon Squeezy webhook pointed at `/api/plan/webhook`, sending the `subscription_*` events. |
+
+To sell Pro: make a subscription product in Lemon Squeezy, set its confirmation redirect to `https://<site>/?plan=1`, add a webhook to `/api/plan/webhook` with the subscription events, and set the two settings above. Checkout carries a random claim code, never the username (see `functions/_plans.js`).
 
 ## License
 

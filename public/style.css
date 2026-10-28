@@ -406,6 +406,11 @@ body.is-desktop .gradient-showcase {
 .drop-label { font-weight: 500; font-size: 1rem; }
 .drop-browse { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 .drop-limit { color: var(--muted); font-size: 0.85rem; }
+.drop-folder { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.req-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.req-brand-logo { width: 40px; height: 40px; object-fit: contain; }
+.req-brand-name { font-weight: 600; font-size: 1.05rem; }
+.file-item-receipt { display: block; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .file-preview {
   display: flex;
@@ -1486,3 +1491,37 @@ a.menu-item { text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .confirm-layer, .confirm-card { transition: none; }
 }
+
+/* ── teams (/teams) ── */
+.teams-main { width: 100%; max-width: 820px; margin: 0 auto; padding: 8px 16px 48px; }
+.teams-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plan-chip { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); }
+.plan-chip:empty { display: none; }
+.teams-sub { color: var(--muted); font-size: 0.9rem; line-height: 1.55; }
+.teams-create { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1px solid var(--line); }
+.teams-h2 { font-size: 0.95rem; font-weight: 600; }
+.teams-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.teams-upsell { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; padding: 16px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); }
+.teams-empty { color: var(--muted); font-size: 0.9rem; padding: 10px 0; }
+.team-banner { display: flex; align-items: center; gap: 12px; padding-left: 12px; border-left: 4px solid var(--team, transparent); }
+.team-banner > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.team-logo { width: 44px; height: 44px; object-fit: contain; }
+.team-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+.team-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.team-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit; font-size: 0.9rem; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.team-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.team-pane { display: flex; flex-direction: column; gap: 16px; }
+.team-pane.hidden { display: none; }
+.color-input { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line-strong); border-radius: var(--r-sm, 6px); background: var(--surface); }
+@media (max-width: 560px) {
+  .teams-row { grid-template-columns: 1fr; }
+  .panel { padding: 20px; }
+}
+
+/* ── plan ── */
+.plan-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 6px 0 4px; }
+.plan-card { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.plan-card.is-current { border-color: var(--ink); }
+.plan-card h3 { font-size: 0.95rem; font-weight: 600; }
+.plan-card ul { margin: 0; padding-left: 1.1em; color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
+@media (max-width: 560px) { .plan-cards { grid-template-columns: 1fr; } }

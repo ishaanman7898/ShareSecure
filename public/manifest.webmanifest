@@ -1,0 +1,36 @@
+{
+  "name": "ShareSecure",
+  "short_name": "ShareSecure",
+  "description": "Share a file through a private link that stops working when you say.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "/share-target",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "files",
+          "accept": [
+            "application/pdf", "image/*", "video/*", "audio/*", "text/*",
+            "application/zip", "application/vnd.openxmlformats-officedocument.*", "application/vnd.oasis.opendocument.*",
+            ".pdf", ".docx", ".xlsx", ".pptx", ".odt", ".ods", ".odp", ".zip", ".7z", ".gz", ".rar", ".tar",
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".mov", ".webm", ".mp3", ".m4a", ".wav", ".txt", ".md", ".csv"
+          ]
+        }
+      ]
+    }
+  }
+}
