@@ -1,5 +1,5 @@
 import * as pdfjsLib from '/vendor/pdf.min.mjs';
-import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey, sealText, toB64url, fromB64url } from './sealed.js';
+import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey } from './sealed.js';
 import { contentMatches, isAllowedType, nameFor, canView, kindName, detectType, extFor, ZIP, NOT_UTF8 } from './filetypes.js';
 import { listEntries, readEntry } from './zip.js';
 import { protectionsFor, usernameFromSession, watermarkText, mountWatermark, installDeterrents, HONEST_NOTE } from './protect.js';
@@ -1133,40 +1133,8 @@ function applyProtections() {
   }
 }
 
-// ── open receipts ─────────────────────────────────────────────────────────────
-// If the sender asked to hear when this link is opened, this browser tells
-// them, sealed so only they can read it: just a tag that's the same each time
-// this device opens this link, and unrelated to the tag for any other link. It
-// goes before the file is fetched, so a link that works once still sends it.
-async function sendReceipt() {
-  if (sharedByMe) return;
-  // Opening a link makes you your own branch of it, and a branch carries
-  // nothing that ties it to the link it came from, receipt key included; so
-  // the key comes from the link you were given.
-  let receiptKey = fileInfo?.receiptKey || null;
-  if (!receiptKey && myShortId !== rawShortId) {
-    receiptKey = (await apiFetch(`/api/info/${encodeURIComponent(rawShortId)}`).then(r => (r.ok ? r.json() : null)).catch(() => null))?.receiptKey || null;
-  }
-  if (!receiptKey) return;
-  show('receipt-note');
-  try {
-    let secret = null;
-    try { secret = localStorage.getItem('receipt_device'); } catch {}
-    if (!secret) {
-      secret = toB64url(crypto.getRandomValues(new Uint8Array(32)));
-      try { localStorage.setItem('receipt_device', secret); } catch {}
-    }
-    const hmac = await crypto.subtle.importKey('raw', fromB64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const mark = await crypto.subtle.sign('HMAC', hmac, new TextEncoder().encode(receiptKey));
-    const box = await sealText(receiptKey, JSON.stringify({ d: toB64url(new Uint8Array(mark).subarray(0, 12)) }), 'receipt');
-    await Promise.race([
-      fetch(`/api/receipts/${encodeURIComponent(rawShortId)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box }),
-      }),
-      new Promise(resolve => setTimeout(resolve, 4000)),
-    ]);
-  } catch {}
-}
+// Open receipts were removed in 1.18.0; forget the device code they used.
+try { localStorage.removeItem('receipt_device'); } catch {}
 
 // ── unsupported ───────────────────────────────────────────────────────────────
 function showUnsupported(why) {
@@ -1741,7 +1709,6 @@ function askPasscode(info) {
     try { localStorage.setItem(openedKey(), '1'); } catch {}
   }
 
-  await sendReceipt();
   applyProtections();
   await showByType(baseMime, rawUrl);
 })();

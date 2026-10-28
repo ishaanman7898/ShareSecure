@@ -217,6 +217,9 @@ form.addEventListener('submit', async e => {
       await signInWebsite(user, pass);
     }
     await savedSignIn?.save(user, pass).catch(() => {});
+    // the next page skips its loading screen and its own look at /api/mode,
+    // so signing in goes straight to your files (see page-loading.js)
+    try { sessionStorage.setItem('signed_in_now', selfHost ? 'local' : 'web'); } catch {}
     location.replace(afterSignIn());
   } catch (err) {
     // a saved password that no longer works is forgotten, so it isn't tried again

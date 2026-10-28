@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'self'; font-src 'self'" />
+  <title>Updating | ShareSecure</title>
+  <style>
+    :root { --paper: #fff; --ink: #000; --ink-2: #2b2b2b; --muted: #6b6b6b; --line: #e4e4e4; --line-strong: #c9c9c9; --sunken: #f4f4f4; --danger: #c4231b; }
+    @media (prefers-color-scheme: dark) {
+      :root { --paper: #000; --ink: #fff; --ink-2: #d6d6d6; --muted: #8c8c8c; --line: #1f1f1f; --line-strong: #333; --sunken: #0e0e0e; --danger: #ff6b61; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px 20px;
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* the sign-in gradient, behind everything */
+    .gradient { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+    .gradient canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+    main {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 480px;
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--paper) 86%, transparent);
+      -webkit-backdrop-filter: blur(14px);
+      backdrop-filter: blur(14px);
+    }
+    img { display: block; width: 64px; height: 64px; margin-bottom: 20px; border-radius: 14px; }
+    h1 { font-size: 1.6rem; letter-spacing: -0.03em; line-height: 1.15; }
+    .lede { margin-top: 8px; color: var(--ink-2); }
+    .versions { margin-top: 18px; font: 500 0.82rem/1 ui-monospace, 'Cascadia Mono', Consolas, monospace; color: var(--muted); }
+    .bar { position: relative; height: 6px; margin-top: 22px; overflow: hidden; border-radius: 99px; background: var(--sunken); border: 1px solid var(--line); }
+    .bar span { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--ink); border-radius: inherit; transition: width 0.3s ease; }
+    /* installing: no numbers to show, so it sweeps */
+    .bar.sweep span { width: 35%; animation: sweep 1.3s ease-in-out infinite; }
+    @keyframes sweep { from { left: -35%; } to { left: 100%; } }
+    @media (prefers-reduced-motion: reduce) { .bar.sweep span { width: 100%; animation: none; opacity: 0.4; } }
+    .step { margin-top: 10px; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+    .note { margin-top: 20px; color: var(--muted); font-size: 0.84rem; }
+    .error { margin-top: 18px; color: var(--danger); }
+    .actions { display: flex; gap: 8px; margin-top: 20px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 40px; padding: 0 18px; border-radius: 10px;
+      border: 1px solid var(--line-strong); color: var(--ink);
+      font-weight: 600; font-size: 0.92rem; text-decoration: none;
+    }
+    .btn:hover, .btn:focus-visible { border-color: var(--ink); outline: none; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="gradient" id="gradient" aria-hidden="true"><canvas></canvas></div>
+  <main aria-live="polite">
+    <img src="icon-win.png" alt="" width="64" height="64" />
+    <h1 id="title">Updating ShareSecure</h1>
+    <p class="lede" id="lede">Getting the new version ready.</p>
+    <p class="versions" id="versions"></p>
+    <div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-labelledby="title"><span id="fill"></span></div>
+    <p class="step"><span id="step">Downloading</span><span id="percent"></span></p>
+    <p class="error" id="error" hidden></p>
+    <div class="actions" id="actions" hidden><a class="btn" href="#back">Back to ShareSecure</a></div>
+    <p class="note" id="note"></p>
+  </main>
+  <script type="module" src="updating.js"></script>
+</body>
+</html>

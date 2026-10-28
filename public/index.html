@@ -95,7 +95,8 @@
         <h1 class="landing-headline">Share a file.<br />Choose when it disappears.</h1>
         <p class="landing-lede">Private, encrypted links that expire when you say.</p>
         <div class="landing-actions">
-          <a class="btn btn-primary btn-lg" href="/signin?new=1">Create an account</a>
+          <a class="btn btn-primary btn-lg" href="/signin?new=1" id="landing-signup">Create an account</a>
+          <a class="btn btn-primary btn-lg hidden" href="/" id="landing-files">Go to your files</a>
           <a href="/download" class="btn btn-ghost btn-lg web-only">Get the desktop app</a>
         </div>
         <p class="landing-legal desktop-only"><a href="/privacy" target="_blank">Privacy</a><a href="/terms" target="_blank">Terms</a></p>
@@ -164,10 +165,6 @@
             <span class="settings-switch-text"><span>Discourage screenshots and printing</span><span class="settings-hint">For view-only files. Browsers can’t fully block screenshots or a phone camera.</span></span>
             <span class="switch"><input type="checkbox" id="default-discourage" /><span class="switch-track" aria-hidden="true"></span></span>
           </label>
-          <label class="settings-switch">
-            <span class="settings-switch-text"><span>Tell me when it’s opened</span><span class="settings-hint">Opens and new devices, sealed so only you can read them.</span></span>
-            <span class="switch"><input type="checkbox" id="default-receipts" /><span class="switch-track" aria-hidden="true"></span></span>
-          </label>
       </div>
 
       <div class="settings-group desktop-only-group hidden" id="settings-desktop">
@@ -188,7 +185,7 @@
       <div class="settings-group">
         <h2>Appearance</h2>
           <label class="settings-switch">
-            <span class="settings-switch-text"><span>Corner brackets</span><span class="settings-hint">White brackets that frame buttons, links and drop zones as your pointer moves over them, on every page but the file viewer. With a mouse or trackpad.</span></span>
+            <span class="settings-switch-text"><span>Corner brackets</span><span class="settings-hint">White brackets that frame buttons, links and drop zones as your pointer moves over them, on the home page and the website’s other public pages. With a mouse or trackpad.</span></span>
             <span class="switch"><input type="checkbox" id="crosshair-toggle" /><span class="switch-track" aria-hidden="true"></span></span>
           </label>
       </div>
@@ -312,11 +309,6 @@
             <span class="switch-text">Discourage screenshots and printing</span>
           </label>
           <span class="field-hint">Screenshot-resistant and traceable, not screenshot-proof: no browser can fully block screenshots or a phone camera. The watermark is what makes a leak traceable.</span>
-          <label class="switch" id="receipts-wrap" title="You see when the link is opened, how many times, and whether it was on a device that opened it before. Not who opened it or where: nobody, ShareSecure included, learns that.">
-            <input type="checkbox" id="receipts-toggle" />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Tell me when it’s opened</span>
-          </label>
           <label class="switch hidden" id="require-account-wrap">
             <input type="checkbox" id="require-account" />
             <span class="switch-track" aria-hidden="true"></span>
@@ -545,7 +537,7 @@
             <li><span data-limit="free.upload">5</span> shares a day</li>
             <li><span data-limit="free.send">60</span> sends a day</li>
             <li><span data-limit="free.requests">10</span> open file requests</li>
-            <li>Every file type, folders, open receipts</li>
+            <li>Every file type and folders</li>
           </ul>
         </div>
         <div class="plan-card" id="plan-card-pro">

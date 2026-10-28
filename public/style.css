@@ -205,6 +205,8 @@ body:has(#landing-page:not(.hidden)) .container {
 .page-loader-mark { position: relative; display: grid; place-items: center; width: 120px; height: 120px; }
 .page-loader-mark img { width: 112px; height: 112px; }
 body.page-loading > :not(.page-loader) { visibility: hidden; }
+/* straight from signing in: no loading screen, and no Sign in button before your files appear */
+.signed-in-now #signin-link { visibility: hidden; }
 
 @media (prefers-reduced-motion: no-preference) {
   .page-loader-content { animation: landing-rise 450ms cubic-bezier(0.22, 1, 0.36, 1) both; }
@@ -410,7 +412,6 @@ body.is-desktop .gradient-showcase {
 .req-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .req-brand-logo { width: 40px; height: 40px; object-fit: contain; }
 .req-brand-name { font-weight: 600; font-size: 1.05rem; }
-.file-item-receipt { display: block; font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .file-preview {
   display: flex;

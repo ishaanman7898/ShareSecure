@@ -95,7 +95,7 @@ const FILE_COLUMNS = [
   'ALTER TABLE files ADD COLUMN passcode_salt TEXT',         // set when the link also needs a passcode
   'ALTER TABLE files ADD COLUMN via_request TEXT',           // the file request it was uploaded to
   'ALTER TABLE files ADD COLUMN max_views INTEGER',          // 1 = erased once it's opened (see _burn.js)
-  'ALTER TABLE files ADD COLUMN receipt_key TEXT',           // set when the sender asked for open receipts (_receipts.js)
+  'ALTER TABLE files ADD COLUMN receipt_key TEXT',           // open receipts, removed in 1.18.0: always empty
   'ALTER TABLE files ADD COLUMN team_id TEXT',               // came in through a team's request link (_teams.js)
   'ALTER TABLE files ADD COLUMN view_opts TEXT',             // watermark / discourage screenshots, encrypted (end to end: in the sealed name instead)
   'CREATE INDEX IF NOT EXISTS idx_files_team ON files(team_id)',
@@ -106,6 +106,9 @@ const FILE_COLUMNS = [
   // one row per send, kept for a day, so declined requests still count
   'CREATE TABLE IF NOT EXISTS send_log (sender_tag TEXT NOT NULL, sent_at TEXT NOT NULL)',
   'CREATE INDEX IF NOT EXISTS idx_send_log ON send_log(sender_tag, sent_at)',
+  // open receipts are gone, and whatever they recorded with them
+  'DROP TABLE IF EXISTS receipts',
+  'UPDATE files SET receipt_key = NULL WHERE receipt_key IS NOT NULL',
 ];
 export const ensureFileColumns = db => migrateOnce('files', db, FILE_COLUMNS);
 

@@ -256,6 +256,10 @@ function createMain(url) {
       }).show();
     }
   });
+  // "Back to ShareSecure" on the update page, when an update didn't finish
+  win.webContents.on('did-navigate-in-page', (_e, url) => {
+    if (url.startsWith('file:') && url.endsWith('#back')) win.loadURL(backFromUpdate || mainUrl());
+  });
   win.on('closed', () => {
     win = null;
     if (mode !== 'local' && !quitting) app.quit();
@@ -406,7 +410,9 @@ function createTray() {
 // ── updates ─────────────────────────────────────────────────────────────────
 // Shown under Updates in the account menu (see preload.js). In local mode an
 // update waits for "Restart to update" instead of installing on quit: quitting
-// leaves the server sharing, and installing would stop it.
+// leaves the server sharing, and installing would stop it. Updating from the
+// menu (or from the notification that one is ready) shows updating.html while
+// it downloads and installs; the app then reopens on the new version.
 const updates = {
   current: app.getVersion(),
   status: app.isPackaged ? 'idle' : 'development',
@@ -416,8 +422,23 @@ const updates = {
   autoUpdate: true,
 };
 let updater = null;
+// set once you choose to update: install as soon as the download is in
+let installWhenReady = false;
+let notice = null;           // the last notification, kept so its click still works
+let backFromUpdate = null;   // where "Back to ShareSecure" goes if an update fails
 
 const updateState = () => ({ ...updates, local: mode === 'local' });
+
+// updates.json: { autoUpdate, pending: a downloaded version, until it's running }
+function readUpdatesFile() {
+  try { return JSON.parse(fs.readFileSync(UPDATES_FILE, 'utf8')) || {}; } catch { return {}; }
+}
+function writeUpdatesFile(patch) {
+  try {
+    fs.mkdirSync(USER_DIR, { recursive: true });
+    fs.writeFileSync(UPDATES_FILE, JSON.stringify({ ...readUpdatesFile(), ...patch }));
+  } catch {}
+}
 
 function setUpdates(patch) {
   Object.assign(updates, patch);
@@ -434,8 +455,74 @@ function downloadUpdate() {
   updater.downloadUpdate().catch(() => {});
 }
 
+function showUpdatePage() {
+  if (!win || win.isDestroyed()) createMain(null);
+  const here = win.webContents.getURL();
+  if (here && !here.startsWith('file:')) backFromUpdate = here;
+  win.loadFile(path.join(__dirname, 'updating.html'), {
+    query: { from: updates.current, to: updates.latest || '', status: updates.status, local: mode === 'local' ? '1' : '0' },
+  });
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+// "Update to …", "Restart to update", or a click on the notification
+function installUpdate() {
+  if (!updater) return;
+  if (updates.status === 'available' || updates.status === 'downloading') {
+    installWhenReady = true;
+    showUpdatePage();
+    if (updates.status === 'available') downloadUpdate();
+    return;
+  }
+  if (updates.status !== 'downloaded') return;
+  installWhenReady = false;
+  showUpdatePage();
+  // long enough to see what's happening; the server stops for the install,
+  // and starts again when the app reopens
+  setTimeout(() => { quitting = true; stopServer(); updater.quitAndInstall(true, true); }, 1800);
+}
+
+function notify(title, body, onClick) {
+  if (!Notification.isSupported()) return false;
+  notice = new Notification({ title, body, icon: ICON });
+  if (onClick) notice.on('click', onClick);
+  notice.show();
+  return true;
+}
+
+// A finished download, said out loud when you're not looking at the app
+// (it's in the tray, or another window has the focus).
+function notifyReady(version) {
+  if (win && !win.isDestroyed() && win.isVisible() && win.isFocused()) return;
+  notify(`ShareSecure ${version} is ready`, mode === 'local'
+    ? 'Click to restart and update. Links on this computer pause for a moment while it installs.'
+    : 'It installs when you quit ShareSecure. Click to restart and update now.', installUpdate);
+}
+
+const newer = (a, b) => {
+  const [x, y] = [a, b].map(v => String(v).split('.').map(n => parseInt(n, 10) || 0));
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+};
+
+// The first run of a new version says so, however it got installed: with
+// "Restart to update", when you quit, or while you weren't using the app (a
+// background start at sign-in counts, so it can tell you before you open it).
+// → whether it did
+function announceUpdate() {
+  const { pending } = readUpdatesFile();
+  const now = app.getVersion();
+  if (!pending || newer(pending, now)) return false;   // nothing, or not installed yet
+  writeUpdatesFile({ pending: null });
+  if (pending !== now) return false;
+  return notify(`ShareSecure updated to ${now}`, 'You’re on the latest version. Click to see what’s new.',
+    () => shell.openExternal(`${CLOUD}/changelog`));
+}
+
 function initUpdates() {
-  try { updates.autoUpdate = JSON.parse(fs.readFileSync(UPDATES_FILE, 'utf8')).autoUpdate !== false; } catch {}
+  updates.autoUpdate = readUpdatesFile().autoUpdate !== false;
   if (!app.isPackaged) return;
   try {
     ({ autoUpdater: updater } = require('electron-updater'));
@@ -446,8 +533,16 @@ function initUpdates() {
   updater.on('update-not-available', info => setUpdates({ status: 'up-to-date', latest: info.version }));
   updater.on('update-available', info => setUpdates({ status: updater.autoDownload ? 'downloading' : 'available', latest: info.version, progress: 0 }));
   updater.on('download-progress', p => setUpdates({ status: 'downloading', progress: Math.round(p.percent) }));
-  updater.on('update-downloaded', info => setUpdates({ status: 'downloaded', latest: info.version }));
-  updater.on('error', err => setUpdates({ status: 'error', error: String(err?.message || 'Something went wrong').split('\n')[0].slice(0, 160) }));
+  updater.on('update-downloaded', info => {
+    setUpdates({ status: 'downloaded', latest: info.version });
+    writeUpdatesFile({ pending: info.version });
+    if (installWhenReady) installUpdate();
+    else notifyReady(info.version);
+  });
+  updater.on('error', err => {
+    installWhenReady = false;
+    setUpdates({ status: 'error', error: String(err?.message || 'Something went wrong').split('\n')[0].slice(0, 160) });
+  });
   checkForUpdates();
   setInterval(checkForUpdates, 6 * 60 * 60 * 1000);
 }
@@ -470,17 +565,13 @@ ipcMain.handle('updates:check', async e => {
 });
 ipcMain.handle('updates:install', e => {
   if (!fromApp(e) || !updater) return null;
-  if (updates.status === 'available') downloadUpdate();
-  else if (updates.status === 'downloaded') {
-    // the server stops for the install, and starts again when the app reopens
-    setImmediate(() => { quitting = true; stopServer(); updater.quitAndInstall(true, true); });
-  }
+  setImmediate(installUpdate);
   return updateState();
 });
 ipcMain.handle('updates:auto', (e, on) => {
   if (!fromApp(e)) return null;
   updates.autoUpdate = on === true;
-  try { fs.writeFileSync(UPDATES_FILE, JSON.stringify({ autoUpdate: updates.autoUpdate })); } catch {}
+  writeUpdatesFile({ autoUpdate: updates.autoUpdate });
   if (updater) {
     updater.autoDownload = updates.autoUpdate;
     if (updates.autoUpdate && updates.status === 'available') downloadUpdate();
@@ -610,8 +701,10 @@ app.whenReady().then(async () => {
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
   const saved = readMode();
   if (process.argv.includes(BACKGROUND_FLAG)) {
-    // started at sign-in: start the server and leave it sharing on its own
+    // started at sign-in: start the server and leave it sharing on its own,
+    // and say if ShareSecure updated itself since you last used it
     if (saved === 'local') await start(saved);
+    if (announceUpdate()) await sleep(4000);
     app.exit(0);
     return;
   }
@@ -619,5 +712,6 @@ app.whenReady().then(async () => {
   createTray();
   if (mode === 'account' && process.argv.includes(NEW_ACCOUNT_FLAG)) createMain(mainUrl(true));
   else showMain();
+  announceUpdate();
   initUpdates();
 });

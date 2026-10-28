@@ -29,7 +29,7 @@
     <header>
       <h1 class="page-title">Privacy policy</h1>
       <div class="page-meta">
-        <span>Last updated October 27, 2026</span>
+        <span>Last updated October 28, 2026</span>
         <span>· <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/privacy.html" target="_blank" rel="noopener noreferrer">Every change, on GitHub</a></span>
       </div>
     </header>
@@ -80,8 +80,6 @@
       <p>To enforce daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code) and the files tagged to an account in the last 24 hours. Spent tokens are remembered for two days so none can be used twice.</p>
       <h3>Files sent to you, and file requests</h3>
       <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, a keyed code standing in for the sender is kept on the copy until you accept it, and in a log erased after 24 hours. File requests you make are stored under your account with what you asked for sealed so we can't read it; files sent through them are sealed to your key.</p>
-      <h3>Open receipts</h3>
-      <p>Only if the sender turns on “Tell me when it's opened”. Each opening stores a receipt sealed to a key only the sender has, and the minute it arrived. Inside is a code that's the same each time one device opens that one link and different for every other link, so the sender can tell a new device from a repeat, but nobody can follow a device from link to link. We can't read receipts and keep no IP address or browser details with them. People opening such a link are told receipts are on.</p>
       <h3>Teams</h3>
       <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team's keys, sealed to each member so we can't open them. Files sent through a team's request links are sealed to the team's key in the sender's browser. We do know who is in which team.</p>
       <h3>Pro</h3>
@@ -122,7 +120,7 @@
       <ul>
         <li>A file's link stops working the moment it expires (after 1 hour to 10 days, as you choose), and the file and everything stored about it are erased at the next cleanup, which runs whenever anyone uploads.</li>
         <li>Deleting a file, or declining one sent to you, erases it straight away. A Works once file is erased when it's opened.</li>
-        <li>Open receipts go when the link would have expired. File requests go when they expire (30 days at most) or you close them.</li>
+        <li>File requests go when they expire (30 days at most) or you close them.</li>
         <li>A team's inbox and request links go when the team is deleted.</li>
         <li>Your account stays until you delete it (Settings → Delete account), which erases it and every file shared from it right away. The key log keeps a record that the account existed (section 1).</li>
       </ul>
@@ -130,7 +128,7 @@
 
     <section id="browser">
       <h2>6. What stays in your browser</h2>
-      <p>Your sign-in lasts until you close the browser. While you're signed in, your private key is kept in the browser in a form it can use but never read out, and it's deleted when you sign out. The browser also keeps: your list of shares and their delete keys (up to 30 days), a few anonymous tokens, the public keys of people you've sent to, the last state of the key log it checked, a random code used only to make open receipts, that you accepted the terms, and your Settings (notifications, the crosshair, what new shares start with). None of it leaves your device, and you can clear it in your browser's settings. If you install ShareSecure to your phone's home screen, things you share to it wait on the phone until you choose to share them.</p>
+      <p>Your sign-in lasts until you close the browser. While you're signed in, your private key is kept in the browser in a form it can use but never read out, and it's deleted when you sign out. The browser also keeps: your list of shares and their delete keys (up to 30 days), a few anonymous tokens, the public keys of people you've sent to, the last state of the key log it checked, that you accepted the terms, and your Settings (notifications, the crosshair, what new shares start with). None of it leaves your device, and you can clear it in your browser's settings. If you install ShareSecure to your phone's home screen, things you share to it wait on the phone until you choose to share them.</p>
     </section>
 
     <section id="security">

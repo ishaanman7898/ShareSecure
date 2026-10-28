@@ -1325,46 +1325,16 @@ test('a send that fails after the upload still returns the share, so the assista
   }
 });
 
-test('open receipts: sealed to the sender, readable only with the delete token, and they tell devices apart without tracking them', async () => {
+test('open receipts are gone: a receipt key sent with an upload is ignored and the link offers none', async () => {
   freshDay();
-  const { makeKeyPair, sealText, openText } = await sealedLib();
-  const receipts = await load('api/receipts/[shortId].js');
+  const { makeKeyPair } = await sealedLib();
   const pair = await makeKeyPair();
   const form = new FormData(); form.set('file', new File(['Watch me'], 'watched.txt')); form.set('expires_hours', '24'); form.set('receipt_key', pair.publicKey);
   const share = await (await uploadHandler(context('/api/upload', { body: form }))).json();
   const info = await (await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }))).json();
-  assert.equal(info.receiptKey, pair.publicKey);
-
-  const post = box => receipts.onRequestPost(context('/api/receipts/' + share.shortId, { user: null, params: { shortId: share.shortId }, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box }) }));
-  const get = token => receipts.onRequestGet(context('/api/receipts/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId }, headers: token ? { 'X-Delete-Token': token } : {} })).then(r => r.json());
-  const phone = await sealText(info.receiptKey, JSON.stringify({ d: 'phone-tag' }), 'receipt');
-  const laptop = await sealText(info.receiptKey, JSON.stringify({ d: 'laptop-tag' }), 'receipt');
-  for (const box of [phone, phone, laptop]) assert.equal((await post(box)).status, 200);
-
-  // the server keeps sealed boxes and the minute, never an address
-  const stored = db.prepare('SELECT * FROM receipts WHERE short_id = ?').all(share.shortId);
-  assert.deepEqual(Object.keys(stored[0]).sort(), ['at', 'box', 'expires_at', 'owner', 'short_id']);
-  assert(stored.every(r => !r.box.includes('tag') && r.owner !== share.deleteToken && /:00Z$/.test(r.at)));
-
-  // only the delete token gets them, and only the sender's key opens them
-  assert.deepEqual((await get()).receipts, []);
-  assert.deepEqual((await get('wrong-token-wrong-token!')).receipts, []);
-  const mine = (await get(share.deleteToken)).receipts;
-  assert.equal(mine.length, 3);
-  const tags = await Promise.all(mine.map(async r => JSON.parse(await openText(pair.privateKey, r.box, 'receipt')).d));
-  assert.deepEqual(tags, ['phone-tag', 'phone-tag', 'laptop-tag']);
-  const stranger = await makeKeyPair();
-  await assert.rejects(openText(stranger.privateKey, mine[0].box, 'receipt'));
-
-  // anything that isn't a sealed receipt is refused, and links that didn't ask take none
-  assert.equal((await post('opened by 203.0.113.9')).status, 400);
-  assert.equal((await post(phone + 'x'.repeat(600))).status, 400);
-  const plain = await upload('quiet.txt', 'No receipts here');
-  assert.equal((await receipts.onRequestPost(context('/api/receipts/' + plain.shortId, { user: null, params: { shortId: plain.shortId }, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ box: phone }) }))).status, 404);
-
-  // a link can't be flooded: after 100, opens aren't recorded
-  for (let i = 0; i < 100; i++) await post(laptop);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM receipts WHERE short_id = ?').get(share.shortId).n, 100);
+  assert.equal(info.receiptKey, undefined);
+  assert.equal(db.prepare('SELECT receipt_key FROM files WHERE short_id = ?').get(share.shortId).receipt_key, null);
+  await assert.rejects(load('api/receipts/[shortId].js'));
 });
 
 // ── plans and teams ─────────────────────────────────────────────────────────

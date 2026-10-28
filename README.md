@@ -40,7 +40,6 @@ The desktop app asks which one you want the first time it opens. You can switch 
 
 - **Files:** PDF, Word, Excel, PowerPoint and OpenDocument files, PNG, JPG, GIF, WebP, MP4, MOV, WebM, MP3, M4A, WAV, ZIP, 7z, gzip, RAR, tar, plain text, Markdown and CSV, up to 10 MB on the website and 100 MB on your own computer. Types are checked from the file's contents, and the name people see always ends in the real type, so a PDF can't arrive looking like an `.exe`. Programs and scripts can't be shared on their own.
 - **Several files or a folder** go as one share: they're packed into a ZIP in your browser, and the viewer lists them and opens each one in place. Video and audio play in the viewer; spreadsheets, presentations and archives are offered to save.
-- **Open receipts.** Turn on *Tell me when it's opened* and *Your shares* says how many times the link was opened, on how many devices, and when, including “from a new device”. Receipts are sealed to a key only you have, carry no address or browser details, and can't link a device across links. People opening the link are told receipts are on.
 - **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
 - **Links that work once.** Turn on *Works once* and the file is erased the moment it's opened. If anyone tries the link after that, you're told: it was probably passed on.
 - **Passcodes.** Add one and the link alone isn't enough to open the file.

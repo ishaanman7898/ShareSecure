@@ -16,7 +16,6 @@ import {
 import { spendToken, issuerAccount, issuedToday, DAILY } from '../_tokens.js';
 import { detectType, nameFor, canView, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../../public/filetypes.js';
 import { isSealed, MAX_FILE, MAX_SEALED_FILE, BOX_OVERHEAD } from '../../public/sealed.js';
-import { receiptKeyFrom } from '../_receipts.js';
 import { planFor } from '../_plans.js';
 
 const limitReached = n => Response.json({ error: `Upload limit reached (${n} files per 24h)` }, { status: 429 });
@@ -113,11 +112,11 @@ export async function onRequestPost(context) {
   await db.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token,
             user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download, require_account,
-            e2e, owner_key, passcode_salt, max_views, receipt_key, view_opts)
-          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            e2e, owner_key, passcode_salt, max_views, view_opts)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [shortId, row.name, row.type, row.size, row.data, expiresAt, deleteToken,
       userTag, shortId, once ? 0 : flag('allow_annotations'), once ? 0 : (row.saveOnly ? 1 : flag('allow_download')), flag('require_account'),
-      e2e ? 1 : 0, row.ownerKey, row.salt, once ? 1 : null, receiptKeyFrom(form.get('receipt_key')), row.viewOpts || null]
+      e2e ? 1 : 0, row.ownerKey, row.salt, once ? 1 : null, row.viewOpts || null]
   });
 
   // Count again now this one is in, so several uploads at once can't all slip

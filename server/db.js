@@ -113,14 +113,13 @@ const migrations = [
   // files people send to the owner: 'pending' until accepted, then 'accepted'
   'ALTER TABLE files ADD COLUMN inbox_status TEXT',
   'ALTER TABLE files ADD COLUMN inbox_note TEXT',
-  // set when the sender asked to hear when the link is opened (see routes/files.js)
+  // open receipts, removed in 1.18.0: the column stays, always empty
   'ALTER TABLE files ADD COLUMN receipt_key TEXT',
   // watermark / discourage screenshots (public/protect.js), encrypted like the name
   'ALTER TABLE files ADD COLUMN view_opts TEXT',
-  `CREATE TABLE IF NOT EXISTS receipts (
-     short_id TEXT NOT NULL, owner TEXT NOT NULL, box TEXT NOT NULL, at TEXT NOT NULL, expires_at TEXT NOT NULL
-   )`,
-  'CREATE INDEX IF NOT EXISTS idx_receipts ON receipts(short_id, owner)',
+  // and whatever they recorded goes with them
+  'DROP TABLE IF EXISTS receipts',
+  'UPDATE files SET receipt_key = NULL WHERE receipt_key IS NOT NULL',
 ];
 
 for (const sql of migrations) {

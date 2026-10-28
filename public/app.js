@@ -1,6 +1,6 @@
 import {
   newFileKey, lockFile, lockMeta, lockText, unlockText, linkWithKey, keyFromLink, sealKey, openKey, toB64url, fromB64url,
-  newPasscodeSalt, passcodeKey, sealText, openText, makeKeyPair, importPrivateKey
+  newPasscodeSalt, passcodeKey, sealText, openText
 } from './sealed.js';
 import { detectType, nameFor, canView, kindName, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
 import { makeZip, safeEntryName } from './zip.js';
@@ -605,22 +605,12 @@ async function buildUploadForm() {
     discourage: Boolean(document.getElementById('discourage-toggle')?.checked),
   };
 
-  // Open receipts: a key pair made just for this share. The server keeps the
-  // public half with the link; the private half stays in Your shares, so only
-  // you can read who-opened-it-when (see functions/_receipts.js).
-  let receiptSecret = null;
-  if (document.getElementById('receipts-toggle')?.checked) {
-    const pair = await makeKeyPair();
-    form.append('receipt_key', pair.publicKey);
-    receiptSecret = toB64url(new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey)));
-  }
-
   if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
     form.append('file', selectedFile);
     if (displayName) form.append('display_name', displayName);
     if (view.watermark) form.append('watermark', '1');
     if (view.discourage) form.append('discourage', '1');
-    return { form, key: null, receiptSecret };
+    return { form, key: null };
   }
 
   const bytes = new Uint8Array(await selectedFile.arrayBuffer());
@@ -640,7 +630,7 @@ async function buildUploadForm() {
   // also sealed to you, so the link shows up in Your shares on any device
   const me = await myKeys();
   if (me?.publicKey) form.append('owner_key', await sealKey(me.publicKey, ownerKeys(linkKey, key)));
-  return { form, key, linkKey, name, type, receiptSecret };
+  return { form, key, linkKey, name, type };
 }
 
 // Sends one upload and resolves with { status, body }. status is 0 if the
@@ -780,8 +770,6 @@ function showResult(data, file, delivery, built = {}) {
     delete_token:      data.deleteToken || null,
     // with a passcode, the file's key isn't in the link; keep it to send it on
     full_key:          built.key && built.key !== built.linkKey ? toB64url(built.key) : null,
-    // opens the receipts people's browsers seal to this share
-    receipt_secret:    built.receiptSecret || null,
   };
   saveUploadToHistory(record);
   vaultChanged();
@@ -1646,6 +1634,9 @@ function showSignedIn(username) {
   document.body.classList.add('is-logged-in');
   landingPage.classList.add('hidden');
   document.getElementById('app-grid')?.classList.remove('hidden');
+  document.getElementById('landing-signup')?.classList.add('hidden');
+  document.getElementById('landing-files')?.classList.remove('hidden');
+  syncBrackets();
   if (/ShareSecureDesktop\//.test(navigator.userAgent)) {
     mountGradientASCII(document.getElementById('desktop-gradient'), {
       colors: ['#1e3fd8', '#f6f8ff', '#a5d8ff', '#38bdf8'],
@@ -1685,8 +1676,47 @@ function initAuth() {
     }
     drawRosette();
     document.getElementById('app-grid')?.classList.add('hidden');
+    syncBrackets();
   }
 }
+
+// ── ShareSecure, top left ────────────────────────────────────────────────────
+// Signed in on the website, it goes to the home page (/#home), which has a
+// way back to your files. In the desktop app, and on a ShareSecure you run
+// yourself, it reloads your files instead: there the home page is only for
+// signing in.
+function showHome(on) {
+  if (on && !settingsView.classList.contains('hidden')) {
+    settingsView.classList.add('hidden');
+    document.body.classList.remove('in-settings');
+  }
+  landingPage.classList.toggle('hidden', !on);
+  document.getElementById('app-grid')?.classList.toggle('hidden', on);
+  if (on) drawRosette();
+  syncBrackets();
+  window.scrollTo(0, 0);
+}
+
+const homeShown = () => !selfHostMode && !/ShareSecureDesktop\//.test(navigator.userAgent) && document.body.classList.contains('is-logged-in');
+
+document.querySelector('.topbar .brand')?.addEventListener('click', e => {
+  if (!homeShown()) return;   // the link reloads the page
+  e.preventDefault();
+  if (location.hash !== '#home') history.pushState(null, '', '/#home');
+  showHome(true);
+});
+document.getElementById('landing-files')?.addEventListener('click', e => {
+  if (!homeShown()) return;
+  e.preventDefault();
+  history.pushState(null, '', '/');
+  showHome(false);
+});
+window.addEventListener('popstate', () => {
+  if (!homeShown()) return;
+  if (location.hash === '#home') showHome(true);
+  else if (!landingPage.classList.contains('hidden')) showHome(false);
+});
+document.addEventListener('sharesecure:ready', () => { if (location.hash === '#home' && homeShown()) showHome(true); }, { once: true });
 
 // ── self-hosted: the owner signs in; nobody else can upload ──────────────────
 function initSelfHost() {
@@ -2243,73 +2273,6 @@ function forgetShare(shortId) {
   if (!fileList.querySelector('.file-item')) fileList.innerHTML = EMPTY_LIST;
 }
 
-// ── open receipts ────────────────────────────────────────────────────────────
-// Shares made with "Tell me when it's opened" show how often they've been
-// opened, and on how many devices. Each receipt is sealed to the share's own
-// key, so it's opened here; the server only ever has the sealed box.
-const receiptText = new Map();   // short_id → what its row says
-let receiptTimer = null;
-
-function sinceText(iso) {
-  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours} h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-async function readReceipts(f) {
-  const token = f.delete_token || localStorage.getItem('owner_' + f.short_id);
-  if (!token) return null;
-  const res = await fetch(`/api/receipts/${encodeURIComponent(f.short_id)}`, { headers: { 'X-Delete-Token': token } });
-  if (!res.ok) return null;
-  const { receipts } = await res.json();
-  const key = await importPrivateKey(fromB64url(f.receipt_secret));
-  const seen = new Set();
-  const opens = [];
-  for (const r of receipts || []) {
-    try {
-      const { d } = JSON.parse(await openText(key, r.box, 'receipt'));
-      opens.push({ at: r.at, newDevice: !seen.has(d) });
-      seen.add(d);
-    } catch {}
-  }
-  return { opens, devices: seen.size };
-}
-
-function describeReceipts({ opens, devices }) {
-  if (!opens.length) return 'Not opened yet';
-  const last = opens[opens.length - 1];
-  if (opens.length === 1) return `Opened once · ${sinceText(last.at)}`;
-  const where = devices === 1 ? 'on one device' : `on ${devices} devices`;
-  return `Opened ${opens.length} times ${where} · last ${sinceText(last.at)}${last.newDevice ? ', from a new device' : ''}`;
-}
-
-async function showReceipts(files) {
-  if (receiptTimer) { clearInterval(receiptTimer); receiptTimer = null; }
-  const watched = files.filter(f => f.receipt_secret);
-  if (!watched.length) return;
-  const update = async () => {
-    for (const f of watched) {
-      const found = await readReceipts(f).catch(() => null);
-      if (!found) continue;
-      const text = describeReceipts(found);
-      const before = receiptText.get(f.short_id);
-      receiptText.set(f.short_id, text);
-      const row = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"] .file-item-receipt`);
-      if (row) {
-        row.textContent = text;
-        row.title = found.opens.map(o => `${new Date(o.at).toLocaleString()}${o.newDevice ? ' · new device' : ''}`).join('\n');
-      }
-      // say so when it happens, not only when someone looks
-      if (before && before !== text && found.opens.length) showToast(`“${f.original_filename}” was just opened${found.opens.at(-1).newDevice && found.opens.length > 1 ? ' on a new device' : ''}.`, 'info', 5000);
-    }
-  };
-  update();
-  receiptTimer = setInterval(update, 60 * 1000);
-}
-
 function renderFileList(files) {
   if (listTimer) { clearInterval(listTimer); listTimer = null; }
   if (!files || files.length === 0) {
@@ -2323,7 +2286,6 @@ function renderFileList(files) {
       <div class="file-item-info">
         <span class="file-item-name">${escapeHtml(f.original_filename)}</span>
         <span class="file-item-time" data-expires="${escapeHtml(f.expires_at)}"></span>
-        ${f.receipt_secret ? `<span class="file-item-receipt">${escapeHtml(receiptText.get(f.short_id) || 'Checking who opened it…')}</span>` : ''}
         <span class="expiry-bar" aria-hidden="true"><span></span></span>
       </div>
       <div class="file-item-actions">
@@ -2335,8 +2297,6 @@ function renderFileList(files) {
       </div>
     </div>
   `).join('');
-
-  showReceipts(files);
 
   // opens the share's dialog, ready to send it to someone
   fileList.querySelectorAll('.send-file-btn').forEach(btn => {
@@ -2529,8 +2489,10 @@ function renderDesktopUpdates(s) {
       : `Version ${s.latest} is ready. It installs when you quit, or restart now.`,
     error: `Couldn’t check for updates: ${s.error}`,
   }[s.status] || '';
-  updateBtn.textContent = s.status === 'downloaded' ? 'Restart to update' : `Update to ${s.latest}`;
-  updateBtn.classList.toggle('hidden', !ready);
+  // each opens the app's update page (desktop/updating.html), which installs
+  // once the download is in
+  updateBtn.textContent = s.status === 'downloaded' ? 'Restart to update' : s.status === 'downloading' ? 'Update now' : `Update to ${s.latest}`;
+  updateBtn.classList.toggle('hidden', !ready && s.status !== 'downloading');
 }
 
 async function initUpdates() {
@@ -2726,6 +2688,7 @@ function startApp(isSelfHost) {
   } else {
     initAuth();
   }
+  document.documentElement.classList.remove('signed-in-now');
   document.dispatchEvent(new Event('sharesecure:ready'));
 }
 
@@ -2735,7 +2698,10 @@ let selfHostStart = false;
 const termsKey = () => selfHostStart ? 'tc_accepted_local' : 'tc_accepted';
 
 async function initApp() {
-  selfHostStart = await detectSelfHostMode();
+  // straight from the sign-in page, which has just asked /api/mode itself
+  let signedInNow = null;
+  try { signedInNow = sessionStorage.getItem('signed_in_now'); sessionStorage.removeItem('signed_in_now'); } catch {}
+  selfHostStart = signedInNow === 'web' ? false : await detectSelfHostMode();
   if (selfHostStart) {
     document.getElementById('tc-website').classList.add('hidden');
     document.getElementById('tc-local').classList.remove('hidden');
@@ -2811,7 +2777,7 @@ document.getElementById('protect-desktop')?.addEventListener('change', async e =
 });
 
 // what new shares start with; each share can still change them
-const SHARE_DEFAULTS = { 'default-watermark': 'watermark-toggle', 'default-discourage': 'discourage-toggle', 'default-receipts': 'receipts-toggle' };
+const SHARE_DEFAULTS = { 'default-watermark': 'watermark-toggle', 'default-discourage': 'discourage-toggle' };
 const defaultOn = id => { try { return localStorage.getItem('pref:' + id) === 'on'; } catch { return false; } };
 function applyShareDefaults() {
   for (const [pref, toggle] of Object.entries(SHARE_DEFAULTS)) {

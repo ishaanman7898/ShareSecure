@@ -3,6 +3,15 @@
 (() => {
   const loader = document.getElementById('page-loader');
   if (!loader) return;
+  // straight from signing in: your files are ready at once, and a blank
+  // loading screen in between would only flash (app.js clears the flag)
+  let signedInNow = false;
+  try { signedInNow = Boolean(sessionStorage.getItem('signed_in_now')); } catch {}
+  if (signedInNow) {
+    document.documentElement.classList.add('signed-in-now');
+    loader.remove();
+    return;
+  }
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const started = performance.now();
   let finished = false;
