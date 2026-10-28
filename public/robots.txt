@@ -1,0 +1,8 @@
+# Only the guides and comparisons are for search engines. Links, files and
+# the app are never indexed (they also send X-Robots-Tag: noindex).
+User-agent: *
+Allow: /guides
+Allow: /compare
+Disallow: /
+
+Sitemap: https://sharesecure-du8.pages.dev/sitemap.xml

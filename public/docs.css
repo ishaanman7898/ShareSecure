@@ -456,3 +456,15 @@ h2 .section-num {
 .legal th { font-weight: 600; white-space: nowrap; }
 .legal .toc { margin: 28px 0 40px; }
 .legal .page-meta a { color: inherit; }
+
+/* guides and comparisons (/guides, /compare) */
+.guide .lede { font-size: 1.1rem; line-height: 1.6; margin: 8px 0 28px; }
+.guide-kicker { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.guide-kicker a { color: inherit; text-decoration: none; }
+.guide-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.guide-list li { display: flex; flex-direction: column; gap: 2px; }
+.guide-list a { font-weight: 600; }
+.guide-list span { opacity: 0.75; }
+.guide-cta { margin-top: 44px; }
+.guide ol li { margin-bottom: 8px; }
+.guide td:first-child { font-weight: 600; }

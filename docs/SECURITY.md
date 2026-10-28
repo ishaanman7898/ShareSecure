@@ -70,7 +70,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Links expire after 1 minute to 10 days. Expired files are erased.
 - Files shared with end-to-end encryption turned off are still encrypted on the server, each with its own key.
 - The self-hosted server checks file types by their contents and strips author and editing metadata from PDF and DOCX files.
-- Pages send `noindex`, `no-store` and `frame-ancestors 'none'`. There are no analytics.
+- Pages send `noindex`, `no-store` and `frame-ancestors 'none'`; only the public guides and comparisons (`/guides`, `/compare`) can be indexed, and they hold nothing private. There are no analytics.
 - Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
 
 ## Screenshots: resistant and traceable, not proof

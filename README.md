@@ -13,7 +13,7 @@
 
 ---
 
-Upload almost any file (documents, spreadsheets, images, video, ZIPs), several files or a whole folder at once, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, pages are never indexed, and when the link expires the file is erased.
+Upload almost any file (documents, spreadsheets, images, video, ZIPs), several files or a whole folder at once, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, links and the app are never indexed, and when the link expires the file is erased.
 
 ## Ways to use it
 
@@ -59,7 +59,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Security codes.** Compare codes with the people you send to; you're warned if someone's key ever changes.
 - **A public key log.** Every account's key is in an append-only log that anyone can audit, and your browser checks that the log shows your own key.
 - **Check the site yourself.** `npm run verify-site` compares every file the website runs with this repository's code. A public check runs it after every deploy and every day.
-- **No tracking and no outside code.** No analytics, ads or cookies; pdf.js and mammoth are served from the site itself, and pages are never indexed.
+- **No tracking and no outside code.** No analytics, ads or cookies; pdf.js and mammoth are served from the site itself, and links and the app are never indexed (only the public [guides](https://sharesecure-du8.pages.dev/guides) are).
 - **Your account, your call.** Delete your account and every file shared from it at any time from the account menu.
 
 **AI assistants** ([setup](#ai-assistants-mcp))
@@ -162,7 +162,7 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
   - **Website (end to end off):** each file's key is derived from a server master key.
   - **Self-hosted:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
 - File types are checked from the file's contents, not its name. The self-hosted server also strips author and editing metadata from PDF and DOCX files.
-- Pages are sent with `noindex`, `no-store` and `frame-ancestors 'none'`.
+- Pages are sent with `noindex`, `no-store` and `frame-ancestors 'none'`, except the public guides and comparisons (`/guides`, `/compare`), which search engines may index.
 
 Files shared with end-to-end encryption off can be read by whoever holds the master key while they exist. Anyone with the whole link (and passcode) can open a file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
 

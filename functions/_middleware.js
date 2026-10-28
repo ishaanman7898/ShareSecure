@@ -37,8 +37,11 @@ export async function onRequest(context) {
   // don't leak referrer to any third-party (qr api sees no referrer)
   h.set('Referrer-Policy', 'no-referrer');
 
-  // don't let search engines index or cache any link
-  h.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  // Search engines never index or cache a link or the app. The only pages
+  // they may index are the public guides and comparisons, written for people
+  // searching for a safe way to send something (see robots.txt).
+  const indexable = /^\/(guides|compare)(\/|$)/.test(path) || path === '/robots.txt' || path === '/sitemap.xml';
+  if (!indexable) h.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
 
   // block framing so files can't be embedded/traced via iframes
   h.set('X-Frame-Options', 'DENY');

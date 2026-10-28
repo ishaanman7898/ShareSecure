@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <title>How to send tax documents securely (2026 guide) | ShareSecure</title>
+  <meta name="description" content="How to send W-2s, 1099s and tax returns securely: end-to-end encryption, passcodes, expiring links and request links, and what to avoid." />
+  <link rel="canonical" href="https://sharesecure-du8.pages.dev/guides/send-tax-documents-securely" />
+  <meta property="og:title" content="How to send tax documents securely (2026 guide) | ShareSecure" />
+  <meta property="og:description" content="How to send W-2s, 1099s and tax returns securely: end-to-end encryption, passcodes, expiring links and request links, and what to avoid." />
+  <meta property="og:type" content="article" />
+  <meta property="og:url" content="https://sharesecure-du8.pages.dev/guides/send-tax-documents-securely" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
+  </header>
+
+  <main class="wrapper legal guide">
+
+    <header>
+      <p class="guide-kicker"><a href="/guides">Guides</a></p>
+      <h1 class="page-title">How to send tax documents securely</h1>
+      <div class="page-meta">
+        <span>Updated October 27, 2026</span>
+      </div>
+    </header>
+
+    <div class="summary">
+      <h2>The short version</h2>
+      <ul>
+        <li>Don't send tax documents as plain email attachments: they sit in inboxes, backups and sent folders for years.</li>
+        <li>Use end-to-end encryption, so the service carrying the file can't read it.</li>
+        <li>Make the link expire, and give it a passcode you send a different way, like a text or a call.</li>
+        <li>To collect documents from someone, send them a request link instead of asking them to email you.</li>
+        <li>Delete what you sent once it's been received.</li>
+      </ul>
+    </div>
+
+    <section id="why">
+      <h2>Why tax documents need more care</h2>
+      <p>A W-2, 1099, tax return or bank statement holds everything someone needs to steal an identity: your name, address, Social Security number, income and account numbers. Tax season is also when phishing peaks, so scammers know these files are moving around. The IRS asks tax professionals to protect client data and encrypt it in its guide <a href="https://www.irs.gov/pub/irs-pdf/p4557.pdf" target="_blank" rel="noopener noreferrer">Publication 4557, Safeguarding Taxpayer Data</a>.</p>
+      <p>The risk with email isn't usually the moment you send it. It's that the attachment then lives, unencrypted, in your sent folder, the recipient's inbox, both email providers' servers and every backup, long after anyone needs it. If any of those accounts is broken into later, the file is still there.</p>
+    </section>
+
+    <section id="steps">
+      <h2>How to send tax documents securely, step by step</h2>
+      <ol>
+        <li><strong>Check who you're sending to.</strong> If the request came by email, confirm it by phone with someone you know. A “your accountant needs your W-2” email is a common scam.</li>
+        <li><strong>Use an end-to-end encrypted link.</strong> With end-to-end encryption, the file is locked on your device before it's uploaded, and only the person with the link can unlock it. The service storing it can't read it. In ShareSecure this is on by default: the key is in the part of the link after <code>#</code>, which never reaches the server.</li>
+        <li><strong>Add a passcode, and send it separately.</strong> If the link ends up somewhere it shouldn't, it's no use without the passcode. Text or say the passcode instead of putting it in the same email as the link.</li>
+        <li><strong>Make it expire.</strong> Pick the shortest time that works, like a day or a week. When the link expires, ShareSecure erases the file.</li>
+        <li><strong>Keep it view-only, or let it work once.</strong> If the recipient only needs to read the document, leave downloads off. For something that should be seen once, turn on <em>Works once</em>: the file is erased as soon as it's opened, and you're told if anyone tries the link again.</li>
+        <li><strong>Several documents? Send them together.</strong> Drop a whole folder or several files in and they go as one link, with each document viewable on its own.</li>
+        <li><strong>Know when it arrived.</strong> Turn on <em>Tell me when it's opened</em> to see when the link was opened, and whether it was on a new device, without anyone learning who opened it.</li>
+      </ol>
+    </section>
+
+    <section id="receive">
+      <h2>If you're the one collecting documents</h2>
+      <p>Accountants, bookkeepers and anyone helping family with taxes spend a lot of time asking people to email sensitive files. Instead, send a <strong>file request link</strong>: anyone can upload through it without an account, their browser encrypts the files to your key, and only you can open them. You choose how many files it takes and how long it stays open. With <a href="/teams">Teams</a>, a firm can share one inbox and send request links with its own name and logo.</p>
+    </section>
+
+    <section id="after">
+      <h2>After it's sent</h2>
+      <ul>
+        <li>Delete the share once it's been received, rather than waiting for it to expire.</li>
+        <li>Don't keep extra copies of the documents in your downloads or desktop folders.</li>
+        <li>If you think a link was shared too widely, delete it: every link forwarded from it stops working too.</li>
+      </ul>
+    </section>
+
+    <section id="limits">
+      <h2>What no tool can do</h2>
+      <p>Once someone can see a document, they can photograph or screenshot it. ShareSecure can put a watermark with the viewer's name and the time over the file, which makes a leak traceable, but no website can stop a camera. Only send tax documents to people you'd trust with them.</p>
+    </section>
+
+    <div class="summary guide-cta">
+      <h2>Try it</h2>
+      <p>ShareSecure is free and needs only a username and password. <a href="/signin?new=1">Create an account</a>, or <a href="/download">get the desktop app</a> to keep files on your own computer.</p>
+    </div>
+
+  </main>
+
+  <footer class="app-footer web-only">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/guides">Guides</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/security">Security</a>
+      <a href="/changelog">Changelog</a>
+      <a href="/download">Desktop app</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+    </nav>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+  </footer>
+  <script src="/footer.js" defer></script>
+</body>
+
+</html>
