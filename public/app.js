@@ -11,6 +11,7 @@ import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
 import { confirmAction } from './confirm.js';
 import { mountGradientASCII } from './gradient-ascii.js';
+import { mountCrosshair } from './crosshair.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
@@ -2746,6 +2747,23 @@ acceptTcBtn?.addEventListener('click', () => {
 });
 
 initApp();
+
+// ── the crosshair ────────────────────────────────────────────────────────────
+// Only on this page (the home page), only with a mouse or trackpad, and it
+// turns off in Settings → Appearance.
+const CROSSHAIR_KEY = 'crosshair';
+const crosshairWanted = () => { try { return localStorage.getItem(CROSSHAIR_KEY) !== 'off'; } catch { return true; } };
+let removeCrosshair = null;
+function syncCrosshair() {
+  const on = crosshairWanted() && window.matchMedia?.('(pointer: fine)').matches && !document.body.classList.contains('in-settings');
+  if (on && !removeCrosshair) {
+    removeCrosshair = mountCrosshair({ color: '#ffffff', blendMode: 'difference', opacity: 0.7, thickness: 1, smoothing: 0.35, targetEffect: 'lock', showCoordinates: true });
+  } else if (!on && removeCrosshair) {
+    removeCrosshair();
+    removeCrosshair = null;
+  }
+}
+syncCrosshair();
 
 // ── the phone's Share button ─────────────────────────────────────────────────
 // Installed from the website ("Add to Home screen"), ShareSecure shows up in
