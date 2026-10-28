@@ -11,7 +11,7 @@ import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
 import { confirmAction } from './confirm.js';
 import { mountGradientASCII } from './gradient-ascii.js';
-import { mountCrosshair } from './crosshair.js';
+import { syncBrackets, bracketsWanted, setBracketsWanted } from './brackets.js';
 
 // Inside the desktop app, hide links to download or self-host ShareSecure.
 if (/ShareSecureDesktop\//.test(navigator.userAgent)) document.documentElement.classList.add('is-desktop');
@@ -2776,15 +2776,7 @@ function openSettings() {
   settingsView.classList.remove('hidden');
   document.body.classList.add('in-settings');
   if (location.hash !== '#settings') history.pushState(null, '', '#settings');
-  syncCrosshair();
-const crosshairToggle = document.getElementById('crosshair-toggle');
-if (crosshairToggle) {
-  crosshairToggle.checked = crosshairWanted();
-  crosshairToggle.addEventListener('change', () => {
-    try { localStorage.setItem(CROSSHAIR_KEY, crosshairToggle.checked ? 'on' : 'off'); } catch {}
-    syncCrosshair();
-  });
-}
+  syncBrackets();
   window.scrollTo(0, 0);
   syncDesktopSettings();
 }
@@ -2794,7 +2786,7 @@ function closeSettings() {
   document.body.classList.remove('in-settings');
   if (document.body.classList.contains('is-logged-in')) document.getElementById('app-grid')?.classList.remove('hidden');
   if (location.hash === '#settings') history.replaceState(null, '', location.pathname + location.search);
-  syncCrosshair();
+  syncBrackets();
 }
 
 document.getElementById('menu-settings')?.addEventListener('click', openSettings);
@@ -2839,24 +2831,12 @@ for (const pref of Object.keys(SHARE_DEFAULTS)) {
 }
 applyShareDefaults();
 
-// ── corner brackets ──────────────────────────────────────────────────────────
-// Brackets that lock onto buttons, links and the rosette as the pointer moves
-// over them. Only on this page (the home page), only with a mouse or trackpad,
-// and they turn off in Settings → Appearance.
-const CROSSHAIR_KEY = 'crosshair';
-const crosshairWanted = () => { try { return localStorage.getItem(CROSSHAIR_KEY) !== 'off'; } catch { return true; } };
-let removeCrosshair = null;
-function syncCrosshair() {
-  const on = crosshairWanted() && window.matchMedia?.('(pointer: fine)').matches && !document.body.classList.contains('in-settings');
-  if (on && !removeCrosshair) {
-    // just the corner brackets, in a soft grey: no lines and no ring on click
-    removeCrosshair = mountCrosshair({ lines: false, clickPulse: false, color: '#c4c4c4', blendMode: 'difference', opacity: 0.85, thickness: 1, smoothing: 0.35, targetEffect: 'lock', showCoordinates: true });
-  } else if (!on && removeCrosshair) {
-    removeCrosshair();
-    removeCrosshair = null;
-  }
+// ── corner brackets (brackets.js, on every page but the viewer) ──────────────
+const bracketsToggle = document.getElementById('crosshair-toggle');
+if (bracketsToggle) {
+  bracketsToggle.checked = bracketsWanted();
+  bracketsToggle.addEventListener('change', () => setBracketsWanted(bracketsToggle.checked));
 }
-syncCrosshair();
 
 // ── the phone's Share button ─────────────────────────────────────────────────
 // Installed from the website ("Add to Home screen"), ShareSecure shows up in

@@ -33,7 +33,7 @@
 
       <form class="auth-form hidden" id="req-form" novalidate>
         <p class="req-label hidden" id="req-label"></p>
-        <div class="drop-zone" id="req-zone" role="button" tabindex="0" aria-label="Choose a file to send">
+        <div class="drop-zone" id="req-zone" data-crosshair-target role="button" tabindex="0" aria-label="Choose a file to send">
           <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
           <p class="drop-label" id="req-file-label">Choose files</p>
           <p class="drop-limit">Documents, spreadsheets, images, video, ZIPs and more, up to 10 MB. Pick several to send them together.</p>
@@ -63,17 +63,16 @@
 
   <footer class="app-footer web-only">
     <nav class="footer-links" aria-label="Site">
-      <a href="/terms">Terms</a>
+      <a href="/guides">Guides</a>
       <a href="/privacy">Privacy</a>
-      <a href="/security">Security</a>
-      <a href="/changelog">Changelog</a>
-      <a href="/download">Desktop app</a>
-      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+      <a href="/terms">Terms</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
-    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>
   </footer>
 
   <script type="module" src="/request.js"></script>
   <script src="/footer.js" defer></script>
+  <script type="module" src="/brackets.js"></script>
 </body>
 </html>
