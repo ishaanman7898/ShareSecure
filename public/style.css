@@ -1549,3 +1549,28 @@ a.menu-item { text-decoration: none; }
 .settings-danger .menu-item, .settings-danger .menu-item svg { color: var(--danger); }
 /* a group with nothing to show here (say, website-only rows in the desktop app) goes */
 .settings-group:not(:has(> .menu-item:not(.hidden), > .settings-switch:not(.hidden), > .settings-who)) { display: none; }
+
+/* ── the desktop download page ── */
+.dl-hero { display: flex; align-items: center; gap: 24px; }
+.dl-icon { width: 96px; height: 96px; border-radius: 22px; flex-shrink: 0; box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.45); }
+.dl-card { margin-top: 36px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px 28px; padding: 24px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.dl-card-main { display: flex; flex-direction: column; gap: 8px; }
+.dl-button { display: inline-flex; align-items: center; gap: 10px; }
+.dl-card .sh-version { font-size: 0.82rem; color: var(--muted); }
+.dl-platforms { display: flex; flex-direction: column; gap: 8px; }
+.dl-label { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.dl-first { margin-top: 12px; }
+.dl-modes, .dl-features { margin-top: 48px; }
+.dl-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dl-mode { padding: 20px; border: 1px solid var(--line); border-radius: var(--r-lg); }
+.dl-mode h3 { font-size: 1rem; font-weight: 600; }
+.dl-mode p { margin-top: 6px; color: var(--ink-2); font-size: 0.93rem; line-height: 1.55; }
+.dl-list { margin-top: 14px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.dl-list li { padding-left: 22px; position: relative; color: var(--ink-2); line-height: 1.55; }
+.dl-list li::before { content: ''; position: absolute; left: 2px; top: 0.6em; width: 8px; height: 8px; border-radius: 2px; background: var(--ink); }
+.dl-list strong { color: var(--ink); }
+@media (max-width: 620px) {
+  .dl-hero { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .dl-icon { width: 72px; height: 72px; border-radius: 17px; }
+  .dl-grid { grid-template-columns: 1fr; }
+}

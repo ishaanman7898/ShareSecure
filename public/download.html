@@ -21,50 +21,68 @@
     <a class="btn btn-ghost" href="/">Open the app</a>
   </header>
 
-  <main class="container sh">
-    <section class="sh-hero">
-      <h1 class="sh-title">ShareSecure on your desktop</h1>
-      <p class="sh-lede">Its own app for Windows, Mac and Linux, with the same encryption as the website. It updates itself.</p>
+  <main class="container sh dl">
+    <section class="dl-hero">
+      <img class="dl-icon" src="/icon-512.png" alt="" width="96" height="96" />
+      <div>
+        <h1 class="sh-title">ShareSecure for your desktop</h1>
+        <p class="sh-lede">The same end-to-end encryption as the website, in its own app for Windows, Mac and Linux. Free, open source, and it updates itself.</p>
+      </div>
     </section>
 
-    <section class="sh-download" aria-label="Download">
-      <div class="sh-download-row">
-        <a class="btn btn-primary btn-lg" id="dl-primary" href="https://github.com/ishaanman7898/ShareSecure/releases/latest">Download</a>
+    <section class="dl-card" aria-label="Download">
+      <div class="dl-card-main">
+        <a class="btn btn-primary btn-lg dl-button" id="dl-primary" href="https://github.com/ishaanman7898/ShareSecure/releases/latest">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12"/><polyline points="7 11 12 16 17 11"/><path d="M4 20h16"/></svg>
+          <span>Download</span>
+        </a>
+        <p class="sh-version" data-version="Version " hidden></p>
+      </div>
+      <div class="dl-platforms">
+        <span class="dl-label">Other downloads</span>
         <div class="sh-download-other" id="dl-other"></div>
       </div>
-      <p class="sh-version" data-version="Latest version: " hidden></p>
-      <p class="sh-hint">First launch: on Windows, select More info → Run anyway. On a Mac, open the app once, then go to System Settings → Privacy &amp; Security and choose Open Anyway.</p>
     </section>
+    <p class="sh-hint dl-first">First launch on Windows: choose <strong>More info → Run anyway</strong>. On a Mac: open the app once, then <strong>System Settings → Privacy &amp; Security → Open Anyway</strong>. Signed installers are on the way.</p>
 
-    <section class="sh-section" aria-labelledby="dl-how">
+    <section class="dl-modes" aria-labelledby="dl-how">
       <h2 class="sh-h2" id="dl-how">Two ways to use it</h2>
-      <ol class="sh-steps">
-        <li><span><strong>With a ShareSecure account.</strong> Sign in, or create an account right in the app. No email needed. Your links work any time, even with the app closed.</span></li>
-        <li><span><strong>Privately on your computer.</strong> Your files and encryption key never leave it, with no upload limit. Links keep working after you close the app, until they expire, while your computer is on.</span></li>
-      </ol>
-      <p class="sh-text">You choose the first time you open it, and can switch later from the ShareSecure icon in your system tray or menu bar.</p>
+      <div class="dl-grid">
+        <article class="dl-mode">
+          <h3>With your ShareSecure account</h3>
+          <p>Sign in, or make an account in the app. No email needed. Your links work any time, even with your computer off. Files up to 10 MB.</p>
+        </article>
+        <article class="dl-mode">
+          <h3>Privately on this computer</h3>
+          <p>Files and keys never leave your computer, files up to 100 MB, no daily limit. Links work while your computer is on, until they expire.</p>
+        </article>
+      </div>
+      <p class="sh-text">You choose the first time you open it, and can switch any time from the ShareSecure icon in your system tray or menu bar.</p>
     </section>
 
-    <section class="sh-section" aria-labelledby="dl-code">
-      <h2 class="sh-h2" id="dl-code">Why an app</h2>
-      <p class="sh-text">The website’s pages, including the code that encrypts your files, come built into the app instead of being downloaded each time you open it, so a compromised server can’t change that code. Prefer a server or Docker? <a href="/self-host">Host it yourself</a>.</p>
+    <section class="dl-features" aria-labelledby="dl-why">
+      <h2 class="sh-h2" id="dl-why">Why the app</h2>
+      <ul class="dl-list">
+        <li><strong>Code you can trust.</strong> The pages that encrypt your files are built into the app, not downloaded each time, so a compromised server can’t change them.</li>
+        <li><strong>Hide files from screenshots.</strong> On Windows and Mac, the app can keep view-only files out of screenshots and screen recordings.</li>
+        <li><strong>Stays out of the way.</strong> Lives in your tray, opens maximized, keeps your sign-in encrypted on this computer, and updates itself.</li>
+      </ul>
+      <p class="sh-text">Prefer a server or Docker? <a href="/self-host">Host it yourself</a>.</p>
     </section>
   </main>
 
   <footer class="app-footer web-only">
     <nav class="footer-links" aria-label="Site">
       <a href="/guides">Guides</a>
-      <a href="/terms">Terms</a>
       <a href="/privacy">Privacy</a>
-      <a href="/security">Security</a>
-      <a href="/changelog">Changelog</a>
-      <a href="/download">Desktop app</a>
-      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+      <a href="/terms">Terms</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
-    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>
   </footer>
 
   <script src="/footer.js" defer></script>
   <script src="/download.js"></script>
+  <script type="module" src="/brackets.js"></script>
 </body>
 </html>

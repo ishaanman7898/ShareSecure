@@ -17,9 +17,9 @@
   const own = BUILDS.find(b => b.id === mine);
   if (own) {
     primary.href = `${DL}/${own.file}`;
-    primary.textContent = `Download for ${own.label}`;
+    (primary.querySelector('span') || primary).textContent = `Download for ${own.label}`;
   } else {
-    primary.textContent = 'See all downloads';
+    (primary.querySelector('span') || primary).textContent = 'See all downloads';
   }
   document.getElementById('dl-other').innerHTML = BUILDS
     .filter(b => b.id !== mine)
