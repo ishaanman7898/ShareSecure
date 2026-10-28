@@ -2717,6 +2717,10 @@ async function detectSelfHostMode() {
 }
 
 function startApp(isSelfHost) {
+  // The desktop app signed in to an account shares through ShareSecure's
+  // servers, so it has the website's 10 MB limit; say where the bigger one is.
+  const desktopNote = document.getElementById('drop-limit-desktop');
+  if (desktopNote) desktopNote.hidden = isSelfHost || !/ShareSecureDesktop\//.test(navigator.userAgent);
   if (isSelfHost) {
     initSelfHost();
   } else {
