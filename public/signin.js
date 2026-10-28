@@ -80,20 +80,31 @@ const COPY = {
     submit: 'Sign in',
     switch: '',
   },
+  // the desktop app only: being at this computer is enough (see signin:reset)
+  'owner-reset': {
+    title: 'Set a new password',
+    sub: 'For the owner account of ShareSecure on this computer. Your files and links stay as they are.',
+    submit: 'Set password and sign in',
+    switch: 'Remembered it? <a href="/signin" data-mode="owner-signin">Sign in</a>',
+  },
 };
+// this account's password isn't your ShareSecure website password
+const DESKTOP_FORGOT = 'Forgot your password? <a href="/signin" data-mode="owner-reset">Set a new one</a>';
 
 function render() {
   const c = COPY[mode];
-  const creating = mode === 'signup' || mode === 'setup';
+  const creating = mode === 'signup' || mode === 'setup' || mode === 'owner-reset';
   document.title = `${c.title} | ShareSecure`;
   $('auth-title').textContent = c.title;
   $('auth-sub').textContent = c.sub;
   submit.textContent = c.submit;
-  const switchHtml = c.switch || '';
+  const switchHtml = c.switch || (mode === 'owner-signin' && savedSignIn ? DESKTOP_FORGOT : '');
   $('auth-switch').innerHTML = switchHtml;
   $('auth-switch').classList.toggle('hidden', !switchHtml);
-  $('auth-note').textContent = c.note || '';
-  $('auth-note').classList.toggle('hidden', !c.note);
+  const note = mode === 'setup' && savedSignIn ? 'If you forget it, you can set a new one here, on this computer.' : c.note;
+  $('auth-note').textContent = note || '';
+  $('auth-note').classList.toggle('hidden', !note);
+  username.closest('.form-group').classList.toggle('hidden', mode === 'owner-reset');
   $('confirm-group').classList.toggle('hidden', !creating);
   $('setup-code-group').classList.toggle('hidden', !(mode === 'setup' && needsSetupCode));
   $('password-hint').textContent = creating ? `at least ${minLength} characters` : '';
@@ -180,11 +191,12 @@ form.addEventListener('submit', async e => {
   errorEl.textContent = '';
   // hidden again before it's sent, so password managers see a password box
   toggles.forEach(btn => showPassword(btn, false));
-  const user = username.value.trim();
+  let user = username.value.trim();
   const pass = password.value;
-  const creating = mode === 'signup' || mode === 'setup';
+  const resetting = mode === 'owner-reset';
+  const creating = mode === 'signup' || mode === 'setup' || resetting;
 
-  if (!user) { errorEl.textContent = 'Enter a username.'; username.focus(); return; }
+  if (!user && !resetting) { errorEl.textContent = 'Enter a username.'; username.focus(); return; }
   if (!pass) { errorEl.textContent = 'Enter your password.'; password.focus(); return; }
   if (creating && pass.length < minLength) {
     errorEl.textContent = `Use at least ${minLength} characters for your password.`;
@@ -201,10 +213,14 @@ form.addEventListener('submit', async e => {
 
   submit.disabled = true;
   const label = submit.textContent;
-  submit.textContent = creating ? 'Creating account…' : 'Signing in…';
+  submit.textContent = resetting ? 'Setting your password…' : creating ? 'Creating account…' : 'Signing in…';
 
   try {
-    if (selfHost) {
+    if (resetting) {
+      user = await savedSignIn.reset(pass).catch(() => null);
+      if (!user) throw new Error('Your password wasn’t changed.');
+      await signInSelfHosted(user, pass);
+    } else if (selfHost) {
       if (creating) {
         const { ok, data } = await post('/api/auth/register', { username: user, access_code: pass, setup_code: $('auth-setup-code').value });
         if (data.code === 'setup_code' && !needsSetupCode) { needsSetupCode = true; render(); $('auth-setup-code').focus(); }

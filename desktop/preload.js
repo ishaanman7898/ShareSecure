@@ -22,5 +22,7 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
     load: () => ipcRenderer.invoke('signin:load'),
     save: (username, password) => ipcRenderer.invoke('signin:save', String(username), String(password)),
     forget: () => ipcRenderer.invoke('signin:forget'),
+    // a new owner password, after the app asks you to confirm → username or null
+    reset: password => ipcRenderer.invoke('signin:reset', String(password)),
   },
 });

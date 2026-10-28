@@ -554,6 +554,40 @@ ipcMain.handle('signin:save', (e, username, password) => {
   writeSignIns(all);
   return true;
 });
+// "Forgot your password?": a new password for this computer's owner account,
+// after you confirm it here. Being at this computer is the proof: it's your
+// ShareSecure, and the files don't depend on the password. → username or null
+ipcMain.handle('signin:reset', async (e, password) => {
+  if (!fromApp(e) || typeof password !== 'string' || password.length < 8 || !server?.connected) return null;
+  const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender) || undefined, {
+    type: 'question',
+    title: 'ShareSecure',
+    buttons: ['Set new password', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: 'Set a new password for ShareSecure on this computer?',
+    detail: 'Your files and links stay as they are. Anywhere else you’re signed in is signed out.',
+  });
+  if (response !== 0 || !server?.connected) return null;
+  const username = await new Promise(resolve => {
+    const timer = setTimeout(() => { server?.off('message', onReply); resolve(null); }, 10000);
+    function onReply(message) {
+      if (message?.type !== 'reset-password') return;
+      clearTimeout(timer);
+      server?.off('message', onReply);
+      resolve(typeof message.username === 'string' ? message.username : null);
+    }
+    server.on('message', onReply);
+    server.send({ type: 'reset-password', password });
+  });
+  if (username) {
+    const all = readSignIns();
+    delete all[siteOf(e)];
+    writeSignIns(all);
+  }
+  return username;
+});
+
 ipcMain.handle('signin:forget', e => {
   if (!fromApp(e)) return false;
   const all = readSignIns();
