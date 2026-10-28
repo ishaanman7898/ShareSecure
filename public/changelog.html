@@ -33,11 +33,12 @@
 
     <div class="timeline">
 
-      <!-- next release -->
-      <section class="release">
+      <!-- v1.17.0 -->
+      <section class="release latest">
         <div class="release-header">
           <span class="release-version">v1.17.0</span>
-          <span class="release-date">Coming next</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
           <div class="change-group">
@@ -52,7 +53,8 @@
               <li><strong>Settings</strong> One page for your plan, assistants, notifications, what new shares start with, and the desktop app, instead of a long account menu.</li>
               <li><strong>Share from your phone</strong> Add ShareSecure to your home screen and, on Android, it appears in the Share menu.</li>
               <li><strong>Guides</strong> How to send tax documents securely, and honest comparisons with WeTransfer and Tresorit.</li>
-              <li><strong>A crosshair</strong> follows your pointer on the home page. Turn it off in Settings.</li>
+              <li><strong>Corner brackets</strong> White brackets frame buttons, links and drop zones as your pointer moves over them, on every page except the file viewer. Turn them off in Settings → Appearance.</li>
+              <li><strong>A new desktop download page</strong> with the right installer for your computer up front.</li>
             </ul>
           </div>
           <div class="change-group">
@@ -69,17 +71,18 @@
             <ul class="change-list">
               <li><strong>Privacy policy and terms</strong> rewritten, with every company that handles data listed, your rights, and the history of every change on GitHub.</li>
               <li><strong>Signed installers</strong> Windows installers will be signed through SignPath, and the macOS signing setup was fixed.</li>
+              <li><strong>A shorter footer</strong> Guides, Privacy, Terms and GitHub.</li>
+              <li><strong>The daily key log check</strong> keeps its record in GitHub Actions, and works again.</li>
             </ul>
           </div>
         </div>
       </section>
 
       <!-- v1.16.0 -->
-      <section class="release latest">
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.16.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
           <div class="change-group">
@@ -770,16 +773,14 @@
   <footer class="app-footer web-only">
     <nav class="footer-links" aria-label="Site">
       <a href="/guides">Guides</a>
-      <a href="/terms">Terms</a>
       <a href="/privacy">Privacy</a>
-      <a href="/security">Security</a>
-      <a href="/changelog">Changelog</a>
-      <a href="/download">Desktop app</a>
-      <a href="https://github.com/ishaanman7898/ShareSecure/issues" target="_blank" rel="noopener noreferrer">Report an issue</a>
+      <a href="/terms">Terms</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
-    <p class="footer-note">ShareSecure <span data-version hidden></span> · Open source under the MIT License</p>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>
   </footer>
   <script src="/footer.js" defer></script>
+  <script type="module" src="/brackets.js"></script>
 </body>
 
 </html>
