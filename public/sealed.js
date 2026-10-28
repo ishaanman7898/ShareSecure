@@ -161,11 +161,14 @@ export function isSealed(text) {
   return typeof text === 'string' && text.startsWith(SEALED);
 }
 
-// The name and type of a sealed file travel together in one box.
-export const lockMeta = (key, { name, type }) => lockText(key, JSON.stringify({ name, type }), 'meta');
+// The name and type of a sealed file travel together in one box, with how the
+// sender wants it shown (watermark, discourage screenshots: public/protect.js),
+// so the server can neither see nor change those either. Both are off unless set.
+export const lockMeta = (key, { name, type, watermark = false, discourage = false }) =>
+  lockText(key, JSON.stringify({ name, type, ...(watermark ? { wm: 1 } : {}), ...(discourage ? { sp: 1 } : {}) }), 'meta');
 export async function unlockMeta(key, sealed) {
   const meta = JSON.parse(await unlockText(key, sealed, 'meta'));
-  return { name: String(meta.name || 'file'), type: String(meta.type || '') };
+  return { name: String(meta.name || 'file'), type: String(meta.type || ''), watermark: meta.wm === 1, discourage: meta.sp === 1 };
 }
 
 // ── account key pairs ────────────────────────────────────────────────────────

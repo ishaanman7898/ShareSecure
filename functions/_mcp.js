@@ -157,6 +157,7 @@ function shareOptions(args = {}) {
     send_to: toRecipients(args.send_to),
     note: args.note ? String(args.note).trim().slice(0, 140) : '',
     burn: Boolean(args.burn_after_reading),
+    watermark: args.watermark === true || args.watermark === 'true',
     // end-to-end encrypted unless the assistant asks otherwise
     private: args.private !== false && args.private !== 'false',
   };
@@ -187,13 +188,14 @@ async function upload(user, file, opts, context) {
     name = nameFor(opts.name, file.name, type);
     form.append('file', new File([await lockFile(key, bytes)], 'sealed.bin'));
     form.append('e2e', '1');
-    form.append('meta', await lockMeta(key, { name, type }));
+    form.append('meta', await lockMeta(key, { name, type, watermark: opts.watermark }));
     // sealed to the owner too, so the link shows up whole in their Your shares
     const ownKey = await publicKeyOf(getDb(env), { userId: user.userId });
     if (ownKey) form.append('owner_key', await sealKey(ownKey, key));
   } else {
     form.append('file', file);
     if (opts.name) form.append('display_name', opts.name);
+    if (opts.watermark) form.append('watermark', '1');
   }
   form.append('expires_hours', String(opts.expires_hours));
   form.append('allow_download', opts.allow_download ? '1' : '0');

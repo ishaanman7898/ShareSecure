@@ -597,6 +597,11 @@ async function buildUploadForm() {
   form.append('require_account', document.getElementById('require-account').checked ? '1' : '0');
   if (!selfHostMode && document.getElementById('burn-toggle')?.checked) form.append('burn', '1');
   const displayName = document.getElementById('display-name-input')?.value.trim() || '';
+  // watermark / discourage screenshots (public/protect.js); both off unless chosen
+  const view = {
+    watermark: Boolean(document.getElementById('watermark-toggle')?.checked),
+    discourage: Boolean(document.getElementById('discourage-toggle')?.checked),
+  };
 
   // Open receipts: a key pair made just for this share. The server keeps the
   // public half with the link; the private half stays in Your shares, so only
@@ -611,6 +616,8 @@ async function buildUploadForm() {
   if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
     form.append('file', selectedFile);
     if (displayName) form.append('display_name', displayName);
+    if (view.watermark) form.append('watermark', '1');
+    if (view.discourage) form.append('discourage', '1');
     return { form, key: null, receiptSecret };
   }
 
@@ -626,7 +633,7 @@ async function buildUploadForm() {
   const name = nameFor(displayName, selectedFile.name, type);
   form.append('file', new Blob([await lockFile(key, bytes)]), 'sealed.bin');
   form.append('e2e', '1');
-  form.append('meta', await lockMeta(key, { name, type }));
+  form.append('meta', await lockMeta(key, { name, type, ...view }));
   if (salt) form.append('passcode_salt', salt);
   // also sealed to you, so the link shows up in Your shares on any device
   const me = await myKeys();
@@ -1479,10 +1486,12 @@ function updateAdvancedState() {
     if (checked('allow-annotations')) parts.push('annotations on');
   }
   if (!selfHostMode && checked('require-account')) parts.push('signed-in only');
+  if (checked('watermark-toggle')) parts.push('watermarked');
+  if (checked('discourage-toggle')) parts.push('screenshot-resistant');
   const state = document.getElementById('advanced-state');
   if (state) state.textContent = parts.join(' · ');
 }
-for (const id of ['allow-download', 'allow-annotations', 'require-account']) {
+for (const id of ['allow-download', 'allow-annotations', 'require-account', 'watermark-toggle', 'discourage-toggle']) {
   document.getElementById(id)?.addEventListener('change', updateAdvancedState);
 }
 // a link that works once can't be downloaded or drawn on: either is a second look

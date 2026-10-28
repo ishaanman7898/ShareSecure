@@ -34,14 +34,15 @@ export async function onRequestPost(context) {
   await db.execute({
     sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, data_ref,
             expires_at, delete_token, integrity_hash, cluster_id, parent_key, uploaded_at,
-            compressed, allow_annotations, allow_download, require_account, e2e, passcode_salt)
-          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+            compressed, allow_annotations, allow_download, require_account, e2e, passcode_salt, view_opts)
+          VALUES (?, ?, ?, ?, '', ?, ?, ?, '', ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
     args: [
       newId, await copy('original_filename'), await copy('mime_type'), file.size_bytes, branch.data_ref,
       file.expires_at, deleteToken,
       newId,               // its own group: nothing in the row points back at the original
       branch.parent_key, new Date().toISOString(),
       file.allow_annotations ?? 1, file.allow_download ?? 0, file.require_account ?? 0, file.e2e ? 1 : 0, file.passcode_salt || null,
+      file.view_opts ? await encryptStr(await decryptStr(file.view_opts, null, env, params.shortId), null, env, newId) : null,
     ]
   });
 

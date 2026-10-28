@@ -73,6 +73,7 @@ function shareOptions(args = {}) {
   return {
     expires_hours: Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240),
     allow_download: Boolean(args.allow_download),
+    watermark: args.watermark === true || args.watermark === 'true',
     name: args.name ? String(args.name).slice(0, 200) : null,
     send_to: common.toRecipients(args.send_to),
     note: args.note ? String(args.note).trim().slice(0, 140) : '',
@@ -90,6 +91,7 @@ async function share(file, opts) {
       allow_download: opts.allow_download ? '1' : '0',
       allow_annotations: '0',
       display_name: opts.name || '',
+      watermark: opts.watermark ? '1' : '0',
     }
   );
   if (stored.error) return { error: stored.error };
@@ -412,6 +414,7 @@ function toolsFrom(c) {
   const COMMON = {
     expires_hours: c.FIELDS.expires_hours,
     allow_download: c.FIELDS.allow_download,
+    watermark: c.FIELDS.watermark,
     name: c.FIELDS.name,
     send_to: c.sendTo('ShareSecure usernames to send it to, e.g. ["alice", "bob"]. Each gets their own copy in their inbox to accept or decline. Use this whenever the user says who it’s for. Up to 20. Needs a ShareSecure account linked in the app; if none is linked, the link is still made and you’re told what the user needs to do.'),
     note: c.FIELDS.note,

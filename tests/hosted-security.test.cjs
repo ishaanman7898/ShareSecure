@@ -12,7 +12,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'sharesecure-audit-'));
 fs.writeFileSync(path.join(temp, 'package.json'), '{"type":"module","version":"0.0.0-test"}');
 fs.cpSync(path.join(root, 'functions'), path.join(temp, 'functions'), { recursive: true });
 // the API and the local MCP package share these modules with the browser
-const SHARED = ['sealed.js', 'filetypes.js', 'zip.js', 'mcp-common.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js'];
+const SHARED = ['sealed.js', 'filetypes.js', 'zip.js', 'protect.js', 'mcp-common.js', 'opaque.js', 'p256.js', 'blindrsa.js', 'tokens.js', 'kt.js'];
 fs.mkdirSync(path.join(temp, 'public'));
 for (const f of SHARED) fs.copyFileSync(path.join(root, 'public', f), path.join(temp, 'public', f));
 // Cloudflare's bundler reads package.json on its own; Node needs to be told it's JSON
@@ -1509,4 +1509,112 @@ test('teams: only members open team files, branding is checked, admins decide, a
   assert.equal((await call([id], { method: 'DELETE' })).status, 200);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE team_id = ?').get(id).n, 0);
   assert.equal(db.prepare('SELECT COUNT(*) n FROM file_requests WHERE team_id = ?').get(id).n, 0);
+});
+
+// ── screenshot resistance (public/protect.js) ───────────────────────────────
+test('watermark and screenshot settings: off by default, sealed in end-to-end shares, encrypted otherwise, and kept on reshares', async () => {
+  freshDay();
+  // sealed with the name, so the server can't see or flip them; old shares read as off
+  const key = sealed.newFileKey();
+  const plainMeta = await sealed.lockMeta(key, { name: 'a.pdf', type: 'application/pdf' });
+  assert.deepEqual(await sealed.unlockMeta(key, plainMeta), { name: 'a.pdf', type: 'application/pdf', watermark: false, discourage: false });
+  const marked = await sealed.lockMeta(key, { name: 'a.pdf', type: 'application/pdf', watermark: true, discourage: true });
+  assert.deepEqual(await sealed.unlockMeta(key, marked), { name: 'a.pdf', type: 'application/pdf', watermark: true, discourage: true });
+
+  // an end-to-end upload: the server stores only the sealed name
+  const form = new FormData();
+  form.set('file', new File([await sealed.lockFile(key, new TextEncoder().encode('Board minutes'))], 'sealed.bin'));
+  form.set('e2e', '1'); form.set('meta', marked); form.set('expires_hours', '24');
+  const e2e = await (await uploadHandler(context('/api/upload', { body: form }))).json();
+  const row = db.prepare('SELECT * FROM files WHERE short_id = ?').get(e2e.shortId);
+  assert.equal(row.view_opts, null);
+  assert(!JSON.stringify(row).includes('watermark') && !JSON.stringify(row).includes('"wm"'));
+  const e2eInfo = await (await infoHandler(context('/api/info/' + e2e.shortId, { user: null, method: 'GET', params: { shortId: e2e.shortId } }))).json();
+  assert.equal(e2eInfo.viewOpts, null);
+  assert.equal((await sealed.unlockMeta(key, e2eInfo.filename)).watermark, true);
+
+  // a server-encrypted upload: stored encrypted, handed to the viewer, kept on reshares
+  const plain = new FormData();
+  plain.set('file', new File(['Board minutes'], 'minutes.txt')); plain.set('expires_hours', '24');
+  plain.set('watermark', '1'); plain.set('discourage', '1');
+  const share = await (await uploadHandler(context('/api/upload', { body: plain }))).json();
+  const stored = db.prepare('SELECT view_opts FROM files WHERE short_id = ?').get(share.shortId).view_opts;
+  assert(stored && !stored.includes('watermark'), 'encrypted at rest');
+  const info = await (await infoHandler(context('/api/info/' + share.shortId, { user: null, method: 'GET', params: { shortId: share.shortId } }))).json();
+  assert.deepEqual(info.viewOpts, { watermark: true, discourage: true });
+  const branch = await (await reshareHandler(context('/api/reshare/' + share.shortId, { user: 'bob', params: { shortId: share.shortId } }))).json();
+  const branchInfo = await (await infoHandler(context('/api/info/' + branch.shortId, { user: null, method: 'GET', params: { shortId: branch.shortId } }))).json();
+  assert.deepEqual(branchInfo.viewOpts, { watermark: true, discourage: true });
+  // and nothing is set unless asked
+  const quiet = await upload('quiet2.txt', 'plain');
+  assert.equal((await (await infoHandler(context('/api/info/' + quiet.shortId, { user: null, method: 'GET', params: { shortId: quiet.shortId } }))).json()).viewOpts, null);
+});
+
+test('the watermark is made in the browser: who looked never reaches the server', async () => {
+  const protect = await publicLib('protect.js');
+  // a sign-in token's username is read locally
+  assert.equal(protect.usernameFromSession(tokens.alice), 'alice');
+  assert.equal(protect.usernameFromSession('nonsense'), null);
+  const text = protect.watermarkText({ username: 'alice', openedAt: new Date(2026, 9, 27, 14, 5), linkId: 'k3Tq9aZZZ' });
+  assert.equal(text, '@alice · 2026-10-27 14:05 · k3Tq9a');
+  assert.match(protect.watermarkText({ openedAt: new Date(2026, 0, 2, 3, 4), linkId: 'abc' }), /^Guest · 2026-01-02 03:04 · abc$/);
+  // the module has no way to send anything anywhere
+  const source = fs.readFileSync(path.join(root, 'public', 'protect.js'), 'utf8');
+  assert(!/\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|navigator\.sendBeacon|new Image\(/.test(source));
+  // and the viewer only hands the username to it, never to a request
+  const viewer = fs.readFileSync(path.join(root, 'public', 'viewer.js'), 'utf8');
+  const uses = viewer.split('\n').filter(line => line.includes('usernameFromSession('));
+  assert(uses.length >= 1 && uses.every(line => line.includes('watermarkText(') && !/fetch|apiFetch|body:/.test(line)));
+  // nor does any request carry a username: the receipt only carries an unlinkable device tag
+  assert(!/receipt[^\n]*username/i.test(viewer));
+});
+
+test('print and PrintScreen deterrents only run for view-only shares that ask for them', async () => {
+  const protect = await publicLib('protect.js');
+  assert.deepEqual(protect.protectionsFor({}), { watermark: false, deterrents: false });
+  assert.deepEqual(protect.protectionsFor({ discourage: true }), { watermark: false, deterrents: true });
+  assert.deepEqual(protect.protectionsFor({ discourage: true, allowDownload: true }), { watermark: false, deterrents: false });
+  assert.deepEqual(protect.protectionsFor({ watermark: true, allowDownload: true }), { watermark: true, deterrents: false });
+
+  // a stand-in window and document, enough to see what gets hooked up
+  const listeners = {};
+  const on = owner => (type, fn) => { (listeners[owner + type] ||= []).push(fn); };
+  const off = owner => (type, fn) => { listeners[owner + type] = (listeners[owner + type] || []).filter(f => f !== fn); };
+  let cleared = null, blurred = 0;
+  const classes = new Set();
+  const win = { addEventListener: on('win:'), removeEventListener: off('win:'), navigator: { clipboard: { writeText: v => { cleared = v; return Promise.resolve(); } } } };
+  const area = { classList: { add: c => classes.add(c), remove: c => classes.delete(c) }, addEventListener: on('area:'), removeEventListener: off('area:') };
+  const styles = [];
+  const doc = { head: { appendChild: el => styles.push(el) }, body: area, createElement: () => ({ remove() { styles.pop(); } }) };
+  const undo = protect.installDeterrents(win, doc, { area, blur: () => { blurred++; } });
+
+  assert.match(styles[0].textContent, /@media print \{ body \{ display: none/);
+  assert(classes.has('no-copy'));
+  const fire = (key, e) => (listeners[key] || []).forEach(fn => fn(e));
+  let prevented = 0;
+  fire('win:keydown', { key: 'p', ctrlKey: true, preventDefault: () => prevented++ });
+  fire('win:keydown', { key: 'P', metaKey: true, preventDefault: () => prevented++ });
+  fire('win:keydown', { key: 'c', ctrlKey: true, preventDefault: () => prevented++ });
+  assert.equal(prevented, 2, 'Ctrl/Cmd+P is blocked, other shortcuts aren’t');
+  fire('win:keyup', { key: 'PrintScreen' });
+  assert.equal(cleared, ''); assert.equal(blurred, 1);
+  for (const type of ['contextmenu', 'selectstart', 'dragstart']) assert.equal(listeners['area:' + type].length, 1);
+
+  // and it all comes off again
+  undo();
+  assert(!classes.has('no-copy')); assert.equal(styles.length, 0);
+  assert.equal(listeners['win:keyup'].length, 0);
+  // the viewer only installs them when protectionsFor says so
+  const viewer = fs.readFileSync(path.join(root, 'public', 'viewer.js'), 'utf8');
+  assert.match(viewer, /if \(deterrents\) \{\s*installDeterrents\(/);
+});
+
+test('MCP: watermark is an option, off unless asked, and sealed with the name', async () => {
+  const { FIELDS } = await publicLib('mcp-common.js');
+  assert.equal(FIELDS.watermark.type, 'boolean');
+  assert.match(FIELDS.watermark.description, /Default false/);
+  const mcpSource = fs.readFileSync(path.join(root, 'functions', '_mcp.js'), 'utf8');
+  assert.match(mcpSource, /lockMeta\(key, \{ name, type, watermark: opts\.watermark \}\)/);
+  const local = fs.readFileSync(path.join(root, 'packages', 'sharesecure-mcp', 'src', 'tools.js'), 'utf8');
+  assert.match(local, /watermark: args\.watermark === true/);
 });

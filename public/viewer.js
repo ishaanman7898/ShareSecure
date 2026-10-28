@@ -2,6 +2,7 @@ import * as pdfjsLib from '/vendor/pdf.min.mjs';
 import { readLink, linkWithKey, unlockFile, unlockMeta, lockText, unlockText, passcodeKey, sealText, toB64url, fromB64url } from './sealed.js';
 import { contentMatches, isAllowedType, nameFor, canView, kindName, detectType, extFor, ZIP, NOT_UTF8 } from './filetypes.js';
 import { listEntries, readEntry } from './zip.js';
+import { protectionsFor, usernameFromSession, watermarkText, mountWatermark, installDeterrents, HONEST_NOTE } from './protect.js';
 import { sealFor } from './keys.js';
 import { takeToken } from './tokens.js';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -1102,6 +1103,36 @@ async function showByType(type, rawUrl) {
   else showUnsupported();
 }
 
+// ── screenshot resistance (public/protect.js) ─────────────────────────────────
+// Only when the sender turned it on. Everything happens here in the browser;
+// nothing about who's looking goes to the server.
+function applyProtections() {
+  const { watermark, deterrents } = protectionsFor({ allowDownload: Boolean(fileInfo.allowDownload), ...(fileInfo.viewOpts || {}) });
+  const notes = [];
+  if (watermark) {
+    mountWatermark(document, watermarkText({ username: usernameFromSession(sessionToken), openedAt: new Date(), linkId: myShortId }));
+    notes.push('Watermarked with who opened it');
+  }
+  if (deterrents) {
+    installDeterrents(window, document, {
+      area: $('viewer-shell'),
+      blur: ms => {
+        $('viewer-shell').classList.add('is-hushed');
+        setTimeout(() => $('viewer-shell').classList.remove('is-hushed'), ms);
+      },
+    });
+    notes.push('Screenshot-resistant');
+  }
+  // in the desktop app, the window can also be hidden from screenshots
+  window.shareSecureDesktop?.protection?.viewing({ viewOnly: !fileInfo.allowDownload, discourage: deterrents }).catch?.(() => {});
+  if (notes.length) {
+    const note = $('protect-note');
+    note.textContent = notes.join(' · ');
+    note.title = HONEST_NOTE;
+    show('protect-note');
+  }
+}
+
 // ── open receipts ─────────────────────────────────────────────────────────────
 // If the sender asked to hear when this link is opened, this browser tells
 // them, sealed so only they can read it: just a tag that's the same each time
@@ -1603,6 +1634,8 @@ function askPasscode(info) {
       if (!isAllowedType(meta.type)) throw new Error('type');
       fileInfo.filename = nameFor(meta.name, '', meta.type);   // the extension always matches the type
       fileInfo.mimeType = meta.type;
+      // how the sender wants it shown, sealed with the name so the server can't change it
+      fileInfo.viewOpts = { watermark: meta.watermark, discourage: meta.discourage };
     } catch (err) {
       fileInfo.filename = err.message === 'missing'
         ? 'This link is missing its key (the part after #). Ask for the whole link.'
@@ -1709,5 +1742,6 @@ function askPasscode(info) {
   }
 
   await sendReceipt();
+  applyProtections();
   await showByType(baseMime, rawUrl);
 })();

@@ -40,7 +40,8 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Name it what you like** when you share it. Every link comes with a QR code.
 - **Your shares** lists every live link with a bar for the time it has left, to send or delete. With end-to-end encryption, the list is sealed to your key and follows you to your other devices.
-- **The viewer** shows PDFs, Word documents, images and text in the browser, and goes black when its tab is hidden or loses focus.
+- **The viewer** shows PDFs, Word documents, images and text in the browser, sharp on high-density screens with zoom for PDFs and images, and goes black when its tab is hidden or loses focus.
+- **Screenshot-resistant and traceable** (off unless you turn it on): a watermark with who opened the file and when, and, for view-only shares, no printing, a blur on PrintScreen, no copying, and in the desktop app a window that screenshots and recordings show as black (Windows and macOS; Linux can't). Browsers can't fully block screenshots or a phone camera, so this is never “screenshot-proof”: the watermark is what makes a leak traceable. [Details](docs/SECURITY.md#screenshots-resistant-and-traceable-not-proof)
 
 **Sending and receiving**
 

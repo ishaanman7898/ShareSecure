@@ -256,7 +256,7 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
     const form = new FormData();
     form.append('file', new Blob([await lockFile(key, bytes)]), 'sealed.bin');
     form.append('e2e', '1');
-    form.append('meta', await lockMeta(key, { name, type }));
+    form.append('meta', await lockMeta(key, { name, type, watermark: args.watermark === true }));
     // sealed to you too: only your key opens it, and nothing in it says it's yours
     if (me.publicKey) form.append('owner_key', await sealKey(me.publicKey, key));
     form.append('expires_hours', String(Math.min(Math.max(Number(args.expires_hours) || 24, 1), 240)));

@@ -115,6 +115,8 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN inbox_note TEXT',
   // set when the sender asked to hear when the link is opened (see routes/files.js)
   'ALTER TABLE files ADD COLUMN receipt_key TEXT',
+  // watermark / discourage screenshots (public/protect.js), encrypted like the name
+  'ALTER TABLE files ADD COLUMN view_opts TEXT',
   `CREATE TABLE IF NOT EXISTS receipts (
      short_id TEXT NOT NULL, owner TEXT NOT NULL, box TEXT NOT NULL, at TEXT NOT NULL, expires_at TEXT NOT NULL
    )`,

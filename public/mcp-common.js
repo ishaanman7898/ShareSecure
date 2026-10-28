@@ -114,6 +114,7 @@ export const FIELDS = {
   name: { type: 'string', description: 'Name shown to people who open the link. Defaults to the file name.' },
   note: { type: 'string', maxLength: 140, description: 'Short note shown to the people it’s sent to. Up to 140 characters.' },
   burn_after_reading: { type: 'boolean', description: 'The link works once: the file is erased as soon as anyone opens it, and the user is told if someone tries the link again. Default false.' },
+  watermark: { type: 'boolean', description: 'Draw a faint watermark over the file in the viewer with who opened it (their username, or Guest), when, and the link’s short id, so a screenshot can be traced. Drawn in the viewer only; the file itself isn’t changed. Default false.' },
 };
 
 // send_to is described per server, since what happens to a send differs

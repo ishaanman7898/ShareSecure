@@ -103,8 +103,8 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token,
       wrapped_key, cluster_id, allow_annotations, allow_download,
-      is_active, inbox_status, inbox_note, receipt_key
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_active, inbox_status, inbox_note, receipt_key, view_opts
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     shortId, encryptString(displayName, encKey), encryptString(mimeType, encKey), paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
@@ -114,7 +114,9 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
     incoming ? 0 : 1,
     incoming ? 'pending' : null,
     note ? encryptString(note, encKey) : null,
-    incoming ? null : receiptKeyFrom(body.receipt_key)
+    incoming ? null : receiptKeyFrom(body.receipt_key),
+    !incoming && (body.watermark === '1' || body.discourage === '1')
+      ? encryptString(JSON.stringify({ watermark: body.watermark === '1', discourage: body.discourage === '1' }), encKey) : null
   );
 
   return { shortId, deleteToken, expires_at, paddedSize, displayName };
@@ -145,7 +147,7 @@ router.get('/info/:shortId', (req, res) => {
   const file = db.prepare(`
     SELECT short_id, original_filename, mime_type, size_bytes,
            expires_at, download_count, integrity_hash,
-           allow_annotations, allow_download, cluster_id, parent_short_id, receipt_key
+           allow_annotations, allow_download, cluster_id, parent_short_id, receipt_key, view_opts
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
 
@@ -167,6 +169,7 @@ router.get('/info/:shortId', (req, res) => {
     // the original upload: deleting it removes every link to the file
     isRoot: !file.parent_short_id && (!file.cluster_id || file.cluster_id === file.short_id),
     receiptKey: file.receipt_key || null,
+    viewOpts: file.view_opts ? (() => { try { return JSON.parse(decryptString(file.view_opts, encKey)); } catch { return null; } })() : null,
   });
 });
 
@@ -334,13 +337,13 @@ router.post('/reshare/:shortId', (req, res) => {
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, expires_at, delete_token,
-      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download, wrapped_key
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download, wrapped_key, view_opts
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newShortId, file.original_filename, file.mime_type, file.size_bytes, file.stored_filename,
     newIntegrity, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
     file.cluster_id || file.short_id, file.short_id, reshareUploadAt,
-    file.allow_annotations, file.allow_download, file.wrapped_key || null
+    file.allow_annotations, file.allow_download, file.wrapped_key || null, file.view_opts || null
   );
 
   res.json({

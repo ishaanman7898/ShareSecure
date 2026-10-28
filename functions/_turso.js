@@ -97,6 +97,7 @@ const FILE_COLUMNS = [
   'ALTER TABLE files ADD COLUMN max_views INTEGER',          // 1 = erased once it's opened (see _burn.js)
   'ALTER TABLE files ADD COLUMN receipt_key TEXT',           // set when the sender asked for open receipts (_receipts.js)
   'ALTER TABLE files ADD COLUMN team_id TEXT',               // came in through a team's request link (_teams.js)
+  'ALTER TABLE files ADD COLUMN view_opts TEXT',             // watermark / discourage screenshots, encrypted (end to end: in the sealed name instead)
   'CREATE INDEX IF NOT EXISTS idx_files_team ON files(team_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent_key ON files(parent_key)',

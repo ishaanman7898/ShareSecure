@@ -225,6 +225,17 @@
             <span class="switch-track" aria-hidden="true"></span>
             <span class="switch-text">Works once: erase it as soon as it’s opened</span>
           </label>
+          <label class="switch" title="A faint mark over the file in the viewer with who opened it (their username, or Guest), when, and the link’s short id, so a screenshot can be traced. The file itself isn’t changed.">
+            <input type="checkbox" id="watermark-toggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Watermark it with who opened it</span>
+          </label>
+          <label class="switch" title="For view-only files: no printing, PrintScreen blurs it, no right-click or copying, and the desktop app hides it from screenshots.">
+            <input type="checkbox" id="discourage-toggle" />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Discourage screenshots and printing</span>
+          </label>
+          <span class="field-hint">Screenshot-resistant and traceable, not screenshot-proof: no browser can fully block screenshots or a phone camera. The watermark is what makes a leak traceable.</span>
           <label class="switch" id="receipts-wrap" title="You see when the link is opened, how many times, and whether it was on a device that opened it before. Not who opened it or where: nobody, ShareSecure included, learns that.">
             <input type="checkbox" id="receipts-toggle" />
             <span class="switch-track" aria-hidden="true"></span>

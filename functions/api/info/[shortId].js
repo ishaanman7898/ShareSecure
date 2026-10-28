@@ -14,7 +14,7 @@ export async function onRequestGet(context) {
   purgeExpired(env, context);
 
   const file = await findLiveFile(db, params.shortId,
-    'short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, parent_short_id, parent_key, allow_annotations, allow_download, require_account, recipient_user_tag, e2e, passcode_salt, max_views, receipt_key, team_id');
+    'short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, download_count, parent_short_id, parent_key, allow_annotations, allow_download, require_account, recipient_user_tag, e2e, passcode_salt, max_views, receipt_key, team_id, view_opts');
   if (!file) {
     // a link that worked once: this try is counted, so its owner hears of it
     if (await noteTry(db, params.shortId)) return Response.json({ error: 'This link worked once, and it has already been opened.', code: 'burned' }, { status: 410 });
@@ -44,5 +44,8 @@ export async function onRequestGet(context) {
     burnAfterReading: Boolean(file.max_views),
     // the sender asked to hear when it's opened; the viewer seals a receipt to this
     receiptKey: file.receipt_key || null,
+    // watermark / discourage screenshots, for a share that isn't end to end
+    // (an end-to-end one keeps them in its sealed name)
+    viewOpts: file.view_opts ? JSON.parse(await decryptStr(file.view_opts, null, env, params.shortId).catch(() => 'null')) : null,
   });
 }

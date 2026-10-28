@@ -228,6 +228,8 @@ audio.media-player { width: min(560px, 100%); background: transparent; box-shado
 .save-note { margin-top: 14px; font-size: 0.8rem; color: var(--muted); }
 
 .v-receipt { color: var(--muted); }
+/* a moment of blur after PrintScreen, for shares that discourage screenshots */
+.viewer-shell.is-hushed > * { filter: blur(24px); transition: none; }
 .unsupported { margin: auto; text-align: center; }
 .unsupported-title { font-weight: 600; }
 .unsupported-sub { margin-top: 4px; color: var(--muted); font-size: 0.9rem; }

@@ -73,6 +73,17 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - Pages send `noindex`, `no-store` and `frame-ancestors 'none'`. There are no analytics.
 - Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
 
+## Screenshots: resistant and traceable, not proof
+
+A browser can't stop screenshots, screen recorders or someone pointing a phone at the screen, so ShareSecure never claims files are screenshot-proof. A sender can turn on two things per share (both off by default):
+
+- **Watermark.** The viewer draws a faint repeating mark over the file with who opened it (their username if signed in, otherwise "Guest"), when, and the link's short id. Each person who opens a link gets their own branch of it, so the id points at one opening. It's drawn in the browser after decrypting and laid over the page, never baked into the file, and it's put back if someone deletes or hides it in the page. The server never learns who viewed what: nothing about the viewer is sent anywhere (`public/protect.js` makes no requests, which the tests check).
+- **Discourage screenshots and printing** (view-only shares only). Printing shows a blank page and Ctrl/Cmd+P is blocked, PrintScreen on Windows clears the clipboard and blurs the file for a moment, and right-click, selecting and dragging are off over the file. In the desktop app the window showing the file is left out of screenshots and screen recordings (`setContentProtection`), on Windows and macOS; **Linux has no way to do this**. The desktop app also has a setting (off by default) to do that for every view-only file.
+
+Both settings travel in the share's sealed name for end-to-end shares, so the server can't see or change them; for shares encrypted on the server they're stored encrypted like the name. The existing blackout when the tab is hidden or loses focus stays on for everyone.
+
+These deter casual copying. The watermark is what makes a leak traceable.
+
 ## Tested by trying to break it
 
 `npm test` includes attacks, each run against the real handlers with a throwaway database:
