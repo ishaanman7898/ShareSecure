@@ -71,12 +71,16 @@ export function mountWatermark(doc, text) {
   ].join(';');
 
   let layer = null;
+  // watches the layer itself; a new layer is watched the moment it's made
+  const own = new MutationObserver(() => place());
   const place = () => {
     if (!layer || !layer.isConnected) {
       layer = doc.createElement('div');
       layer.setAttribute('aria-hidden', 'true');
       layer.dataset.watermark = '';
       doc.body.appendChild(layer);
+      own.disconnect();
+      own.observe(layer, { attributes: true });
     }
     if (layer.getAttribute('style') !== STYLE) layer.setAttribute('style', STYLE);
     if (layer.hidden) layer.hidden = false;
@@ -85,11 +89,8 @@ export function mountWatermark(doc, text) {
 
   const watch = new MutationObserver(place);
   watch.observe(doc.body, { childList: true, subtree: false, attributes: true });
-  const own = new MutationObserver(place);
-  const follow = () => own.observe(layer, { attributes: true });
-  follow();
-  // a new layer needs watching too
-  const timer = setInterval(() => { const before = layer; place(); if (layer !== before) follow(); }, 1500);
+  // and a slow check as a backstop
+  const timer = setInterval(place, 1500);
   return () => { watch.disconnect(); own.disconnect(); clearInterval(timer); layer?.remove(); };
 }
 
