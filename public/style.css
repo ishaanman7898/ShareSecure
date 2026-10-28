@@ -1525,3 +1525,27 @@ a.menu-item { text-decoration: none; }
 .plan-card h3 { font-size: 0.95rem; font-weight: 600; }
 .plan-card ul { margin: 0; padding-left: 1.1em; color: var(--muted); font-size: 0.88rem; line-height: 1.6; }
 @media (max-width: 560px) { .plan-cards { grid-template-columns: 1fr; } }
+
+/* ── settings (/#settings) ── */
+.settings-view { width: 100%; max-width: 760px; margin: 0 auto; padding: 8px 16px 64px; display: flex; flex-direction: column; gap: 18px; }
+.settings-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settings-title { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+.settings-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 8px; display: flex; flex-direction: column; }
+.settings-group > h2 { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 10px 12px 6px; }
+.settings-group > .settings-hint { padding: 0 12px 6px; }
+.settings-who { padding: 4px 12px 10px; font-size: 0.92rem; }
+.settings-group .menu-item { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 12px; border-radius: var(--r-sm); width: 100%; text-decoration: none; }
+.settings-group .menu-item > svg { grid-row: 1 / span 2; }
+.settings-group .menu-item > span:first-of-type { grid-column: 2; }
+.settings-group .menu-item > .menu-meta, .settings-group .menu-item > .menu-count { grid-column: 3; grid-row: 1 / span 2; }
+.settings-group .menu-item > .settings-hint { grid-column: 2; }
+.settings-group .menu-item.hidden { display: none; }
+.settings-hint { display: block; font-size: 0.8rem; color: var(--muted); font-weight: 400; line-height: 1.45; }
+.settings-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px; border-radius: var(--r-sm); cursor: pointer; }
+.settings-switch:hover { background: var(--sunken); }
+.settings-switch.hidden { display: none; }
+.settings-switch-text { display: flex; flex-direction: column; gap: 2px; font-size: 0.95rem; }
+.settings-switch .switch { flex-shrink: 0; }
+.settings-danger .menu-item, .settings-danger .menu-item svg { color: var(--danger); }
+/* a group with nothing to show here (say, website-only rows in the desktop app) goes */
+.settings-group:not(:has(> .menu-item:not(.hidden), > .settings-switch:not(.hidden), > .settings-who)) { display: none; }

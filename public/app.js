@@ -551,6 +551,7 @@ function clearSelection() {
   const passcodeInput = document.getElementById('passcode-input');
   if (passcodeInput) passcodeInput.value = '';
   syncSaveOnly();
+  applyShareDefaults();
   updateUploadLabel();
 }
 
@@ -968,7 +969,8 @@ function tokenUsername() {
   if (stored) return stored;
   try {
     const payloadB64 = userToken.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
-    return JSON.parse(atob(payloadB64 + '==')).username || null;
+    // padded to a whole number of 4-character groups: a fixed '==' broke most lengths
+    return JSON.parse(atob(payloadB64.padEnd(Math.ceil(payloadB64.length / 4) * 4, '='))).username || null;
   } catch {
     return null;
   }
@@ -1692,7 +1694,14 @@ function initSelfHost() {
   // file requests live on the website, where people can reach them
   document.getElementById('ask-file-btn').classList.add('hidden');
   const username = userToken && tokenUsername();
-  if (!username) { location.replace('/signin'); return; }
+  if (!username) {
+    // a session that can't be read is dropped, or the sign-in page (which
+    // sends anyone with a session back here) and this one would bounce forever
+    sessionStorage.removeItem('user_token');
+    sessionStorage.removeItem('user_name');
+    location.replace('/signin');
+    return;
+  }
   updateAdvancedState();
 
   showSignedIn(username);
@@ -2610,6 +2619,7 @@ async function loadPlan() {
     document.getElementById('menu-plan-name').textContent = planState.name;
     document.getElementById('menu-plan')?.classList.remove('hidden');
     document.getElementById('menu-teams')?.classList.remove('hidden');
+    document.getElementById('settings-teams')?.classList.remove('hidden');
     return planInfo;
   } catch { return null; }
 }
@@ -2747,6 +2757,83 @@ acceptTcBtn?.addEventListener('click', () => {
 });
 
 initApp();
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+// One page for what used to crowd the account menu. It's a view of this page
+// (/#settings), so every dialog it opens is the same one as before.
+const settingsView = document.getElementById('settings-view');
+
+function openSettings() {
+  closeMenu();
+  if (!document.body.classList.contains('is-logged-in')) return;
+  document.getElementById('settings-username').textContent = tokenUsername() || '';
+  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo);
+  document.getElementById('app-grid')?.classList.add('hidden');
+  settingsView.classList.remove('hidden');
+  document.body.classList.add('in-settings');
+  if (location.hash !== '#settings') history.pushState(null, '', '#settings');
+  syncCrosshair();
+const crosshairToggle = document.getElementById('crosshair-toggle');
+if (crosshairToggle) {
+  crosshairToggle.checked = crosshairWanted();
+  crosshairToggle.addEventListener('change', () => {
+    try { localStorage.setItem(CROSSHAIR_KEY, crosshairToggle.checked ? 'on' : 'off'); } catch {}
+    syncCrosshair();
+  });
+}
+  window.scrollTo(0, 0);
+  syncDesktopSettings();
+}
+
+function closeSettings() {
+  settingsView.classList.add('hidden');
+  document.body.classList.remove('in-settings');
+  if (document.body.classList.contains('is-logged-in')) document.getElementById('app-grid')?.classList.remove('hidden');
+  if (location.hash === '#settings') history.replaceState(null, '', location.pathname + location.search);
+  syncCrosshair();
+}
+
+document.getElementById('menu-settings')?.addEventListener('click', openSettings);
+document.getElementById('settings-close')?.addEventListener('click', closeSettings);
+window.addEventListener('popstate', () => { if (location.hash === '#settings') openSettings(); else if (!settingsView.classList.contains('hidden')) closeSettings(); });
+document.addEventListener('sharesecure:ready', () => { if (location.hash === '#settings') setTimeout(openSettings, 300); }, { once: true });
+
+// the desktop app: hiding view-only files from screenshots (Windows and macOS)
+async function syncDesktopSettings() {
+  const protection = window.shareSecureDesktop?.protection;
+  const group = document.getElementById('settings-desktop');
+  group.classList.toggle('hidden', !window.shareSecureDesktop);
+  const box = document.getElementById('protect-desktop');
+  const state = await protection?.get().catch(() => null);
+  box.closest('.settings-switch').classList.toggle('hidden', !state?.supported);
+  box.checked = Boolean(state?.hideViewOnly);
+}
+document.getElementById('protect-desktop')?.addEventListener('change', async e => {
+  const state = await window.shareSecureDesktop?.protection?.set(e.target.checked).catch(() => null);
+  e.target.checked = Boolean(state?.hideViewOnly);
+  showToast(e.target.checked ? 'View-only files are hidden from screenshots in this app.' : 'Screenshots of view-only files are allowed again.', 'success', 3000);
+});
+
+// what new shares start with; each share can still change them
+const SHARE_DEFAULTS = { 'default-watermark': 'watermark-toggle', 'default-discourage': 'discourage-toggle', 'default-receipts': 'receipts-toggle' };
+const defaultOn = id => { try { return localStorage.getItem('pref:' + id) === 'on'; } catch { return false; } };
+function applyShareDefaults() {
+  for (const [pref, toggle] of Object.entries(SHARE_DEFAULTS)) {
+    const box = document.getElementById(toggle);
+    if (box && !box.disabled) box.checked = defaultOn(pref);
+  }
+  updateAdvancedState();
+}
+for (const pref of Object.keys(SHARE_DEFAULTS)) {
+  const box = document.getElementById(pref);
+  if (!box) continue;
+  box.checked = defaultOn(pref);
+  box.addEventListener('change', () => {
+    try { localStorage.setItem('pref:' + pref, box.checked ? 'on' : 'off'); } catch {}
+    applyShareDefaults();
+  });
+}
+applyShareDefaults();
 
 // ── the crosshair ────────────────────────────────────────────────────────────
 // Only on this page (the home page), only with a mouse or trackpad, and it

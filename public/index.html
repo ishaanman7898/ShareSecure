@@ -66,53 +66,22 @@
             <span class="profile-head-label">Signed in as</span>
             <strong id="profile-menu-name"></strong>
           </div>
-          <button class="menu-item hidden" role="menuitemcheckbox" aria-checked="false" id="notify-toggle">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            <span id="notify-label"></span>
-          </button>
-          <button class="menu-item web-only-item hidden" role="menuitem" id="menu-code">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span>Security code</span>
-          </button>
-          <button class="menu-item web-only-item hidden" role="menuitem" id="menu-plan">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            <span>Plan</span>
-            <span class="menu-meta" id="menu-plan-name"></span>
+          <button class="menu-item" role="menuitem" id="menu-settings">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Settings</span>
           </button>
           <a class="menu-item web-only-item hidden" role="menuitem" href="/teams" id="menu-teams">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span>Teams</span>
           </a>
-          <button class="menu-item" role="menuitem" id="menu-mcp">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
-            <span>Connect an AI assistant</span>
-          </button>
           <a class="menu-item web-only" role="menuitem" href="/download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             <span>Get the desktop app</span>
           </a>
-          <button class="menu-item hidden" role="menuitem" id="menu-cloud">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
-            <span>ShareSecure account</span>
-          </button>
-          <button class="menu-item hidden" role="menuitem" id="menu-updates">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-            <span>Updates</span>
-            <span class="menu-meta" id="menu-version"></span>
-            <span class="menu-count hidden" id="menu-update-badge">New</span>
-          </button>
           <div class="menu-sep" role="separator"></div>
           <button class="menu-item" role="menuitem" id="logout-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             <span>Sign out</span>
-          </button>
-          <button class="menu-item hidden" role="menuitem" id="menu-signout-all">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="9" y1="7" x2="15" y2="13"/><line x1="15" y1="7" x2="9" y2="13"/></svg>
-            <span>Sign out everywhere</span>
-          </button>
-          <button class="menu-item menu-item-danger" role="menuitem" id="menu-delete">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            <span>Delete account</span>
           </button>
         </div>
       </div>
@@ -133,6 +102,113 @@
       </div>
       <div class="landing-art" aria-hidden="true">
         <div id="rosette" class="rosette"></div>
+      </div>
+    </section>
+
+
+    <!-- Settings: everything that used to crowd the account menu -->
+    <section class="settings-view hidden" id="settings-view" aria-labelledby="settings-title">
+      <div class="settings-top">
+        <h1 class="settings-title" id="settings-title">Settings</h1>
+        <button class="btn btn-ghost btn-small" id="settings-close" type="button">Back to your files</button>
+      </div>
+
+      <div class="settings-group">
+        <h2>Account</h2>
+        <p class="settings-who">Signed in as <strong id="settings-username"></strong></p>
+          <button class="menu-item web-only-item hidden" id="menu-plan">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span>Plan</span>
+            <span class="menu-meta" id="menu-plan-name"></span>
+            <span class="settings-hint">Your limits, and Pro</span>
+          </button>
+          <a class="menu-item web-only-item hidden" href="/teams" id="settings-teams">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Teams</span>
+            <span class="settings-hint">Shared inboxes and branded request links</span>
+          </a>
+          <button class="menu-item web-only-item hidden" id="menu-code">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>Security code</span>
+            <span class="settings-hint">Read it to people who send you files</span>
+          </button>
+          <button class="menu-item hidden" id="menu-cloud">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            <span>ShareSecure account</span>
+            <span class="settings-hint">Link an account so you can send to usernames</span>
+          </button>
+      </div>
+
+      <div class="settings-group">
+        <h2>Sharing</h2>
+          <button class="menu-item" id="menu-mcp">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>
+            <span>Connect an AI assistant</span>
+            <span class="settings-hint">Let Claude, ChatGPT and others share for you</span>
+          </button>
+          <button class="menu-item hidden" role="switch" aria-checked="false" id="notify-toggle">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span id="notify-label"></span>
+            <span class="settings-hint">A system notification when someone sends you a file</span>
+          </button>
+      </div>
+
+      <div class="settings-group">
+        <h2>New shares start with</h2>
+        <p class="settings-hint">You can still change each share in its Advanced options. All off unless you turn them on.</p>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Watermark with who opened it</span><span class="settings-hint">A faint mark with their username (or Guest), the time and the link’s id. Traceable, not screenshot-proof.</span></span>
+            <span class="switch"><input type="checkbox" id="default-watermark" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Discourage screenshots and printing</span><span class="settings-hint">For view-only files. Browsers can’t fully block screenshots or a phone camera.</span></span>
+            <span class="switch"><input type="checkbox" id="default-discourage" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Tell me when it’s opened</span><span class="settings-hint">Opens and new devices, sealed so only you can read them.</span></span>
+            <span class="switch"><input type="checkbox" id="default-receipts" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+      </div>
+
+      <div class="settings-group desktop-only-group hidden" id="settings-desktop">
+        <h2>Desktop app</h2>
+          <button class="menu-item hidden" id="menu-updates">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            <span>Updates</span>
+            <span class="menu-meta" id="menu-version"></span>
+            <span class="menu-count hidden" id="menu-update-badge">New</span>
+            <span class="settings-hint">Version, and installing updates</span>
+          </button>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Hide view-only files from screenshots</span><span class="settings-hint">Windows that show a file people can’t download appear black in screenshots and screen recordings. Windows and macOS only. Off by default.</span></span>
+            <span class="switch"><input type="checkbox" id="protect-desktop" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+      </div>
+
+      <div class="settings-group">
+        <h2>Appearance</h2>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Crosshair on the home page</span><span class="settings-hint">Thin lines that follow your pointer, with a mouse or trackpad.</span></span>
+            <span class="switch"><input type="checkbox" id="crosshair-toggle" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+      </div>
+
+      <div class="settings-group">
+        <h2>Sign-in</h2>
+          <button class="menu-item hidden" id="menu-signout-all">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="9" y1="7" x2="15" y2="13"/><line x1="15" y1="7" x2="9" y2="13"/></svg>
+            <span>Sign out everywhere</span>
+            <span class="settings-hint">Ends every session but this one</span>
+          </button>
+      </div>
+
+      <div class="settings-group settings-danger">
+        <h2>Delete</h2>
+          <button class="menu-item menu-item-danger" id="menu-delete">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Delete account</span>
+            <span class="settings-hint">Your account and every file shared from it</span>
+          </button>
       </div>
     </section>
 
