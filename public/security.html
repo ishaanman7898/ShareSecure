@@ -50,7 +50,7 @@
         <li><strong>Links that work once.</strong> Turn on Works once and the file is erased the moment it’s opened. If anyone tries the link after that, you’re told: it was probably passed on.</li>
         <li><strong>File requests.</strong> A link you hand someone so they can send you a file. Their browser encrypts it to your key, which comes from the link itself, not the server, so the server can’t swap in a key of its own. It never sees the file, its name or what you asked for.</li>
         <li><strong>AI assistants ask before sending.</strong> An assistant can be tricked by something it reads into sending your files to a stranger, so a send to anyone not on your list waits for your OK. The list and the waiting sends are sealed to your own key. The assistant that runs on your computer (<code>npx sharesecure-mcp</code>) encrypts files there and keeps links out of the chat.</li>
-        <li><strong>No third-party code.</strong> Every script is served from this site. The desktop app runs the site’s code from its own copy, so not even a compromised server can change it.</li>
+        <li><strong>No third-party code.</strong> Every script is served from this site. The desktop app runs everything from its own copy on your computer, so no server can change it.</li>
         <li><strong>Check the site yourself.</strong> <code>npm run verify-site</code> compares every file this site serves with the published code, byte for byte. A public check runs it after every change and every day.</li>
         <li><strong>Encrypted storage.</strong> If you turn end-to-end encryption off, files are still encrypted on the server, each with its own key derived from a server master key.</li>
         <li><strong>Links that expire.</strong> You pick 1 hour to 10 days. After that the link stops working and the file is erased.</li>
@@ -62,7 +62,7 @@
     <section id="limits">
       <h2>What it doesn't protect against</h2>
       <ul>
-        <li><strong>The page you load.</strong> In a browser you trust the page the server sends each time. The public check catches a changed page for everyone, but not one sent only to you. The desktop app runs its own copy instead.</li>
+        <li><strong>The page you load.</strong> In a browser you trust the page the server sends each time. The public check catches a changed page for everyone, but not one sent only to you. The desktop app and self-hosted copies run their own code instead.</li>
         <li><strong>Who you send to.</strong> The server knows who a file was sent to and when, but not who sent it.</li>
         <li><strong>Whether a username exists.</strong> The key log names accounts by a hash of the username, so someone who guesses a username can check whether it has an account.</li>
         <li><strong>Anyone with the whole link.</strong> Without a passcode, a link is all it takes to open a file until it expires. Add a passcode, send to a username, and pick the shortest expiry that works.</li>

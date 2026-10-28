@@ -728,18 +728,6 @@ test('attack: links, tokens and uploads without the right secret get nothing', a
   assert.equal(filetypes.nameFor('payload.hta', '', 'application/pdf'), 'payload.pdf');
 });
 
-test('attack: the desktop app never serves files from outside its own copy of the site', () => {
-  const { bundledFile } = require(path.join(root, 'desktop', 'site-files.js'));
-  const dir = path.join(root, 'public');
-  for (const p of ['/../package.json', '/..%2fpackage.json', '/%2e%2e/%2e%2e/Windows/win.ini', '/C:/Windows/win.ini',
-    '/vendor/..%5c..%5cpackage.json', '/.git/config', '/%00index.html', '/../../server/settings.js']) {
-    assert.equal(bundledFile(dir, p), null, p);
-  }
-  assert.equal(bundledFile(dir, '/signin'), 'signin.html');
-  assert.equal(bundledFile(dir, '/vendor/pdf.min.mjs'), 'vendor/pdf.min.mjs');
-  assert.equal(bundledFile(dir, '/r/abc123'), 'viewer.html');
-});
-
 // ── assistants: rules for sending, the local MCP server, and the inbox ────────
 
 const assistantCall = (method, user, body) => context('/api/auth/assistant', { user, method, headers: { 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });

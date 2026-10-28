@@ -1,10 +1,9 @@
 'use strict';
-// ShareSecure desktop. On first launch you choose how to use it:
-//   account  sign in to your ShareSecure account (the website, in its own window)
-//   local    run a private ShareSecure on this computer. Its server runs in a
-//            process of its own, which outlives the app: share links keep
-//            working after you quit, until the last one expires
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, session, ipcMain, safeStorage, net: electronNet } = require('electron');
+// ShareSecure desktop: a private ShareSecure that runs on this computer. Its
+// server runs in a process of its own, which outlives the app: share links keep
+// working after you quit, until the last one expires. Your ShareSecure account
+// is the website; the app only links to it to send files to usernames.
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage } = require('electron');
 const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -18,9 +17,8 @@ if (!app.requestSingleInstanceLock()) {
   return;
 }
 
+// the website: where sending to a username goes, and the changelog
 const CLOUD = 'https://sharesecure-du8.pages.dev';
-// set when the app restarts to create an account (see createAccount)
-const NEW_ACCOUNT_FLAG = '--new-account';
 // set when Windows starts the app at sign-in: bring the links back up, no window
 const BACKGROUND_FLAG = '--background';
 
@@ -30,6 +28,7 @@ const BACKGROUND_FLAG = '--background';
 const USER_DIR = app.getPath('userData');
 const DATA_DIR = path.join(USER_DIR, 'data');
 const PORT_FILE = path.join(USER_DIR, 'port.json');
+// up to 1.19 the app could also show your account instead; see forgetAccountMode
 const MODE_FILE = path.join(USER_DIR, 'mode.json');
 // the running server's process id and port, so the next launch can find it
 const SERVER_FILE = path.join(USER_DIR, 'server.json');
@@ -43,34 +42,22 @@ const ICON = path.join(__dirname, 'icon-win.png');
 let win = null;
 let tray = null;
 let quitting = false;
-let mode = null;     // 'account' | 'local' | null until chosen
 let origin = '';
 let toldAboutTray = false;
 let server = null;      // this computer's server process, while the app runs it
 let publicBase = null;  // the public address share links are made with (the tunnel)
 
-function readMode() {
-  try {
-    const m = JSON.parse(fs.readFileSync(MODE_FILE, 'utf8')).mode;
-    if (m === 'account' || m === 'local') return m;
-  } catch {}
-  // 1.8.0 only had local mode: anyone with a local database keeps it
-  return fs.existsSync(path.join(DATA_DIR, 'sharesecure.db')) ? 'local' : null;
-}
-
-function saveMode(m) {
-  fs.mkdirSync(USER_DIR, { recursive: true });
-  fs.writeFileSync(MODE_FILE, JSON.stringify({ mode: m }));
-}
-
-function portFree(port) {
+// The server listens on every address (IPv6 and IPv4), so probe both: a
+// server holding only one of them still answers http://localhost:<port>.
+function portFreeOn(port, host) {
   return new Promise(resolve => {
     const probe = net.createServer()
       .once('error', () => resolve(false))
       .once('listening', () => probe.close(() => resolve(true)))
-      .listen(port, '127.0.0.1');
+      .listen(port, host);
   });
 }
+const portFree = async port => (await portFreeOn(port, '::')) && (await portFreeOn(port, '127.0.0.1'));
 
 // Keep the same port between launches: the page's saved state (your share list,
 // owner keys) belongs to the origin, and a new port would be a new origin.
@@ -148,7 +135,7 @@ async function startServer() {
   started.once('exit', () => {
     if (server === started) server = null;
     // it stopped while the app still needs it: start it again
-    if (ready && !quitting && mode === 'local') {
+    if (ready && !quitting) {
       startServer().then(() => win?.loadURL(origin)).catch(err => dialog.showErrorBox('ShareSecure stopped', err.message));
     }
   });
@@ -181,12 +168,11 @@ function hasLiveLinks() {
   });
 }
 
-// Links that belong in the app window. In local mode, share links point at the
-// public tunnel; open them on localhost instead, which skips its warning page.
+// Links that belong in the app window. Share links point at the public tunnel;
+// open them on localhost instead, which skips its warning page.
 function inApp(url) {
   try {
     const u = new URL(url);
-    if (mode === 'account') return u.origin === CLOUD ? url : null;
     const base = publicBase && new URL(publicBase);
     if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (base && u.host === base.host)) {
       return origin + u.pathname + u.search + u.hash;
@@ -205,8 +191,6 @@ function wireLinks(contents) {
   contents.on('will-navigate', (e, url) => {
     if (inApp(url) || url.startsWith('file:')) return;
     e.preventDefault();
-    // "Create an account" on this computer's sign-in page
-    if (url.startsWith(`${CLOUD}/signin`)) return createAccount();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
 }
@@ -234,17 +218,12 @@ function openWindow(url, { maximize = false, ...size }) {
   return w;
 }
 
-function mainUrl(newAccount = false) {
-  if (mode !== 'account') return origin;
-  return newAccount ? `${CLOUD}/signin?new=1` : `${CLOUD}/signin`;
-}
-
 function createMain(url) {
   // fills the screen at launch; un-maximizing goes back to this size
   win = openWindow(url, { width: 1240, height: 820, maximize: true });
   win.on('close', e => {
-    // with an account there's no server to keep alive, so closing quits
-    if (quitting || mode !== 'local') return;
+    // closing leaves the server sharing; quit from the tray icon
+    if (quitting) return;
     e.preventDefault();
     win.hide();
     if (!toldAboutTray && Notification.isSupported()) {
@@ -258,131 +237,58 @@ function createMain(url) {
   });
   // "Back to ShareSecure" on the update page, when an update didn't finish
   win.webContents.on('did-navigate-in-page', (_e, url) => {
-    if (url.startsWith('file:') && url.endsWith('#back')) win.loadURL(backFromUpdate || mainUrl());
+    if (url.startsWith('file:') && url.endsWith('#back')) win.loadURL(backFromUpdate || origin);
   });
   win.on('closed', () => {
     win = null;
-    if (mode !== 'local' && !quitting) app.quit();
   });
 }
 
 function showMain() {
-  if (!mode) return showWelcome();
-  if (!win || win.isDestroyed()) return createMain(mainUrl());
+  if (!win || win.isDestroyed()) return createMain(origin);
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
 }
 
-// First launch: pick "sign in to your account" or "run it on this computer".
-// The page's buttons change the URL hash, which we listen for here.
-function showWelcome() {
-  if (win && !win.isDestroyed()) { win.show(); return; }
-  createMain(null);
-  win.loadFile(path.join(__dirname, 'welcome.html'));
-  win.webContents.on('did-navigate-in-page', async (_e, url) => {
-    const choice = new URL(url).hash.slice(1);
-    if (!['account', 'account-new', 'local'].includes(choice)) return;
-    const chosen = choice === 'local' ? 'local' : 'account';
-    saveMode(chosen);
-    await start(chosen);
-    win.loadURL(mainUrl(choice === 'account-new'));
-    buildTrayMenu();
-  });
-}
-
-async function start(chosen) {
-  mode = chosen;
-  startAtSignIn(mode === 'local');
-  if (updater) updater.autoInstallOnAppQuit = mode !== 'local';
-  if (mode === 'local') {
-    try {
-      await startServer();
-    } catch (err) {
-      dialog.showErrorBox('ShareSecure couldn’t start', err.message);
-      app.exit(1);
-    }
-  } else {
-    origin = CLOUD;
+async function start() {
+  startAtSignIn(true);
+  try {
+    await startServer();
+  } catch (err) {
+    dialog.showErrorBox('ShareSecure couldn’t start', err.message);
+    app.exit(1);
   }
 }
 
-// Opens sign-up for a ShareSecure account. From this computer's own
-// ShareSecure that means switching to an account, which needs a restart.
-async function createAccount() {
-  if (mode === 'account') {
-    showMain();
-    win.loadURL(mainUrl(true));
-    return;
+// Up to 1.19 the app could show your ShareSecure account instead of running
+// on this computer. That's the website's job now: forget the choice, and the
+// account's saved sign-in.
+function forgetAccountMode() {
+  try { fs.unlinkSync(MODE_FILE); } catch {}
+  const all = readSignIns();
+  if (all[CLOUD]) {
+    delete all[CLOUD];
+    try { writeSignIns(all); } catch {}
   }
-  if (!mode) {
-    saveMode('account');
-    await start('account');
-    showMain();
-    win.loadURL(mainUrl(true));
-    buildTrayMenu();
-    return;
-  }
-  const { response } = await dialog.showMessageBox({
-    type: 'question',
-    title: 'ShareSecure',
-    buttons: ['Create an account', 'Cancel'],
-    defaultId: 0,
-    cancelId: 1,
-    message: 'Create a ShareSecure account?',
-    detail: 'ShareSecure will restart with your account. The files on this computer stay, but their links stop working until you switch back from the tray icon.',
-  });
-  if (response !== 0) return;
-  saveMode('account');
-  stopServer();
-  quitting = true;
-  app.relaunch({ args: [...process.argv.slice(1).filter(a => a !== NEW_ACCOUNT_FLAG), NEW_ACCOUNT_FLAG] });
-  app.exit(0);
-}
-
-// Switching needs a fresh start: a local server can't be stopped in place.
-// From the tray, the account menu or Settings (mode:switch below).
-async function switchMode() {
-  if (!mode) return;
-  const toLocal = mode === 'account';
-  const { response } = await dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
-    type: 'question',
-    title: 'ShareSecure',
-    buttons: [toLocal ? 'Run it on this computer' : 'Use my account', 'Cancel'],
-    defaultId: 0,
-    cancelId: 1,
-    message: toLocal ? 'Run ShareSecure on this computer?' : 'Use your ShareSecure account?',
-    detail: toLocal
-      ? 'ShareSecure restarts and runs privately on this computer: free, no upload limit, and your files never leave it. Your account stays as it is, and you can switch back any time.'
-      : 'ShareSecure restarts and signs in to your account. The files on this computer stay, but their links stop working until you switch back.',
-  });
-  if (response !== 0) return;
-  saveMode(toLocal ? 'local' : 'account');
-  stopServer();
-  quitting = true;
-  app.relaunch({ args: process.argv.slice(1).filter(a => a !== NEW_ACCOUNT_FLAG) });
-  app.exit(0);
 }
 
 function buildTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open ShareSecure', click: showMain },
-    { label: 'Create a ShareSecure account…', click: createAccount },
-    ...(mode === 'local' ? [{ label: 'Open data folder', click: () => shell.openPath(DATA_DIR) }] : []),
-    ...(mode ? [{ label: mode === 'local' ? 'Use your ShareSecure account…' : 'Run it on this computer…', click: switchMode }] : []),
+    { label: 'Open data folder', click: () => shell.openPath(DATA_DIR) },
     { type: 'separator' },
-    // reachable from the welcome screen too, before anything is set up
-    { label: 'Privacy policy', click: () => openWindow(`${origin || CLOUD}/privacy`, { width: 900, height: 820 }) },
-    { label: 'Terms', click: () => openWindow(`${origin || CLOUD}/terms`, { width: 900, height: 820 }) },
+    { label: 'Privacy policy', click: () => openWindow(`${origin}/privacy`, { width: 900, height: 820 }) },
+    { label: 'Terms', click: () => openWindow(`${origin}/terms`, { width: 900, height: 820 }) },
     { type: 'separator' },
     { label: 'Quit ShareSecure', click: quit },
-    ...(mode === 'local' ? [{ label: 'Stop sharing and quit', click: () => { stopServer(); quit(); } }] : []),
+    { label: 'Stop sharing and quit', click: () => { stopServer(); quit(); } },
   ]));
 }
 
 async function quit() {
   quitting = true;
-  if (mode === 'local' && await hasLiveLinks() && Notification.isSupported()) {
+  if (await hasLiveLinks() && Notification.isSupported()) {
     new Notification({
       title: 'Your links keep working',
       body: 'ShareSecure keeps sharing in the background until your links expire, then stops by itself.',
@@ -413,9 +319,9 @@ function createTray() {
 }
 
 // ── updates ─────────────────────────────────────────────────────────────────
-// Shown under Updates in the account menu (see preload.js). In local mode an
-// update waits for "Restart to update" instead of installing on quit: quitting
-// leaves the server sharing, and installing would stop it. Updating from the
+// Shown under Updates in Settings (see preload.js). An update waits for
+// "Restart to update" instead of installing on quit: quitting leaves the
+// server sharing, and installing would stop it. Updating from the
 // menu (or from the notification that one is ready) shows updating.html while
 // it downloads and installs; the app then reopens on the new version.
 const updates = {
@@ -432,7 +338,7 @@ let installWhenReady = false;
 let notice = null;           // the last notification, kept so its click still works
 let backFromUpdate = null;   // where "Back to ShareSecure" goes if an update fails
 
-const updateState = () => ({ ...updates, local: mode === 'local' });
+const updateState = () => ({ ...updates, local: true });
 
 // updates.json: { autoUpdate, pending: a downloaded version, until it's running }
 function readUpdatesFile() {
@@ -465,7 +371,7 @@ function showUpdatePage() {
   const here = win.webContents.getURL();
   if (here && !here.startsWith('file:')) backFromUpdate = here;
   win.loadFile(path.join(__dirname, 'updating.html'), {
-    query: { from: updates.current, to: updates.latest || '', status: updates.status, local: mode === 'local' ? '1' : '0' },
+    query: { from: updates.current, to: updates.latest || '', status: updates.status, local: '1' },
   });
   if (win.isMinimized()) win.restore();
   win.show();
@@ -501,9 +407,7 @@ function notify(title, body, onClick) {
 // (it's in the tray, or another window has the focus).
 function notifyReady(version) {
   if (win && !win.isDestroyed() && win.isVisible() && win.isFocused()) return;
-  notify(`ShareSecure ${version} is ready`, mode === 'local'
-    ? 'Click to restart and update. Links on this computer pause for a moment while it installs.'
-    : 'It installs when you quit ShareSecure. Click to restart and update now.', installUpdate);
+  notify(`ShareSecure ${version} is ready`, 'Click to restart and update. Your links pause for a moment while it installs.', installUpdate);
 }
 
 const newer = (a, b) => {
@@ -533,7 +437,7 @@ function initUpdates() {
     ({ autoUpdater: updater } = require('electron-updater'));
   } catch { return; /* updates are best effort */ }
   updater.autoDownload = updates.autoUpdate;
-  updater.autoInstallOnAppQuit = mode !== 'local';
+  updater.autoInstallOnAppQuit = false;
   updater.on('checking-for-update', () => setUpdates({ status: 'checking', error: null }));
   updater.on('update-not-available', info => setUpdates({ status: 'up-to-date', latest: info.version }));
   updater.on('update-available', info => setUpdates({ status: updater.autoDownload ? 'downloading' : 'available', latest: info.version, progress: 0 }));
@@ -557,17 +461,9 @@ function fromApp(event) {
   const frame = event.senderFrame;
   if (!frame || frame.parent) return false;
   try {
-    const from = new URL(frame.url).origin;
-    return from === CLOUD || (origin !== '' && from === new URL(origin).origin);
+    return origin !== '' && new URL(frame.url).origin === new URL(origin).origin;
   } catch { return false; }
 }
-
-ipcMain.handle('mode:get', e => (fromApp(e) ? mode : null));
-ipcMain.handle('mode:switch', e => {
-  if (!fromApp(e)) return false;
-  setImmediate(switchMode);
-  return true;
-});
 
 ipcMain.handle('updates:status', e => (fromApp(e) ? updateState() : null));
 ipcMain.handle('updates:check', async e => {
@@ -623,7 +519,7 @@ ipcMain.handle('protection:viewing', (e, { viewOnly, discourage } = {}) => {
 // ── saved sign-in ───────────────────────────────────────────────────────────
 // The app remembers your username and password so it signs you in at launch.
 // They're encrypted with the operating system's key store (safeStorage), one
-// per site: your account and this computer's ShareSecure each have their own.
+// for this computer's ShareSecure.
 // Signing out or deleting the account forgets them.
 function canEncrypt() {
   if (!safeStorage.isEncryptionAvailable()) return false;
@@ -669,61 +565,24 @@ ipcMain.handle('signin:forget', e => {
 app.on('second-instance', (_e, argv) => { if (!argv.includes(BACKGROUND_FLAG)) showMain(); });
 app.on('activate', showMain);
 app.on('before-quit', () => { quitting = true; });
-// in local mode stay alive in the tray when every window is closed
-app.on('window-all-closed', () => { if (mode !== 'local') app.quit(); });
-
-// ── the website's page code comes from this app ─────────────────────────────
-// With an account, the window shows the ShareSecure website. Its pages and
-// scripts (the code that encrypts your files) are served from the copy inside
-// this app, not downloaded, so a compromised server can't change that code.
-// Only the API (/api, /mcp, /connect) goes over the network.
-const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const { bundledFile: findFile, TYPES } = require('./site-files');
-const PAGE_CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-  "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; " +
-  "frame-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
-
-const bundledFile = pathname => findFile(PUBLIC_DIR, pathname);
-
-function serveBundledSite() {
-  session.defaultSession.protocol.handle('https', async request => {
-    const url = new URL(request.url);
-    const isPage = url.origin === CLOUD && request.method === 'GET' && !/^\/(api|mcp|connect)(\/|$)/.test(url.pathname);
-    const file = isPage && bundledFile(url.pathname);
-    if (file) {
-      const type = TYPES[path.extname(file)];
-      return new Response(fs.readFileSync(path.join(PUBLIC_DIR, file)), {
-        headers: {
-          'Content-Type': type,
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
-          'Referrer-Policy': 'no-referrer',
-          'Content-Security-Policy': type.startsWith('text/html') ? PAGE_CSP : "frame-ancestors 'none'",
-        },
-      });
-    }
-    return electronNet.fetch(request, { bypassCustomProtocolHandlers: true });
-  });
-}
+// stay alive in the tray when every window is closed
+app.on('window-all-closed', () => {});
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
-  serveBundledSite();
   // lets pages hide their "get the app" and "host it yourself" links in here
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
-  const saved = readMode();
+  forgetAccountMode();
+  await start();
   if (process.argv.includes(BACKGROUND_FLAG)) {
-    // started at sign-in: start the server and leave it sharing on its own,
-    // and say if ShareSecure updated itself since you last used it
-    if (saved === 'local') await start(saved);
+    // started at sign-in: leave the server sharing on its own, and say if
+    // ShareSecure updated itself since you last used it
     if (announceUpdate()) await sleep(4000);
     app.exit(0);
     return;
   }
-  if (saved) await start(saved);
   createTray();
-  if (mode === 'account' && process.argv.includes(NEW_ACCOUNT_FLAG)) createMain(mainUrl(true));
-  else showMain();
+  showMain();
   announceUpdate();
   initUpdates();
 });

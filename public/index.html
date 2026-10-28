@@ -70,10 +70,6 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span>Settings</span>
           </button>
-          <button class="menu-item hidden" role="menuitem" id="menu-switch-mode">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-            <span class="switch-mode-label">Switch</span>
-          </button>
           <a class="menu-item web-only-item hidden" role="menuitem" href="/teams" id="menu-teams">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span>Teams</span>
@@ -173,11 +169,6 @@
 
       <div class="settings-group desktop-only-group hidden" id="settings-desktop">
         <h2>Desktop app</h2>
-          <button class="menu-item hidden" id="settings-switch-mode">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-            <span class="switch-mode-label">Switch</span>
-            <span class="settings-hint" id="switch-mode-hint"></span>
-          </button>
           <button class="menu-item hidden" id="menu-updates">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
             <span>Updates</span>
@@ -227,7 +218,7 @@
           <span class="drop-badge"><svg class="drop-icon" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><polyline points="7 9 12 4 17 9"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg></span>
           <p class="drop-label drop-label-fine">Drop files or a folder here, or <span class="drop-browse">browse</span></p>
           <p class="drop-label drop-label-touch"><span class="drop-browse">Tap to choose files</span></p>
-          <p class="drop-limit">Documents, spreadsheets, images, video, ZIPs and more, up to <span id="drop-limit-size">10 MB</span><span class="drop-limit-desktop" id="drop-limit-desktop" hidden> (100 MB if you switch the app to “this computer” from its tray icon)</span> · <button type="button" class="drop-browse drop-folder" id="folder-browse">choose a folder</button></p>
+          <p class="drop-limit">Documents, spreadsheets, images, video, ZIPs and more, up to <span id="drop-limit-size">10 MB</span> · <button type="button" class="drop-browse drop-folder" id="folder-browse">choose a folder</button></p>
           <input type="file" id="file-input" multiple hidden />
           <input type="file" id="folder-input" webkitdirectory hidden />
         </div>

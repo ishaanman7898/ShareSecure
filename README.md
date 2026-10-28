@@ -28,11 +28,10 @@ Upload almost any file (documents, spreadsheets, images, video, ZIPs), several f
 | | Where your files live | Links work | Limits |
 |---|---|---|---|
 | **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day (Pro: 100), 10 MB each |
-| **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: sign in | Same as the website | Any time until they expire | Same as the website |
-| **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)**: this computer | Only your computer | Until they expire, while the computer is on | 100 MB each (10 MB to send to usernames), no daily limit |
+| **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)** | Only your computer | Until they expire, while the computer is on | 100 MB each (10 MB to send to usernames), no daily limit |
 | **[Self-hosted](#self-hosting)** (command line or Docker) | Only your machine or server | While the server is running | 100 MB each (10 MB to send to usernames), no daily limit |
 
-The desktop app asks which one you want the first time it opens. You can switch later from its tray icon. The installers aren't code-signed yet: on Windows choose **More info → Run anyway**, and on a Mac open the app once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
+Your ShareSecure account is the website; the desktop app is ShareSecure running privately on your own computer, nothing in between. The installers aren't code-signed yet: on Windows choose **More info → Run anyway**, and on a Mac open the app once, then go to **System Settings → Privacy & Security** and choose **Open Anyway**.
 
 ## Features
 
@@ -57,7 +56,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
 - **Teams** (Pro, account menu → *Teams*): a shared inbox and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
 - **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
-- **From the desktop app** in “this computer” mode, link your ShareSecure account first (account menu → **ShareSecure account**). Sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
+- **From the desktop app**, link your ShareSecure account first (account menu → **ShareSecure account**). Sending then uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 
 **Privacy and security** ([how it works](#how-files-are-protected))
 
@@ -79,7 +78,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 **Apps and hosting**
 
 - **Website**, on phones too, in light and dark mode. Add it to your home screen and, on Android, ShareSecure appears in the Share menu, so you can share straight from any app. What you share waits on the phone until you choose to send it.
-- **Desktop app** for Windows, macOS and Linux: sign in to your account or keep files on your computer only. It runs in the tray and updates itself.
+- **Desktop app** for Windows, macOS and Linux: your files stay on your computer only. It runs in the tray and updates itself.
 - **Self-hosted** with one command or Docker. Only you can upload, and files are erased within 30 seconds of expiring.
 
 ## AI assistants (MCP)
@@ -139,7 +138,7 @@ The list and the waiting sends are sealed to your own key, so ShareSecure can't 
 
 Assistants share text they wrote with `share_text`, and pass files in the call (`content_base64`) or as a link (`source_url`), so the Claude and ChatGPT apps can finish the job themselves. Only when an assistant can't get at the file does `share_file` give you a one-time upload page to pick it.
 
-In the desktop app's “this computer” mode and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one). The Claude app connector works there too through the public link.
+In the desktop app and on self-hosted installs, the address is `http://localhost:3000/mcp` (the dialog shows the right one). The Claude app connector works there too through the public link.
 
 | Tool | What it does |
 |---|---|
@@ -156,7 +155,7 @@ In the desktop app's “this computer” mode and on self-hosted installs, the a
 
 The share tools also take `burn_after_reading`, for a link that works once.
 
-Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*. In “this computer” mode, `send_to` and `send_share` need a linked ShareSecure account.
+Replacing the token cuts off the old one, and **Turn off** disconnects every assistant. Shares made by an assistant count toward the daily limit and appear in *Your shares*. In the desktop app and on self-hosted installs, `send_to` and `send_share` need a linked ShareSecure account.
 
 ## How files are protected
 
@@ -165,7 +164,7 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
 - **Anonymous uploads and sends:** your browser spends blind-signed tokens (RFC 9474) instead of your sign-in, so the server can enforce daily limits without knowing who uploaded or sent a file.
 - **Security codes** let you check nobody swapped someone's key, and your browser warns you if a contact's key ever changes.
 - **A public key log** records every account's key in an append-only Merkle tree. Every key you're given must come with proof it's in the log, your browser checks the log shows your own key, and anyone can audit the whole log (`node scripts/kt-monitor.mjs`; a public check runs daily). A server trying to read someone's files would have to publish a second key for them where everyone can see it.
-- **No third-party code:** pdf.js and mammoth are served from the site, and the desktop app runs the site's code from its own copy.
+- **No third-party code:** pdf.js and mammoth are served from the site, and the desktop app runs everything from its own copy.
 - Otherwise, files, their names and notes are encrypted on the server with AES-256-GCM.
   - **Website (end to end off):** each file's key is derived from a server master key.
   - **Self-hosted:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
@@ -225,7 +224,7 @@ public/       website and app UI (served by both backends), plus the shared
               encryption, sign-in, token, key-log, file-type and MCP modules
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
-desktop/      Electron app, icons, the logo and the first-run welcome screen
+desktop/      Electron app, icons, the logo and the update page
 packages/     sharesecure-mcp, the local MCP server (npm)
 scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
 tests/        security tests for the website and self-hosted server, and the

@@ -1132,7 +1132,7 @@ async function mcpCall(method) {
 
 document.getElementById('menu-mcp').addEventListener('click', async () => {
   openModal(mcpModal);
-  // the local server and the sending rules live on the website, not in "this computer" mode
+  // the local server and the sending rules live on the website, not in the desktop app or a self-hosted copy
   document.getElementById('mcp-local-tab').classList.toggle('hidden', selfHostMode);
   try { renderMcp(await mcpCall('GET')); } catch { showToast('Couldn’t load your assistant settings.', 'error'); }
   loadAgentRules();
@@ -2580,12 +2580,9 @@ async function loadPlan() {
     planInfo = await res.json();
     planState = planInfo.plan;
     document.getElementById('menu-plan-name').textContent = 'Coming soon';
-    // the desktop app shows nothing that's paid for: Plan, and Teams (part of Pro)
-    if (!IN_DESKTOP) {
-      document.getElementById('menu-plan')?.classList.remove('hidden');
-      document.getElementById('menu-teams')?.classList.remove('hidden');
-      document.getElementById('settings-teams')?.classList.remove('hidden');
-    }
+    document.getElementById('menu-plan')?.classList.remove('hidden');
+    document.getElementById('menu-teams')?.classList.remove('hidden');
+    document.getElementById('settings-teams')?.classList.remove('hidden');
     return planInfo;
   } catch { return null; }
 }
@@ -2681,10 +2678,6 @@ async function detectSelfHostMode() {
 }
 
 function startApp(isSelfHost) {
-  // The desktop app signed in to an account shares through ShareSecure's
-  // servers, so it has the website's 10 MB limit; say where the bigger one is.
-  const desktopNote = document.getElementById('drop-limit-desktop');
-  if (desktopNote) desktopNote.hidden = isSelfHost || !/ShareSecureDesktop\//.test(navigator.userAgent);
   if (isSelfHost) {
     initSelfHost();
   } else {
@@ -2739,7 +2732,7 @@ function openSettings() {
   closeMenu();
   if (!document.body.classList.contains('is-logged-in')) return;
   document.getElementById('settings-username').textContent = tokenUsername() || '';
-  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo || IN_DESKTOP);
+  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo);
   document.getElementById('app-grid')?.classList.add('hidden');
   settingsView.classList.remove('hidden');
   document.body.classList.add('in-settings');
@@ -2798,26 +2791,6 @@ for (const pref of Object.keys(SHARE_DEFAULTS)) {
   });
 }
 applyShareDefaults();
-
-// ── the desktop app: your account, or this computer ─────────────────────────
-// One click from the account menu and from Settings, instead of the tray icon.
-// The app asks before it restarts (see switchMode in desktop/main.js).
-(async () => {
-  const desktopMode = window.shareSecureDesktop?.mode;
-  const current = await desktopMode?.get().catch(() => null);
-  if (!current) return;
-  const toLocal = current === 'account';
-  for (const id of ['menu-switch-mode', 'settings-switch-mode']) {
-    const btn = document.getElementById(id);
-    if (!btn) continue;
-    btn.querySelector('.switch-mode-label').textContent = toLocal ? 'Run it on this computer' : 'Use your ShareSecure account';
-    btn.classList.remove('hidden');
-    btn.addEventListener('click', () => { closeMenu(); desktopMode.switch(); });
-  }
-  document.getElementById('switch-mode-hint').textContent = toLocal
-    ? 'Private and free, with no upload limit: files never leave this computer. ShareSecure restarts.'
-    : 'The same account as the website. ShareSecure restarts; links on this computer stop until you switch back.';
-})();
 
 // ── corner brackets (brackets.js, on every page but the viewer) ──────────────
 const bracketsToggle = document.getElementById('crosshair-toggle');

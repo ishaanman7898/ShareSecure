@@ -19,7 +19,6 @@ const inDesktop = /ShareSecureDesktop\//.test(navigator.userAgent);
 if (inDesktop) document.documentElement.classList.add('is-desktop');
 // On this computer's own ShareSecure, the desktop app catches this link and
 // restarts with a ShareSecure account instead (see createAccount in main.js).
-const DESKTOP_SIGNUP = 'Want a ShareSecure account instead? <a href="https://sharesecure-du8.pages.dev/signin?new=1">Create an account</a>';
 
 
 const $ = id => document.getElementById(id);
@@ -90,7 +89,7 @@ function render() {
   $('auth-title').textContent = c.title;
   $('auth-sub').textContent = c.sub;
   submit.textContent = c.submit;
-  const switchHtml = c.switch || (selfHost && inDesktop ? DESKTOP_SIGNUP : '');
+  const switchHtml = c.switch || '';
   $('auth-switch').innerHTML = switchHtml;
   $('auth-switch').classList.toggle('hidden', !switchHtml);
   $('auth-note').textContent = c.note || '';
