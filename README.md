@@ -5,6 +5,14 @@
 <p align="center">Share a file through a private link that stops working when you say.</p>
 
 <p align="center">
+  <a href="https://github.com/ishaanman7898/ShareSecure/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/ishaanman7898/ShareSecure?label=release" /></a>
+  <a href="https://github.com/ishaanman7898/ShareSecure/actions/workflows/verify-site.yml"><img alt="Live site matches this code" src="https://img.shields.io/github/actions/workflow/status/ishaanman7898/ShareSecure/verify-site.yml?label=live%20site%20verified" /></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
+  <img alt="End-to-end encrypted" src="https://img.shields.io/badge/end--to--end-encrypted-1e3fd8" />
+  <img alt="No tracking" src="https://img.shields.io/badge/tracking-none-success" />
+</p>
+
+<p align="center">
   <a href="https://sharesecure-du8.pages.dev">Website</a> ·
   <a href="https://github.com/ishaanman7898/ShareSecure/releases/latest">Desktop app</a> ·
   <a href="https://sharesecure-du8.pages.dev/self-host">Self-hosting</a> ·
@@ -39,6 +47,7 @@ The desktop app asks which one you want the first time it opens. You can switch 
 - **View-only by default.** Choose per file whether people can download it or draw on it (pen, highlighter, eraser), and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Name it what you like** when you share it. Every link comes with a QR code.
+- **Settings** keeps your plan, teams, assistants, notifications, what new shares start with and the desktop app's options on one page.
 - **Your shares** lists every live link with a bar for the time it has left, to send or delete. With end-to-end encryption, the list is sealed to your key and follows you to your other devices.
 - **The viewer** shows PDFs, Word documents, images and text in the browser, sharp on high-density screens with zoom for PDFs and images, and goes black when its tab is hidden or loses focus.
 - **Screenshot-resistant and traceable** (off unless you turn it on): a watermark with who opened the file and when, and, for view-only shares, no printing, a blur on PrintScreen, no copying, and in the desktop app a window that screenshots and recordings show as black (Windows and macOS; Linux can't). Browsers can't fully block screenshots or a phone camera, so this is never “screenshot-proof”: the watermark is what makes a leak traceable. [Details](docs/SECURITY.md#screenshots-resistant-and-traceable-not-proof)
