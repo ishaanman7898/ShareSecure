@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
     setAuto: on => ipcRenderer.invoke('updates:auto', on === true),
     onChange: callback => ipcRenderer.on('updates:status', (_e, state) => callback(state)),
   },
+  // hiding windows that show files from screenshots (Windows and macOS)
+  protection: {
+    get: () => ipcRenderer.invoke('protection:get'),
+    set: on => ipcRenderer.invoke('protection:set', on === true),
+    viewing: ({ viewOnly, discourage } = {}) => ipcRenderer.invoke('protection:viewing', { viewOnly: viewOnly === true, discourage: discourage === true }),
+  },
   signIn: {
     load: () => ipcRenderer.invoke('signin:load'),
     save: (username, password) => ipcRenderer.invoke('signin:save', String(username), String(password)),

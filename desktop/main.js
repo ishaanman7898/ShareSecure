@@ -36,6 +36,7 @@ const SERVER_FILE = path.join(USER_DIR, 'server.json');
 const UPDATES_FILE = path.join(USER_DIR, 'updates.json');
 // your saved sign-in, encrypted by the operating system (see saved sign-in below)
 const SIGNIN_FILE = path.join(USER_DIR, 'signin.json');
+const PROTECT_FILE = path.join(USER_DIR, 'protection.json');
 // the full-bleed tile reads better at window and tray sizes than the Mac-grid one
 const ICON = path.join(__dirname, 'icon-win.png');
 
@@ -223,6 +224,8 @@ function openWindow(url, { maximize = false, ...size }) {
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
   });
   wireLinks(w.webContents);
+  // a page has to ask again (protection:viewing): leaving a file un-hides the window
+  w.webContents.on('did-navigate', () => w.setContentProtection(false));
   w.once('ready-to-show', () => {
     if (maximize) w.maximize();
     w.show();
@@ -484,6 +487,34 @@ ipcMain.handle('updates:auto', (e, on) => {
   }
   setUpdates({});
   return updateState();
+});
+
+// ── hiding files from screenshots ───────────────────────────────────────────
+// Windows and macOS can leave a window out of screenshots and screen
+// recordings (it shows up black). A window gets that while it shows a file
+// whose sender chose "discourage screenshots", or any view-only file when the
+// setting below is on. It's off by default. Linux has no such thing.
+function readProtection() {
+  try { return { hideViewOnly: JSON.parse(fs.readFileSync(PROTECT_FILE, 'utf8')).hideViewOnly === true }; } catch { return { hideViewOnly: false }; }
+}
+const protectionState = () => ({ ...readProtection(), supported: process.platform === 'win32' || process.platform === 'darwin' });
+
+ipcMain.handle('protection:get', e => (fromApp(e) ? protectionState() : null));
+ipcMain.handle('protection:set', (e, on) => {
+  if (!fromApp(e)) return null;
+  try {
+    fs.mkdirSync(USER_DIR, { recursive: true });
+    fs.writeFileSync(PROTECT_FILE, JSON.stringify({ hideViewOnly: on === true }));
+  } catch {}
+  return protectionState();
+});
+ipcMain.handle('protection:viewing', (e, { viewOnly, discourage } = {}) => {
+  if (!fromApp(e)) return false;
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w) return false;
+  const hide = discourage === true || (viewOnly === true && readProtection().hideViewOnly);
+  w.setContentProtection(hide);
+  return hide;
 });
 
 // ── saved sign-in ───────────────────────────────────────────────────────────
