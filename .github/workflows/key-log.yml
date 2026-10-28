@@ -1,7 +1,12 @@
 # Watches the public key log (see public/kt.js), in public, every day: checks
 # the whole log, and that every log it saw before is still the start of it.
-# Each day's log is added to heads.jsonl on the key-log-witness branch, so the
-# record of what the log looked like can't be changed by the server either.
+#
+# The record of earlier checks (heads.jsonl) is carried from run to run in the
+# Actions cache, and each day's copy is attached to that day's run, so anyone
+# can download it and compare. Records up to October 2026 are on the
+# key-log-witness branch, which the first run here picks up. (The workflow used
+# to push to that branch; the repository's branch rules now stop pushes from
+# workflows, and the check doesn't need to push anything.)
 name: Watch the key log
 
 on:
@@ -10,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   monitor:
@@ -25,22 +30,34 @@ jobs:
           node-version: 22
 
       - name: Get the record of earlier checks
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: witness/heads.jsonl
+          key: key-log-heads-${{ github.run_id }}
+          restore-keys: key-log-heads-
+
+      - name: Or, the first time, the record on the key-log-witness branch
+        if: steps.cache.outputs.cache-matched-key == ''
         run: |
+          mkdir -p witness
           if git ls-remote --exit-code --heads origin key-log-witness >/dev/null; then
-            git worktree add witness origin/key-log-witness
-            git -C witness switch -c key-log-witness
-          else
-            git worktree add --orphan -b key-log-witness witness
+            git fetch origin key-log-witness
+            git show origin/key-log-witness:heads.jsonl > witness/heads.jsonl
+            echo "Started from the key-log-witness branch ($(wc -l < witness/heads.jsonl) earlier checks)."
           fi
 
       - run: node scripts/kt-monitor.mjs --heads witness/heads.jsonl --write
 
-      - name: Keep today's check
-        run: |
-          cd witness
-          git add heads.jsonl
-          if git diff --cached --quiet; then exit 0; fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898283+github-actions[bot]@users.noreply.github.com'
-          git commit -m "Key log checked: $(tail -n 1 heads.jsonl)"
-          git push origin key-log-witness
+      - name: Keep today's record for tomorrow
+        uses: actions/cache/save@v4
+        with:
+          path: witness/heads.jsonl
+          key: key-log-heads-${{ github.run_id }}
+
+      - name: Attach today's record to this run, for anyone to download
+        uses: actions/upload-artifact@v4
+        with:
+          name: key-log-heads
+          path: witness/heads.jsonl
+          retention-days: 90
