@@ -2,8 +2,12 @@ import { setUpKeys, newKeyFields } from './keys.js';
 import { signIn as opaqueSignIn, register as opaqueRegister, postWith } from './opaque.js';
 import { mountGradientASCII } from './gradient-ascii.js';
 
+// all blues and no glow: the default ramp's near-white middle, bloomed by the
+// glow, made a white half circle behind the form
 mountGradientASCII(document.getElementById('auth-gradient'), {
   shape: 'rise',
+  colors: ['#1e3fd8', '#2563eb', '#3b82f6', '#38bdf8'],
+  glow: 0,
   cellSize: 18,
   density: 0.8,
   speed: 0.7,
