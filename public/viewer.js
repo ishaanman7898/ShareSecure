@@ -245,6 +245,13 @@ window.addEventListener('beforeprint', () => {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 const rawShortId = location.pathname.split('/r/')[1]?.split('?')[0];
+// A link to a ShareSecure on someone's own computer (/l/<computer>/r/<id>):
+// this page comes from the website, and the file from that computer through
+// ShareSecure's relay (relay/), locked, like every end-to-end encrypted file.
+const RELAY = 'https://sharesecure-relay.ishman.workers.dev';
+const onComputer = location.pathname.match(/^\/l\/([A-Za-z0-9_-]{22})\/r\//)?.[1] || null;
+const api = path => (onComputer ? `${RELAY}/c/${onComputer}${path}` : path);
+const pagePrefix = onComputer ? `/l/${onComputer}` : '';
 
 let myShortId = rawShortId;
 
@@ -285,12 +292,12 @@ function withSignIn(init = {}) {
 }
 
 async function apiFetch(url, init = {}) {
-  let res = await fetch(url, sendSignIn ? withSignIn(init) : init);
+  let res = await fetch(api(url), sendSignIn ? withSignIn(init) : init);
   if (res.status === 401 && !sendSignIn && sessionToken) {
     const body = await res.clone().json().catch(() => ({}));
     if (body.code === 'sign_in_required') {
       sendSignIn = true;
-      res = await fetch(url, withSignIn(init));
+      res = await fetch(api(url), withSignIn(init));
     }
   }
   return res;
@@ -448,7 +455,7 @@ async function assignFreshId() {
     const data = await res.json();
     if (data.shortId) {
       myShortId = data.shortId;
-      history.replaceState(null, '', `/r/${myShortId}${location.hash}`);
+      history.replaceState(null, '', `${pagePrefix}/r/${myShortId}${location.hash}`);
       if (data.deleteToken) {
         localStorage.setItem('owner_' + myShortId, data.deleteToken);
       }
@@ -1199,7 +1206,7 @@ function showSendDialog() {
         const user = sessionStorage.getItem('user_name');
         anonymous = myDeleteToken && user ? takeToken(user, 'send') : null;
       }
-      const sendWith = h => fetch(`/api/send/${myShortId}`, { method: 'POST', headers: h, body: JSON.stringify(body) });
+      const sendWith = h => fetch(api(`/api/send/${myShortId}`), { method: 'POST', headers: h, body: JSON.stringify(body) });
       let res = anonymous
         ? await sendWith({ 'Content-Type': 'application/json', 'X-ShareSecure-Token': anonymous })
         : await apiFetch(`/api/send/${myShortId}`, { method: 'POST', headers, body: JSON.stringify(body) });
@@ -1273,7 +1280,7 @@ function openSharePanel() {
           warningText.style.color = 'var(--muted)';
           warningText.style.fontSize = '0.78rem';
           warningText.style.paddingTop = '4px';
-          warningText.textContent = 'This link only works on this computer. Set BASE_URL or turn on the tunnel to share it with other devices.';
+          warningText.textContent = 'This link only works on this computer. Set BASE_URL or turn on the relay (USE_RELAY) to share it with other devices.';
           $('share-link-text').parentNode.appendChild(warningText);
         }
       }

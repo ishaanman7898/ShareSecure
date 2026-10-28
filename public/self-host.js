@@ -3,9 +3,8 @@
   const RAW = 'https://raw.githubusercontent.com/ishaanman7898/ShareSecure/main/public';
 
   // Serve the scripts from this site when it's a real https deployment;
-  // fall back to GitHub for localhost / tunnel instances.
-  const host = location.hostname;
-  const base = location.protocol === 'https:' && !host.endsWith('loca.lt') ? location.origin : RAW;
+  // fall back to GitHub for localhost.
+  const base = location.protocol === 'https:' ? location.origin : RAW;
 
   const PLATFORMS = {
     unix: {

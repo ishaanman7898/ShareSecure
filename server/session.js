@@ -64,7 +64,7 @@ function requireOwner(req, res, next) {
 }
 
 // A request made on the computer ShareSecure runs on. Requests through the
-// public tunnel also arrive from this computer, but carry the tunnel's host name.
+// relay (relay.js) also arrive from this computer, but carry the relay's host name.
 function fromThisComputer(req) {
   const host = String(req.headers.host || '').replace(/:\d+$/, '').replace(/^\[|\]$/g, '');
   const addr = String(req.socket.remoteAddress || '');
@@ -74,7 +74,7 @@ function fromThisComputer(req) {
 
 // Until the owner account exists, whoever reaches the server first could
 // claim it, and it's often reachable from elsewhere (the same network,
-// Docker's published port, the public tunnel). So setting up from anywhere
+// Docker's published port, the relay). So setting up from anywhere
 // but this computer takes the code printed in the server's console.
 let setupCode = null;
 const getSetupCode = () => (setupCode ||= crypto.randomBytes(5).toString('hex'));

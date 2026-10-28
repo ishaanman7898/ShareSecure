@@ -119,6 +119,12 @@ const migrations = [
   'ALTER TABLE files ADD COLUMN view_opts TEXT',
   // and whatever they recorded goes with them
   'DROP TABLE IF EXISTS receipts',
+  // locked end to end (relay.js): the name is locked too, and opens with the
+  // key in the link; local_key keeps the key of one locked here (an
+  // assistant's share), encrypted, so this computer can list and send it
+  'ALTER TABLE files ADD COLUMN e2e INTEGER DEFAULT 0',
+  'ALTER TABLE files ADD COLUMN passcode_salt TEXT',
+  'ALTER TABLE files ADD COLUMN local_key TEXT',
   'UPDATE files SET receipt_key = NULL WHERE receipt_key IS NOT NULL',
 ];
 

@@ -1,6 +1,6 @@
 {
   "name": "sharesecure",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "desktop/main.js",
   "type": "commonjs",
@@ -29,7 +29,6 @@
     "dotenv": "^17.3.1",
     "electron-updater": "^6.8.9",
     "express": "^5.2.1",
-    "localtunnel": "^2.0.2",
     "multer": "^2.1.1"
   },
   "devDependencies": {

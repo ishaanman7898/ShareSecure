@@ -33,12 +33,35 @@
 
     <div class="timeline">
 
-      <!-- v1.21.0 -->
+      <!-- v1.22.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.22.0</span>
+          <span class="release-date">October 2026</span>
+          <span class="status-badge">Latest</span>
+        </div>
+        <div class="release-body">
+          <div class="change-group">
+            <h3>New</h3>
+            <ul class="change-list">
+              <li><strong>ShareSecure’s own relay</strong> Links to files on your computer now go through a relay ShareSecure runs, instead of a free public tunnel. People opening a link never learn your computer’s address, there’s no warning page, and links keep the same address when the app restarts.</li>
+              <li><strong>Locked end to end on the desktop</strong> Files shared from the desktop app (and by an assistant connected to it) are locked before they’re stored, with the key in the link after “#”. Your computer only sends locked files through the relay, so nothing in between can read them.</li>
+            </ul>
+          </div>
+          <div class="change-group">
+            <h3>Fixed</h3>
+            <ul class="change-list">
+              <li><strong>Desktop links</strong> No more “You are about to visit… enter the IP” page showing your address, and no more 408 errors from the old tunnel.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- v1.21.0 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.21.0</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
           <div class="change-group">

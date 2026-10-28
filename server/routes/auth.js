@@ -9,7 +9,6 @@ const { db } = require('../db');
 const session = require('../session');
 const settings = require('../settings');
 const { purgeAll } = require('../purge');
-const { getEncKey, decryptString } = require('../utils');
 
 const MIN_PASSWORD = 8;
 
@@ -105,10 +104,13 @@ router.post('/delete-account', session.requireOwner, (req, res) => {
 
 // ── /api/auth/mcp-token: the token assistants use to connect ──────────────────
 const mcpUrl = () => `http://localhost:${process.env.PORT || 3000}/mcp`;
-// apps like Claude and ChatGPT need a public https address: the tunnel, or your domain
-const reach = () => ({
-  publicUrl: /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null,
-});
+// apps like Claude and ChatGPT need a public https address: the relay, or your domain
+// Links go to BASE_URL (the website's /l/<computer>, or your domain); an
+// assistant's app connects straight to the relay, which passes it on here.
+const reach = () => {
+  const publicUrl = /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null;
+  return { publicUrl, connectBase: process.env.SHARESECURE_RELAY_BASE || publicUrl, viaRelay: Boolean(process.env.SHARESECURE_RELAY_BASE) };
+};
 
 router.get('/mcp-token', session.requireOwner, (_req, res) => {
   res.json({ ...require('../mcp').tokenStatus(), mcpUrl: mcpUrl(), ...reach() });
@@ -126,20 +128,21 @@ router.delete('/mcp-token', session.requireOwner, (_req, res) => {
 // ── GET /api/auth/user/files ──────────────────────────────────────────────────
 // Live shares, so ones made by an assistant show up in the dashboard too.
 // Self-hosted instances have no daily limit.
-router.get('/user/files', session.requireOwner, (_req, res) => {
-  const key = getEncKey();
+router.get('/user/files', session.requireOwner, async (_req, res) => {
   const rows = db.prepare(`
-    SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, delete_token
+    SELECT short_id, original_filename, mime_type, size_bytes, uploaded_at, expires_at, delete_token, e2e, local_key
     FROM files WHERE is_active = 1 AND inbox_status IS NULL AND (expires_at IS NULL OR expires_at > ?)
     ORDER BY uploaded_at DESC LIMIT 50
   `).all(new Date().toISOString());
-  const plain = v => { try { return decryptString(v, key); } catch { return v; } };
   const base = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
-  const files = rows.map(r => ({
-    ...r,
-    original_filename: plain(r.original_filename),
-    mime_type: plain(r.mime_type),
-    short_url: `${base}/r/${r.short_id}`,
+  const { openShare } = require('./files');
+  // A share locked in the app's page opens only where its key is (that
+  // browser's own list has it): it's marked e2e, and the page leaves it out.
+  const files = await Promise.all(rows.map(async ({ local_key, e2e, ...r }) => {
+    const opened = await openShare({ ...r, e2e, local_key }).catch(() => null);
+    if (e2e && !opened) return { short_id: r.short_id, e2e: true, expires_at: r.expires_at };
+    const key = opened?.key ? `#k=${Buffer.from(opened.key).toString('base64url')}` : '';
+    return { ...r, original_filename: opened?.name || '', mime_type: opened?.type || '', short_url: `${base}/r/${r.short_id}${key}` };
   }));
   res.json({ files, dailyUploadCount: 0, unlimited: true, publicUrl: reach().publicUrl });
 });

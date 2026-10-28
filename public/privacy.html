@@ -153,7 +153,7 @@
       <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer. We never receive any of it unless you link a ShareSecure account. A few things still reach the internet:</p>
       <ul>
         <li>The desktop app makes or links a ShareSecure account with your username when you set it up or sign in, unless you link another or unlink it. Each file you send to a username is uploaded as an encrypted copy under that account, and this policy covers it. Files sent to your username are fetched from the website and kept on your computer once you accept them; the account's private key is kept on your computer, encrypted, to open them.</li>
-        <li>To make links work for other devices, the app uses a public relay (localtunnel at loca.lt), which can see traffic passing through it. You can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting if you have your own domain.</li>
+        <li>To make links work from anywhere, the app keeps a connection open to ShareSecure's relay (a Cloudflare Worker), and people opening a link reach your computer through it, so they never learn its address. Shares are locked end to end before they leave the app, so the relay only carries locked bytes it can't read, and it keeps no log, addresses or files. The relay does see your computer's address while it's connected, and the addresses of people opening links, as any website does. You can turn it off with the <code>USE_RELAY</code> setting if you have your own domain.</li>
         <li>The app checks GitHub for updates.</li>
       </ul>
       <p>The desktop app can hide windows showing view-only files from screenshots and screen recordings (Windows and macOS). That setting stays on your computer.</p>

@@ -207,7 +207,9 @@ let copiesGeneration = 0;       // bumped by forgetAllCloudCopies
 
 // Returns { id, deleteToken } for the website's copy of a share, uploading it if needed,
 // or { status, error } when that isn't possible.
-function cloudCopy(shortId, token) {
+// A share locked end to end opens with its key: the one kept for it here, or
+// the one the app's page has (keyB64).
+function cloudCopy(shortId, token, keyB64 = null) {
   const cached = loadCopies()[shortId];
   if (cached) return Promise.resolve(cached);
   if (uploading.has(shortId)) return uploading.get(shortId);
@@ -218,11 +220,15 @@ function cloudCopy(shortId, token) {
     if (!file || !file.stored_filename || file.expires_at <= new Date().toISOString()) {
       return { status: 404, error: 'File not found' };
     }
-    const encKey = getEncKey();
-    const name = decryptString(file.original_filename, encKey) || 'file';
-    const mime = decryptString(file.mime_type, encKey) || 'application/octet-stream';
+    const opened = await require('./files').openShare(file, keyB64);
+    if (!opened) return { status: 409, error: 'Open this share in the app to send it.' };
+    const name = opened.name || 'file';
+    const mime = opened.type || 'application/octet-stream';
     let bytes;
-    try { bytes = readShare(file); } catch { return { status: 500, error: 'Couldn’t read the file.' }; }
+    try {
+      bytes = readShare(file);
+      if (opened.key) bytes = Buffer.from(await (await lib()).unlockFile(opened.key, new Uint8Array(bytes)));
+    } catch { return { status: 500, error: 'Couldn’t read the file.' }; }
 
     // sealed here: a fresh key, the file padded and locked with it, and the
     // name and type locked too
@@ -282,12 +288,12 @@ function cloudCopy(shortId, token) {
 
 // Sends one share to one username. Resolves with { status, body } where body is
 // { sent: true } or { error } ('link_account', 'link_expired', 'User not found', …).
-async function sendOne(shortId, username, note) {
+async function sendOne(shortId, username, note, keyB64 = null) {
   const token = cloudToken();
   if (!token) return { status: 409, body: { error: 'link_account' } };
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    const copy = await cloudCopy(shortId, token);
+    const copy = await cloudCopy(shortId, token, keyB64);
     if (copy.error) {
       if (copy.status === 401) forgetToken();
       return { status: copy.status, body: { error: copy.error } };
@@ -665,7 +671,9 @@ router.post('/send/:shortId', requireOwner, async (req, res) => {
   if (!username) return res.status(400).json({ error: 'targetUsername required' });
   const note = String(req.body?.note || '').trim().slice(0, NOTE_MAX);
   try {
-    const out = await sendOne(req.params.shortId, username, note);
+    // a share locked in the app's page comes with its key (only ever to this computer)
+    const keyB64 = /^[A-Za-z0-9_-]{43}$/.test(String(req.body?.file_key || '')) ? String(req.body.file_key) : null;
+    const out = await sendOne(req.params.shortId, username, note, keyB64);
     res.status(out.status).json(out.body);
   } catch (err) {
     // a key the public log can't confirm is a reason worth showing as it is

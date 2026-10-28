@@ -45,7 +45,7 @@ let quitting = false;
 let origin = '';
 let toldAboutTray = false;
 let server = null;      // this computer's server process, while the app runs it
-let publicBase = null;  // the public address share links are made with (the tunnel)
+let publicBase = null;  // the public address share links are made with (the website's /l/<this computer>)
 
 // The server listens on every address (IPv6 and IPv4), so probe both: a
 // server holding only one of them still answers http://localhost:<port>.
@@ -149,7 +149,7 @@ function stopServer() {
   if (server?.connected) server.send('stop');
 }
 
-// Share links point at the public tunnel, whose address the server picks.
+// Share links point at the website's address for this computer (server/relay.js).
 async function refreshPublicBase() {
   try {
     const res = await fetch(`${origin}/api/mode`);
@@ -168,15 +168,13 @@ function hasLiveLinks() {
   });
 }
 
-// Links that belong in the app window. Share links point at the public tunnel;
-// open them on localhost instead, which skips its warning page.
+// Links that belong in the app window. Share links point at the website's
+// address for this computer, through the relay; open them here instead.
 function inApp(url) {
   try {
+    if (publicBase && url.startsWith(`${publicBase}/`)) return origin + url.slice(publicBase.length);
     const u = new URL(url);
-    const base = publicBase && new URL(publicBase);
-    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || (base && u.host === base.host)) {
-      return origin + u.pathname + u.search + u.hash;
-    }
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return origin + u.pathname + u.search + u.hash;
   } catch {}
   return null;
 }

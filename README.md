@@ -201,13 +201,13 @@ The installers set up Node.js if needed and start ShareSecure at `http://localho
   - macOS: `~/Library/Application Support/ShareSecure`
   - Linux: `~/.local/share/sharesecure`
 - **Updates** install from the app's Updates panel, or automatically if you turn that on. Docker updates by rebuilding.
-- **Public links:** a free relay (localtunnel) gives other devices a way in. The relay can see traffic passing through it. If you have your own domain, set `USE_LOCAL_TUNNEL=false` and `BASE_URL`.
+- **Public links** go through ShareSecure's relay (`relay/`, a Cloudflare Worker): your computer keeps one connection open to it, so nothing is opened on your router, and people opening a link never learn your computer's address. Shares are locked end to end (the key is in the link after `#`, which browsers never send), and your computer refuses to send anything else through the relay, so it only ever carries locked bytes. Links keep working across restarts, while the computer is on. If you have your own domain, set `USE_RELAY=false` and `BASE_URL`.
 
 | Setting (`.env`) | Default | What it does |
 |---|---|---|
 | `PORT` | `3000` | Port the server listens on. |
-| `BASE_URL` | localhost or the tunnel | Address used in share links. |
-| `USE_LOCAL_TUNNEL` | `true` | Create a public link through localtunnel. |
+| `BASE_URL` | localhost, or the relay's address | Address used in share links. |
+| `USE_RELAY` | `true` | Make links that work from anywhere, through ShareSecure's relay. |
 | `ENCRYPTION_KEY` | generated | Encrypts every file. Changing it makes existing files unreadable. |
 | `DATA_DIR` | app-data folder | Where the database and encrypted files are stored. |
 
@@ -225,6 +225,7 @@ public/       website and app UI (served by both backends), plus the shared
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
 desktop/      Electron app, icons, the logo and the update page
+relay/        ShareSecure's relay for links to a computer (Cloudflare Worker: npx wrangler deploy --config relay/wrangler.toml)
 packages/     sharesecure-mcp, the local MCP server (npm)
 scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
 tests/        security tests for the website and self-hosted server, and the

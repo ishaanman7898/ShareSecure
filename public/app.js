@@ -606,7 +606,8 @@ async function buildUploadForm() {
     discourage: Boolean(document.getElementById('discourage-toggle')?.checked),
   };
 
-  if (selfHostMode || !document.getElementById('e2e-toggle')?.checked) {
+  // on your own computer they're always locked: their links go through the relay
+  if (!selfHostMode && !document.getElementById('e2e-toggle')?.checked) {
     form.append('file', selectedFile);
     if (displayName) form.append('display_name', displayName);
     if (view.watermark) form.append('watermark', '1');
@@ -624,7 +625,7 @@ async function buildUploadForm() {
   const salt = passcode ? newPasscodeSalt() : null;
   const key = passcode ? await passcodeKey(linkKey, passcode, salt) : linkKey;
   const name = nameFor(displayName, selectedFile.name, type);
-  form.append('file', new Blob([await lockFile(key, bytes)]), 'sealed.bin');
+  form.append('file', new Blob([await lockFile(key, bytes, selfHostMode ? maxBytes : undefined)]), 'sealed.bin');
   form.append('e2e', '1');
   form.append('meta', await lockMeta(key, { name, type, ...view }));
   if (salt) form.append('passcode_salt', salt);
@@ -708,7 +709,7 @@ uploadBtn.addEventListener('click', async () => {
   }
   // end-to-end uploads spend an anonymous token when there is one; if it's
   // refused (say, it ran out at midnight) the upload goes signed in instead
-  const token = built.key ? takeToken(tokenUsername(), 'upload') : null;
+  const token = built.key && !selfHostMode ? takeToken(tokenUsername(), 'upload') : null;
   let result = await sendUpload(built.form, !token, token);
   if (token && result.status === 401) result = await sendUpload((await buildAgain(built)).form, true);
 
@@ -783,12 +784,14 @@ function showResult(data, file, delivery, built = {}) {
 }
 
 // The link for a share. On this computer, always the current public address
-// (the tunnel's can change, and this page itself is on localhost); otherwise
-// the one the server gave, or this site's own.
+// (links made before the relay had another, and this page itself is on
+// localhost), keeping the key after "#"; otherwise the one the server gave, or
+// this site's own.
 let publicBase = null;
 function shareUrl(record) {
   const path = `/r/${encodeURIComponent(record.short_id)}`;
-  if (selfHostMode && publicBase) return publicBase + path;
+  const fragment = String(record.short_url || '').includes('#') ? `#${String(record.short_url).split('#')[1]}` : '';
+  if (selfHostMode && publicBase) return publicBase + path + fragment;
   return record.short_url || location.origin + path;
 }
 
@@ -1106,14 +1109,15 @@ function renderMcp(state, token) {
 
   // Claude's and ChatGPT's apps connect over the internet, and their connector
   // form only takes a URL, so the token rides in the connector URL
-  const connectorUrl = state.publicUrl ? `${state.publicUrl}/connect/${token}` : '';
+  const base = state.connectBase || state.publicUrl;
+  const connectorUrl = base ? `${base}/connect/${token}` : '';
   for (const id of ['mcp-connector', 'mcp-connector-chatgpt']) {
     const box = document.getElementById(id);
     box.textContent = connectorUrl;
     box.closest('.code-box').classList.toggle('hidden', !connectorUrl);
   }
-  document.querySelector('.mcp-no-public').classList.toggle('hidden', Boolean(state.publicUrl));
-  document.querySelector('.mcp-tunnel-warn').classList.toggle('hidden', !/\.loca\.lt$/i.test(state.publicUrl ? new URL(state.publicUrl).hostname : ''));
+  document.querySelector('.mcp-no-public').classList.toggle('hidden', Boolean(base));
+  document.querySelector('.mcp-tunnel-warn').classList.toggle('hidden', !state.viaRelay);
 }
 
 document.querySelector('.mcp-tabs').addEventListener('click', e => {
@@ -1458,7 +1462,7 @@ document.getElementById('check-code-form')?.addEventListener('submit', async e =
 
 // The passcode only applies to end-to-end encrypted links.
 function syncPasscodeField() {
-  const on = !selfHostMode && document.getElementById('e2e-toggle')?.checked;
+  const on = selfHostMode || document.getElementById('e2e-toggle')?.checked;
   document.getElementById('passcode-wrap')?.classList.toggle('hidden', !on);
   updateAdvancedState();
 }
@@ -2075,7 +2079,10 @@ async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(short
       const body = { targetUsername: username, deleteToken: key };
       // an end-to-end encrypted file's key is sealed to the person it's for
       let token = null;
-      if (fileKey) {
+      // on your own computer, the server there makes the website's copy, so it
+      // gets the key (it never leaves this computer otherwise)
+      if (fileKey && selfHostMode) body.file_key = toB64url(fileKey);
+      if (fileKey && !selfHostMode) {
         let sealed;
         try { sealed = await sealFor(username, fileKey); } catch (err) {
           result.failed.push({ username, reason: err.message });
@@ -2092,7 +2099,7 @@ async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(short
         // doesn't learn who sent it
         if (key && !selfHostMode) token = takeToken(tokenUsername(), 'send');
       }
-      if (!fileKey && note) body.note = note;
+      if ((!fileKey || selfHostMode) && note) body.note = note;
       const post = headers => fetch(`/api/send/${encodeURIComponent(shortId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },

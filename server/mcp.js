@@ -7,8 +7,8 @@
 // kept. An assistant can hand over what it wants to share in several ways:
 // text it wrote, the file's bytes (inline or in chunks), or a public link for
 // ShareSecure to download. Reading a file straight from its path only works
-// for requests made on this computer: nothing arriving through the public
-// tunnel can read files here.
+// for requests made on this computer: nothing arriving through the relay
+// (relay.js) can read files here.
 const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -19,9 +19,8 @@ const net = require('net');
 
 const { db } = require('./db');
 const settings = require('./settings');
-const { decryptString, getEncKey } = require('./utils');
 const { purgeLink } = require('./purge');
-const { storeFile } = require('./routes/files');
+const { storeFile, openShare } = require('./routes/files');
 const { sendToCloud } = require('./routes/cloud');
 const { fromThisComputer } = require('./session');
 
@@ -67,6 +66,11 @@ function tokenOk(header) {
 
 
 const baseUrl = () => (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+// A share's link: locked ones carry their key after "#", which never reaches
+// a server (or the relay)
+const linkFor = (id, keyB64) => `${baseUrl()}/r/${id}${keyB64 ? `#k=${keyB64}` : ''}`;
+const keyOf = async row => (row ? (await openShare(row))?.key : null);
+const b64 = bytes => (bytes ? Buffer.from(bytes).toString('base64url') : null);
 
 // ── share options ────────────────────────────────────────────────────────────
 function shareOptions(args = {}) {
@@ -92,10 +96,12 @@ async function share(file, opts) {
       allow_annotations: '0',
       display_name: opts.name || '',
       watermark: opts.watermark ? '1' : '0',
-    }
+    },
+    // locked here, so its link only ever carries locked bytes (relay.js)
+    { seal: true }
   );
   if (stored.error) return { error: stored.error };
-  const result = { url: `${baseUrl()}/r/${stored.shortId}`, name: stored.displayName || opts.name || file.originalname, expires_at: stored.expires_at, id: stored.shortId };
+  const result = { url: linkFor(stored.shortId, b64(stored.linkKey)), name: stored.displayName || opts.name || file.originalname, expires_at: stored.expires_at, id: stored.shortId };
   // the share exists now, so a failed send is reported, never thrown
   let sent;
   try { sent = await sendOn(stored.shortId, opts.send_to, opts.note); } catch (err) { sent = common.sendFailed(opts.send_to, err); }
@@ -398,7 +404,8 @@ async function sendShare(args) {
   const note = args.note ? String(args.note).trim().slice(0, 140) : '';
   const sent = await sendOn(id, recipients, note);
   if (sent.cloud_error && !sent.sent_to.length && !sent.not_sent.length) return { error: cloudHelp(sent.cloud_error, id) };
-  return { id, url: `${baseUrl()}/r/${id}`, expires_at: file.expires_at, ...sent };
+  const row = db.prepare('SELECT * FROM files WHERE short_id = ?').get(id);
+  return { id, url: linkFor(id, b64(await keyOf(row))), expires_at: file.expires_at, ...sent };
 }
 
 // Text the assistant wrote → a .md, .txt or .csv share
@@ -514,19 +521,18 @@ async function callTool(name, args, req) {
 
   if (name === 'list_shares') {
     const rows = db.prepare(`
-      SELECT short_id, original_filename, expires_at FROM files
+      SELECT * FROM files
       WHERE is_active = 1 AND inbox_status IS NULL AND (expires_at IS NULL OR expires_at > ?)
       ORDER BY uploaded_at DESC LIMIT 50
     `).all(new Date().toISOString());
     if (!rows.length) return { text: 'No live shares.', data: { shares: [] } };
-    const key = getEncKey();
-    const shares = rows.map(r => {
-      let name = r.original_filename;
-      try { name = decryptString(r.original_filename, key); } catch {}
-      return { id: r.short_id, name, url: `${baseUrl()}/r/${r.short_id}`, expires_at: r.expires_at };
-    });
+    // ones locked in the app's page open only there, so they're listed without a link
+    const shares = (await Promise.all(rows.map(async r => {
+      const opened = await openShare(r).catch(() => null);
+      return { id: r.short_id, name: opened?.name || 'Locked share (open it in the app)', url: opened ? linkFor(r.short_id, b64(opened.key)) : null, expires_at: r.expires_at };
+    })));
     return {
-      text: shares.map(x => `- ${x.name} — ${x.url} (id ${x.id}, expires ${x.expires_at})`).join('\n'),
+      text: shares.map(x => `- ${x.name} — ${x.url || 'its link is in the app'} (id ${x.id}, expires ${x.expires_at})`).join('\n'),
       data: { shares },
     };
   }

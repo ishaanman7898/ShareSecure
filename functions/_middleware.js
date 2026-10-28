@@ -15,6 +15,11 @@ const PAGE_CSP = [
   "frame-ancestors 'none'",
 ].join('; ');
 
+// Links to a ShareSecure on someone's own computer (/l/…) load the file from
+// ShareSecure's relay (relay/, functions/l/[[path]].js).
+const RELAY = 'https://sharesecure-relay.ishman.workers.dev';
+const COMPUTER_CSP = PAGE_CSP.replace("connect-src 'self'", `connect-src 'self' ${RELAY}`);
+
 export async function onRequest(context) {
   const response = await context.next();
   const h = new Headers(response.headers);
@@ -24,7 +29,7 @@ export async function onRequest(context) {
   // private, so browsers keep them: fonts and icons for a week, scripts and
   // styles revalidated on every load so a deploy is picked up at once.
   const path = new URL(context.request.url).pathname;
-  const isOwnAsset = !path.startsWith('/api/') && !path.startsWith('/r/');
+  const isOwnAsset = !path.startsWith('/api/') && !path.startsWith('/r/') && !path.startsWith('/l/');
   if (isOwnAsset && /\.(woff2|png|ico|svg)$/.test(path)) {
     h.set('Cache-Control', 'public, max-age=604800');
   } else if (isOwnAsset && /\.(js|css)$/.test(path)) {
@@ -52,7 +57,7 @@ export async function onRequest(context) {
   // Everything that isn't a page keeps just the framing rule, so a PDF opened
   // straight from the API still shows in the browser's own viewer.
   const isPage = (response.headers.get('Content-Type') || '').includes('text/html');
-  h.set('Content-Security-Policy', isPage ? PAGE_CSP : "frame-ancestors 'none'");
+  h.set('Content-Security-Policy', isPage ? (path.startsWith('/l/') ? COMPUTER_CSP : PAGE_CSP) : "frame-ancestors 'none'");
 
   // strip server identity — remove all fingerprinting headers
   h.delete('Server');

@@ -119,8 +119,9 @@ export async function unlock(key, box, label) {
 
 // ── files, padded so their size gives little away ────────────────────────────
 // Inside the box: [4-byte length][the file][zeros], rounded up to the next
-// standard size (1 KB, 2 KB, 4 KB … 8 MB, then 10 MB). The server only learns
-// which size bucket a file falls in.
+// standard size (1 KB, 2 KB, 4 KB … 8 MB, then 10 MB, then every 10 MB for the
+// bigger files a ShareSecure on your own computer takes). The server only
+// learns which size bucket a file falls in.
 
 export const MAX_FILE = 10 * 1024 * 1024;
 export const MAX_SEALED_FILE = MAX_FILE + 4 + BOX_OVERHEAD;
@@ -128,11 +129,13 @@ export const MAX_SEALED_FILE = MAX_FILE + 4 + BOX_OVERHEAD;
 export function paddedSize(length) {
   const need = length + 4;
   for (let size = 1024; size <= 8 * 1024 * 1024; size *= 2) if (need <= size) return size;
-  return MAX_FILE + 4;
+  if (need <= MAX_FILE + 4) return MAX_FILE + 4;
+  return Math.ceil(need / MAX_FILE) * MAX_FILE;
 }
 
-export async function lockFile(key, bytes) {
-  if (bytes.length > MAX_FILE) throw new Error('File too large');
+// max: the website takes 10 MB; your own computer's ShareSecure, more
+export async function lockFile(key, bytes, max = MAX_FILE) {
+  if (bytes.length > max) throw new Error('File too large');
   const padded = new Uint8Array(paddedSize(bytes.length));
   new DataView(padded.buffer).setUint32(0, bytes.length);
   padded.set(bytes, 4);

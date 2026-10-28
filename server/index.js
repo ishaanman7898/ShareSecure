@@ -21,7 +21,6 @@ if (!fs.existsSync(envPath)) {
     content += `\nENCRYPTION_KEY=${key}\n`;
   }
 
-  // the public tunnel's name is picked once and kept in settings.json (see startTunnel)
   fs.writeFileSync(envPath, content);
   console.log('✅ Generated secure ENCRYPTION_KEY');
   console.log('Setup complete. Starting server...\n');
@@ -138,7 +137,7 @@ app.use('/connect', require('./mcp').connectRouter);
 // so the frontend uses its presence to detect self-hosted mode.
 app.get('/api/mode', (req, res) => {
   const setupRequired = db.prepare("SELECT COUNT(*) AS n FROM users WHERE access_code LIKE 'scrypt$%'").get().n === 0;
-  // the public https address links are made with (the tunnel, or your domain), so
+  // the public https address links are made with (the relay, or your domain), so
   // the app never hands out a localhost link it can't be opened from elsewhere
   const publicUrl = /^https:\/\//.test(process.env.BASE_URL || '') ? process.env.BASE_URL.replace(/\/$/, '') : null;
   res.json({ selfHostMode: true, setupRequired, setupCodeNeeded: setupRequired && !fromThisComputer(req), version: updater.status().current, publicUrl, maxUpload: MAX_UPLOAD });
@@ -235,155 +234,17 @@ purgeOrphans();
 sweep();
 setInterval(sweep, 30 * 1000);
 
-// ── public tunnel ─────────────────────────────────────────────────────────────
-// The public link (and the AI connector URL built from it) has to stay the same
-// across restarts and dropped connections, or everything shared or connected
-// before stops working. So the tunnel always asks for the same name: the one in
-// TUNNEL_SUBDOMAIN, or else a random one picked on first run and kept in
-// settings. When the connection drops it comes back with the same name.
-const TUNNEL_MAX_WAIT = 30 * 1000;
-const TUNNEL_CHECK_EVERY = 2 * 60 * 1000;
-let tunnel = null;         // the open connection
-let tunnelHasName = false; // whether it got the name it asked for
-let tunnelRetry = null;
-let tunnelWait = 1000;
-let nameTries = 0;
-let failedChecks = 0;
-let lastTunnelUrl = null;
-let checking = false;
-
-// the names the localtunnel relay accepts; it answers anything else with a 403,
-// which localtunnel retries forever without a word
-const TUNNEL_NAME = /^(?:[a-z0-9][a-z0-9-]{4,63}[a-z0-9]|[a-z0-9]{4,63})$/;
-let warnedBadName = false;
-
-function tunnelSubdomain() {
-  const fromEnv = String(process.env.TUNNEL_SUBDOMAIN || '').trim().toLowerCase();
-  if (fromEnv && TUNNEL_NAME.test(fromEnv)) return fromEnv;
-  if (fromEnv && !warnedBadName) {
-    warnedBadName = true;
-    console.warn(`  [tunnel] TUNNEL_SUBDOMAIN "${fromEnv}" can't be used: use lowercase letters, numbers and dashes, not starting or ending with a dash (4 to 63 characters, or at least 6 with a dash). Using the saved name instead.`);
-  }
-  const settings = require('./settings');
-  let name = settings.get('tunnelSubdomain');
-  if (!TUNNEL_NAME.test(name || '')) {
-    const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    name = 'sharesecure-' + Array.from(crypto.randomBytes(10), b => abc[b % abc.length]).join('');
-    settings.set('tunnelSubdomain', name);
-  }
-  return name;
-}
-
-const openTunnel = subdomain => require('localtunnel')({ port: PORT, subdomain });
-const nameOf = t => new URL(t.url).hostname.split('.')[0];
-
-// Close a connection without it counting as a drop. Only our own listeners
-// come off: localtunnel's own 'close' listeners are what shut its sockets to the
-// relay, and without them a closed tunnel keeps holding its name.
-function closeQuietly(t) {
-  if (!t) return;
-  if (t.ssOnError) t.off('error', t.ssOnError);
-  if (t.ssOnClose) t.off('close', t.ssOnClose);
-  t.on('error', () => {});
-  try { t.close(); } catch {}
-}
-
-// Try again later, waiting twice as long each time, up to 30 seconds.
-function retryTunnel(why) {
-  closeQuietly(tunnel);
-  tunnel = null;
-  if (tunnelRetry) return;
-  if (why) console.warn(`  [tunnel] ${why}. Reconnecting in ${Math.round(tunnelWait / 1000)}s…`);
-  tunnelRetry = setTimeout(() => { tunnelRetry = null; startTunnel(); }, tunnelWait);
-  tunnelRetry.unref?.();
-  tunnelWait = Math.min(tunnelWait * 2, TUNNEL_MAX_WAIT);
-}
-
-// Make t the public link, and point new links and the AI connector at it.
-function useTunnel(t, hasName) {
-  const old = tunnel;
-  tunnel = t;
-  tunnelHasName = hasName;
-  closeQuietly(old);
-  tunnelWait = 1000;
-  failedChecks = 0;
-
-  const url = t.url.replace(/\/$/, '');
-  if (process.env.BASE_URL !== url) {
-    if (old || lastTunnelUrl) console.log(`  [tunnel] The public link is now ${url}.`);
-    process.env.BASE_URL = url;
-  }
-  lastTunnelUrl = url;
-  console.log(`  Public Link  →  ${url}`);
-  console.log(`  (Share this public link with anyone on different devices)`);
-  if (!hasName) console.warn(`  [tunnel] Got ${url} instead of https://${tunnelSubdomain()}.loca.lt. Will keep trying for the usual one.`);
-
-  t.ssOnError = err => { if (tunnel === t) retryTunnel(`Connection lost (${err.message})`); };
-  t.ssOnClose = () => { if (tunnel === t) retryTunnel('Connection closed'); };
-  t.on('error', t.ssOnError);
-  t.on('close', t.ssOnClose);
-}
-
-async function startTunnel() {
-  const want = tunnelSubdomain();
-  let t;
-  try {
-    t = await openTunnel(want);
-  } catch (err) {
-    return retryTunnel(`Couldn’t open the public link (${err.message})`);
-  }
-  // A dropped connection can hold the name for a little while. Wait for it
-  // rather than take a random one; after a few tries, use what we got.
-  const hasName = nameOf(t) === want;
-  if (!hasName && nameTries < 4) {
-    nameTries++;
-    closeQuietly(t);
-    return retryTunnel(`${want} is still in use`);
-  }
-  nameTries = 0;
-  useTunnel(t, hasName);
-}
-
-// The tunnel can die without telling us (the relay forgot us), and then every
-// request to the public link gets a 503. Check it now and then from outside,
-// and win the usual name back if we had to take another one.
-async function checkTunnel() {
-  if (!tunnel || checking) return;
-  checking = true;
-  try { await checkTunnelOnce(); } finally { checking = false; }
-}
-
-async function checkTunnelOnce() {
-  if (!tunnelHasName) {
-    const want = tunnelSubdomain();
-    try {
-      const t = await openTunnel(want);
-      if (nameOf(t) === want && tunnel) return useTunnel(t, true);
-      closeQuietly(t);
-    } catch { /* keep the one we have */ }
-  }
-  if (!tunnel) return; // dropped meanwhile; retryTunnel is already on it
-  let ok = false;
-  try {
-    const res = await fetch(`${tunnel.url.replace(/\/$/, '')}/api/mode`, {
-      headers: { 'bypass-tunnel-reminder': '1', 'User-Agent': 'ShareSecure' },
-      signal: AbortSignal.timeout(15000),
-    });
-    ok = res.ok;
-    await res.body?.cancel().catch(() => {});
-  } catch { /* offline or timed out */ }
-  failedChecks = ok ? 0 : failedChecks + 1;
-  if (failedChecks >= 2 && tunnel) retryTunnel('The public link stopped answering');
-}
-
 // ── start ─────────────────────────────────────────────────────────────────────
-if (process.env.USE_LOCAL_TUNNEL !== 'false') setInterval(checkTunnel, TUNNEL_CHECK_EVERY).unref();
+// Links reach this computer through ShareSecure's relay (relay.js), unless
+// it's turned off (you have your own domain in BASE_URL). USE_LOCAL_TUNNEL is
+// its old name, from when that was localtunnel.
+const useRelay = process.env.USE_RELAY !== 'false' && process.env.USE_LOCAL_TUNNEL !== 'false';
 
 app.listen(PORT, async () => {
   const { DATA_DIR, DB_PATH } = require('./db');
   console.log(`\n  ShareSecure  →  http://localhost:${PORT}`);
   
-  if (process.env.USE_LOCAL_TUNNEL !== 'false') startTunnel();
+  if (useRelay) require('./relay').start(PORT);
 
   updater.start();
 

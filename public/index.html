@@ -429,8 +429,8 @@
               <li>Leave <strong>Advanced → Transport</strong> on <strong>Streamable HTTP</strong>, and add the connector.</li>
               <li>In a chat, make sure ShareSecure is turned on in the tools menu, then ask Claude to share or send something. It does it for you.</li>
             </ol>
-            <p class="field-hint mcp-tunnel-warn hidden">This URL has your token in it, and it goes through the free public tunnel (loca.lt), so the tunnel can see it. Anyone with it can share and send files as you. Keep it private, and use <strong>Replace token</strong> if it gets out.</p>
-            <p class="field-hint mcp-no-public hidden">Apps like Claude need a public https address. Turn on the public link (<code>USE_LOCAL_TUNNEL</code>) or set <code>BASE_URL</code> to your domain, then create the token again.</p>
+            <p class="field-hint mcp-tunnel-warn hidden">This URL has your token in it, and the assistant’s app reaches this computer through ShareSecure’s relay, which passes what it sends along as it is (shares it makes are locked before their links go out). Anyone with the URL can share and send files as you. Keep it private, and use <strong>Replace token</strong> if it gets out.</p>
+            <p class="field-hint mcp-no-public hidden">Apps like Claude need a public https address. Turn on the relay (<code>USE_RELAY</code>) or set <code>BASE_URL</code> to your domain, then create the token again.</p>
           </div>
 
           <div class="mcp-panel hidden" data-panel="chatgpt" role="tabpanel">

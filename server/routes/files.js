@@ -49,39 +49,71 @@ const upload = multer({
   limits: { fileSize: MAX_BYTES },
 });
 
+// The browser modules that lock files end to end (public/sealed.js).
+let sealed;
+const sealedReady = import('../../public/sealed.js').then(m => { sealed = m; });
+
 // Validate, strip metadata, compress, encrypt and store an uploaded file.
 // Used for the owner's uploads and for files people send to the owner
 // (`incoming`), which are stored inactive until the owner accepts them.
-async function storeFile(file, body, { incoming = false, note = null } = {}) {
+//
+// Shares are locked end to end, so the relay that carries their links only
+// ever sees locked bytes (relay.js):
+//   - the app locks them in the browser (body.e2e = '1', body.meta), and the
+//     key stays in the link;
+//   - `seal` locks one here (an assistant's share), keeping its key encrypted
+//     with the share (local_key) so this computer can list and send it.
+// → { shortId, deleteToken, expires_at, paddedSize, displayName, linkKey? }
+async function storeFile(file, body, { incoming = false, note = null, seal = false } = {}) {
   await typesReady;
-  const mimeType = types.detectType(file.buffer, file.originalname, file.mimetype);   // never the client's claim
-  if (!mimeType || mimeType === types.NOT_UTF8) return { error: mimeType ? types.ENCODING_ERROR : types.TYPES_ERROR, status: 415 };
+  await sealedReady;
+  const lockedInBrowser = !incoming && body.e2e === '1';
+  const encKey = getEncKey();
 
   const rawHours = parseFloat(body.expires_hours) || 1;
   const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
   const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
-
   const allow_annotations = body.allow_annotations === '1' ? 1 : 0;
-  // a file the viewer can't show can always be saved, or it's no use at all
-  const allow_download    = body.allow_download === '1' || !types.canView(mimeType) ? 1 : 0;
-  const displayName = types.nameFor(body.display_name, file.originalname, mimeType);
+  const view = { watermark: body.watermark === '1', discourage: body.discourage === '1' };
+
+  let mimeType, displayName, allow_download, rawBuffer, meta = null, linkKey = null;
+  if (lockedInBrowser) {
+    // already a locked box: nothing here can (or needs to) look inside
+    if (!sealed.isSealed(body.meta) || String(body.meta).length > 4096) return { error: 'A locked file needs its locked name.', status: 400 };
+    if (body.passcode_salt && !/^[A-Za-z0-9_-]{16,64}$/.test(String(body.passcode_salt))) return { error: 'Bad passcode salt.', status: 400 };
+    mimeType = 'application/octet-stream';
+    displayName = null;
+    meta = String(body.meta);
+    allow_download = body.allow_download === '1' ? 1 : 0;
+    rawBuffer = file.buffer;
+  } else {
+    mimeType = types.detectType(file.buffer, file.originalname, file.mimetype);   // never the client's claim
+    if (!mimeType || mimeType === types.NOT_UTF8) return { error: mimeType ? types.ENCODING_ERROR : types.TYPES_ERROR, status: 415 };
+    // a file the viewer can't show can always be saved, or it's no use at all
+    allow_download = body.allow_download === '1' || !types.canView(mimeType) ? 1 : 0;
+    displayName = types.nameFor(body.display_name, file.originalname, mimeType);
+    // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
+    // (text has none to strip)
+    rawBuffer = file.buffer;
+    // Word, Excel and PowerPoint files all keep it in docProps/
+    if ([types.DOCX, types.XLSX, types.PPTX].includes(mimeType)) rawBuffer = stripDocxMetadata(rawBuffer);
+    if (mimeType === 'application/pdf') rawBuffer = stripPdfMetadata(rawBuffer);
+    if (seal) {
+      linkKey = sealed.newFileKey();
+      meta = await sealed.lockMeta(linkKey, { name: displayName, type: mimeType, ...view });
+      rawBuffer = Buffer.from(await sealed.lockFile(linkKey, new Uint8Array(rawBuffer), MAX_BYTES));
+    }
+  }
+  const e2e = Boolean(meta);
 
   const shortId     = generateId(LINK_ID_LENGTH);
   const deleteToken = generateId(24);
-
-  // ── strip in-file metadata (author, creator, timestamps, XMP) ────────────
-  // (text has none to strip)
-  let rawBuffer = file.buffer;
-  // Word, Excel and PowerPoint files all keep it in docProps/
-  if ([types.DOCX, types.XLSX, types.PPTX].includes(mimeType)) rawBuffer = stripDocxMetadata(rawBuffer);
-  if (mimeType === 'application/pdf') rawBuffer = stripPdfMetadata(rawBuffer);
 
   // HMAC-SHA256 integrity hash (keyed — not searchable in public hash databases)
   const integrity_hash = hmacHex(rawBuffer);
 
   // compress then optionally encrypt with per-file key wrapping
   let processed = compress(rawBuffer);
-  const encKey = getEncKey();
   const isEncrypted = encKey ? 1 : 0;
   let wrappedKey = null;
   if (encKey) {
@@ -95,17 +127,17 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
 
   // privacy: quantize upload time to hour boundary; pad size to 100 KB boundary
   const uploaded_at = quantizeToHour();
-  const paddedSize  = padSize(file.size);
+  const paddedSize  = padSize(rawBuffer.length);
 
   db.prepare(`
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, uploaded_at, expires_at, delete_token,
       wrapped_key, cluster_id, allow_annotations, allow_download,
-      is_active, inbox_status, inbox_note, view_opts
-    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_active, inbox_status, inbox_note, view_opts, e2e, passcode_salt, local_key
+    ) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    shortId, encryptString(displayName, encKey), encryptString(mimeType, encKey), paddedSize, storedFilename,
+    shortId, encryptString(e2e ? meta : displayName, encKey), encryptString(mimeType, encKey), paddedSize, storedFilename,
     integrity_hash, isEncrypted, uploaded_at, expires_at, deleteToken,
     wrappedKey,
     shortId, // cluster_id = shortId (own random cluster, not shared with reshares)
@@ -113,12 +145,41 @@ async function storeFile(file, body, { incoming = false, note = null } = {}) {
     incoming ? 0 : 1,
     incoming ? 'pending' : null,
     note ? encryptString(note, encKey) : null,
-    !incoming && (body.watermark === '1' || body.discourage === '1')
-      ? encryptString(JSON.stringify({ watermark: body.watermark === '1', discourage: body.discourage === '1' }), encKey) : null
+    // locked shares carry these in their locked name instead
+    !incoming && !e2e && (view.watermark || view.discourage) ? encryptString(JSON.stringify(view), encKey) : null,
+    e2e ? 1 : 0,
+    lockedInBrowser && body.passcode_salt ? String(body.passcode_salt) : null,
+    linkKey ? encryptString(sealed.toB64url(linkKey), encKey) : null
   );
 
-  return { shortId, deleteToken, expires_at, paddedSize, displayName };
+  return { shortId, deleteToken, expires_at, paddedSize, displayName, linkKey };
 }
+
+// A share's name, type and key, for this computer's own lists and sends.
+// Locked ones open with the key kept for them (local_key), or one the caller
+// has (the browser that made it). → { name, type, key } or null
+async function openShare(file, keyB64 = null) {
+  await sealedReady;
+  const encKey = getEncKey();
+  const stored = decryptString(file.original_filename, encKey);
+  if (!file.e2e) return { name: stored, type: decryptString(file.mime_type, encKey), key: null };
+  const b64 = keyB64 || (file.local_key ? decryptString(file.local_key, encKey) : null);
+  if (!b64) return null;
+  try {
+    const key = sealed.fromB64url(b64);
+    return { ...(await sealed.unlockMeta(key, stored)), key };
+  } catch { return null; }
+}
+
+// Came through the relay (relay.js): only shares locked end to end are
+// answered, so nothing readable ever passes through it.
+const viaRelay = req => req.headers['x-sharesecure-relay'] === '1';
+router.use(['/info/:shortId', '/raw/:shortId', '/download/:shortId', '/reshare/:shortId', '/annotations/:shortId', '/delete/:shortId'], (req, res, next) => {
+  if (!viaRelay(req)) return next();
+  const file = db.prepare('SELECT e2e FROM files WHERE short_id = ?').get(req.params.shortId);
+  if (!file?.e2e) return res.status(404).json({ error: 'File not found' });
+  next();
+});
 
 // ── POST /api/upload ──────────────────────────────────────────────────────────
 // Only the signed-in owner can upload to a self-hosted instance, so there is
@@ -145,7 +206,7 @@ router.get('/info/:shortId', (req, res) => {
   const file = db.prepare(`
     SELECT short_id, original_filename, mime_type, size_bytes,
            expires_at, download_count, integrity_hash,
-           allow_annotations, allow_download, cluster_id, parent_short_id, view_opts
+           allow_annotations, allow_download, cluster_id, parent_short_id, view_opts, e2e, passcode_salt
     FROM files WHERE short_id = ? AND is_active = 1
   `).get(req.params.shortId);
 
@@ -156,9 +217,12 @@ router.get('/info/:shortId', (req, res) => {
   const mimeType = decryptString(file.mime_type, encKey);
 
   res.json({
+    // a locked share's name is still locked: the viewer opens it with the key
     filename,
     size: file.size_bytes,
-    mimeType,
+    mimeType: file.e2e ? null : mimeType,
+    e2e: Boolean(file.e2e),
+    passcodeSalt: file.passcode_salt || null,
     expiresAt: file.expires_at,
     views: file.download_count,
     integrityHash: file.integrity_hash,
@@ -197,7 +261,11 @@ function pipeFile(res, file, disposition) {
 
   const mimeType = decryptString(file.mime_type, encKey);
   const isText = isTextMime(mimeType);
-  if (disposition === 'attachment') {
+  if (disposition === 'attachment' && file.e2e) {
+    // locked: the browser opens it and names it
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="sealed.bin"');
+  } else if (disposition === 'attachment') {
     // download: reveal original mime + filename (owner-only action).
     // Only the types we accept are named; anything else goes out as plain bytes.
     const filename = decryptString(file.original_filename, encKey);
@@ -299,13 +367,15 @@ router.post('/reshare/:shortId', (req, res) => {
     INSERT INTO files (
       short_id, original_filename, mime_type, size_bytes, stored_filename,
       integrity_hash, compressed, encrypted, expires_at, delete_token,
-      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download, wrapped_key, view_opts
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      cluster_id, parent_short_id, uploaded_at, allow_annotations, allow_download, wrapped_key, view_opts,
+      e2e, passcode_salt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     newShortId, file.original_filename, file.mime_type, file.size_bytes, file.stored_filename,
     newIntegrity, file.compressed, file.encrypted, file.expires_at, newDeleteToken,
     file.cluster_id || file.short_id, file.short_id, reshareUploadAt,
-    file.allow_annotations, file.allow_download, file.wrapped_key || null, file.view_opts || null
+    file.allow_annotations, file.allow_download, file.wrapped_key || null, file.view_opts || null,
+    file.e2e || 0, file.passcode_salt || null
   );
 
   res.json({
@@ -411,5 +481,6 @@ router.post('/annotations/:shortId', (req, res) => {
 
 module.exports = router;
 module.exports.storeFile = storeFile;
+module.exports.openShare = openShare;
 module.exports.upload = upload;
 module.exports.MAX_BYTES = MAX_BYTES;
