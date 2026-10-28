@@ -29,115 +29,160 @@
     <header>
       <h1 class="page-title">Privacy policy</h1>
       <div class="page-meta">
-        <span>Last updated October 4, 2026</span>
+        <span>Last updated October 27, 2026</span>
+        <span>· <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/privacy.html" target="_blank" rel="noopener noreferrer">Every change, on GitHub</a></span>
       </div>
     </header>
 
     <div class="summary">
       <h2>The short version</h2>
       <ul>
-        <li>We only ask for a username and password. No email, no real name.</li>
-        <li>Files, their names and notes are stored encrypted, and erased after they expire.</li>
-        <li>No analytics, no ads, no tracking cookies. We don't log IP addresses.</li>
-        <li>Your public key goes in a public log so nobody can swap it. Someone who guesses your username can see it has an account.</li>
-        <li>The companies that host the site can see your IP address, like any website host.</li>
+        <li>We ask for a username and password. No email, no phone number, no real name.</li>
+        <li>Files are end-to-end encrypted by default: we store them, but we can't read them, their names or their notes.</li>
+        <li>Shares go up with anonymous tokens, so we can't tell which account shared what.</li>
+        <li>No analytics, no ads, no tracking cookies. Our code doesn't log IP addresses.</li>
+        <li>Everything is erased when it expires, and you can delete your account and files at any time.</li>
+        <li>If you pay for Pro, the payment company handles your card and email. We never see them.</li>
       </ul>
     </div>
 
-    <p class="muted" style="margin-bottom: 40px;">This covers the ShareSecure website at sharesecure-du8.pages.dev. The desktop app and other copies people run themselves work differently; see section 7.</p>
+    <p class="muted">This policy covers the ShareSecure website at sharesecure-du8.pages.dev and the desktop app when it's signed in to a ShareSecure account. A copy of ShareSecure you run yourself (the desktop app's “this computer” mode, or a self-hosted server) keeps your data on your own machine; <a href="#self-hosted">section 9</a> covers what still reaches the internet. ShareSecure's code is open source, so you can check everything here against <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">what it actually does</a>.</p>
+
+    <nav class="toc" aria-label="Contents">
+      <ol>
+        <li><a href="#collect">What we store</a></li>
+        <li><a href="#not-collected">What we don't collect</a></li>
+        <li><a href="#use">How we use it</a></li>
+        <li><a href="#others">Services that handle your data</a></li>
+        <li><a href="#retention">How long we keep it</a></li>
+        <li><a href="#browser">What stays in your browser</a></li>
+        <li><a href="#security">How your files are protected</a></li>
+        <li><a href="#rights">Your rights and choices</a></li>
+        <li><a href="#self-hosted">The desktop app and self-hosted copies</a></li>
+        <li><a href="#children">Children</a></li>
+        <li><a href="#faq">Questions people ask</a></li>
+        <li><a href="#changes">Changes to this policy</a></li>
+      </ol>
+    </nav>
 
     <section id="collect">
       <h2>1. What we store</h2>
       <h3>Your account</h3>
-      <p>Your username, what's needed to check your password without ever having it (never the password itself), and when you signed up. Your public key, and your private key locked with a key only your browser has. If you connect an AI assistant, we also keep a hash of its token, and your rule for what it may send.</p>
+      <p>Your username, what's needed to check your password without ever having it (never the password itself), and when you signed up. Your public key, and your private key locked with a key only your browser has. If you connect an AI assistant, a hash of its token and your rule for what it may send.</p>
       <h3>The public key log</h3>
-      <p>Your public key is also added to a public, append-only log, so nobody (us included) can quietly swap it. Each entry names the account by a hash of its username, not the username itself, but someone who guesses a username can hash it and see that it has an account. The log can't be edited, so entries stay after you delete your account; the log then records that the account was deleted.</p>
+      <p>Your public key is added to a public, append-only log, so nobody (us included) can quietly swap it. Entries name an account by a hash of its username, but someone who guesses a username can hash it and see that the account exists. The log can't be edited, so an entry stays after you delete your account; the log then records the deletion.</p>
       <h3>Files you share</h3>
-      <p>The file, its name and its type, all encrypted with AES-256-GCM. Alongside them we keep the file's size, when it was uploaded, when it expires, and how many times it's been opened. Notes and drawings people add to a file are encrypted too. Links reshared from yours point at the same encrypted file rather than making another copy. Which link a reshare came from is stored only as a keyed code and an encrypted pointer, so the database alone can’t show who shared with whom.</p>
+      <p>The file, its name and its type, encrypted. Alongside them: the file's size (padded to a standard size for end-to-end files), when it was uploaded and expires, how many times it's been opened, and the settings you chose (view only, works once, passcode needed, and so on). Notes and drawings are encrypted too. Links reshared from yours point at the same encrypted file; which link a reshare came from is stored only as a keyed code, so the database alone can't show who shared with whom.</p>
+      <p>If you turn on a watermark or “discourage screenshots” for a share, that setting is sealed inside the file's encrypted name, so we can't see or change it. The watermark itself is drawn in the viewer's browser; we never learn who looked at a file.</p>
       <h3>Who uploaded what</h3>
-      <p>End-to-end encrypted files you share or send from the website, the desktop app or the assistant on your own computer go up with anonymous tokens, so nothing ties them to your account. Files shared another way (end-to-end encryption off, or by an assistant connected through our servers) are tagged with a code derived from your account using a secret key, not your username or account number. The one-time upload link an assistant may get is erased once it's used, or after 30 minutes.</p>
-      <p>So you can see your shares on your other devices, your browser keeps a list of them on our servers, sealed to your own key. We can't read it.</p>
+      <p>End-to-end encrypted files shared from the website, the desktop app or the assistant on your own computer go up with anonymous tokens, so nothing ties them to your account. Files shared another way (end-to-end encryption off, or by an assistant connected through our servers) are tagged with a code derived from your account with a secret key, not your username or account number. Your list of shares (“Your shares”) is kept on our servers sealed to your own key, so it follows you between devices and we can't read it.</p>
       <h3>Daily limits</h3>
-      <p>To enforce the daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code, not your username), and the files tagged to your account in the last 24 hours. Spent tokens are remembered for two days, so none can be used twice.</p>
-      <h3>Files sent to you</h3>
-      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, we keep a code derived from the sender's account using a secret key (not their username or account number): on the copy until you accept it, and in a log of sends that's erased after 24 hours. Until then, the server can link that copy to the account that sent it.</p>
-      <h3>File requests</h3>
-      <p>When you make a link for someone to send you a file, we store it under your account with what you asked for sealed so we can't read it, how many files it takes, and when it expires. Files sent through it arrive sealed to your key, like any end-to-end encrypted file.</p>
-      <h3>Sends waiting for your OK</h3>
-      <p>When an assistant sends a file to someone not on your list, the send waits, sealed to your own key, for up to a week. Your list of people is sealed the same way. We can't read either.</p>
+      <p>To enforce daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code) and the files tagged to an account in the last 24 hours. Spent tokens are remembered for two days so none can be used twice.</p>
+      <h3>Files sent to you, and file requests</h3>
+      <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, a keyed code standing in for the sender is kept on the copy until you accept it, and in a log erased after 24 hours. File requests you make are stored under your account with what you asked for sealed so we can't read it; files sent through them are sealed to your key.</p>
       <h3>Open receipts</h3>
-      <p>Only if the sender turns on “Tell me when it’s opened”. Each time the link is opened, we store a receipt sealed to a key only the sender has, and the minute it arrived. Inside it is a code that’s the same each time one device opens that one link, and different for every other link, so the sender can tell a new device from a repeat but nobody can follow a device from link to link. We can’t read the receipt, and we don’t store an IP address or browser details with it. People opening such a link are told receipts are on. Receipts are erased when the link would have expired.</p>
+      <p>Only if the sender turns on “Tell me when it's opened”. Each opening stores a receipt sealed to a key only the sender has, and the minute it arrived. Inside is a code that's the same each time one device opens that one link and different for every other link, so the sender can tell a new device from a repeat, but nobody can follow a device from link to link. We can't read receipts and keep no IP address or browser details with them. People opening such a link are told receipts are on.</p>
       <h3>Teams</h3>
-      <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team’s keys, sealed to each member so we can’t open them. Files sent through a team’s request links are sealed to the team’s key in the sender’s browser; we store them like any end-to-end encrypted file, marked as the team’s. We do know who is in which team.</p>
+      <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team's keys, sealed to each member so we can't open them. Files sent through a team's request links are sealed to the team's key in the sender's browser. We do know who is in which team.</p>
       <h3>Pro</h3>
-      <p>Lemon Squeezy takes the payment and handles your card and email; we never see them. We keep only that your account is on Pro, until when, and a keyed code standing in for the subscription, so renewals and cancellations reach your account. Pro gives your account more anonymous tokens a day, and those tokens look like anyone else’s, so being on Pro doesn’t tie any share to you.</p>
-      <h3>Links that work once</h3>
-      <p>After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
+      <p>Lemon Squeezy takes the payment and handles your card, name and email; we never see them, and it isn't told your ShareSecure username. We keep only that your account is on Pro, until when, and a keyed code standing in for the subscription so renewals and cancellations reach your account. Pro gives your account more anonymous tokens a day; those tokens look like anyone else's, so being on Pro doesn't tie any share to you.</p>
+      <h3>Assistants, sends waiting for approval, and links that work once</h3>
+      <p>When an assistant sends a file to someone not on your list, the send waits sealed to your own key for up to a week; your list of people is sealed the same way. After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
     </section>
 
     <section id="not-collected">
       <h2>2. What we don't collect</h2>
-      <p>No email address, phone number or real name. No analytics, advertising or tracking scripts, and no cookies. ShareSecure's own code doesn't record IP addresses.</p>
+      <p>No email address, phone number or real name. No analytics, advertising or tracking scripts, and no cookies. Our own code doesn't record IP addresses, browser details or who viewed a file. We don't sell, rent or share your data, and we never use files, or anything else on ShareSecure, to train AI.</p>
+    </section>
+
+    <section id="use">
+      <h2>3. How we use it</h2>
+      <p>Only to run ShareSecure: to store and serve your files until they expire, deliver what you send, enforce the limits, keep accounts secure, and give you the plan you paid for. We don't build profiles, and we don't look through files (we can't open end-to-end encrypted ones). We may act on a specific file or account if it's reported as breaking the <a href="/terms">terms</a> or the law requires it.</p>
     </section>
 
     <section id="others">
-      <h2>3. Services that handle your data</h2>
-      <ul>
-        <li><strong>Cloudflare</strong> hosts the site and handles every request. Like any web host it sees your IP address and basic request details, under <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">its privacy policy</a>.</li>
-        <li><strong>Turso</strong> stores the database, including the encrypted files.</li>
-        <li><strong>GitHub</strong> hosts the source code and desktop app downloads.</li>
-        <li><strong>Lemon Squeezy</strong>, only if you buy Pro, takes the payment as the seller of record, under <a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noopener noreferrer">its privacy policy</a>. It isn’t told your ShareSecure username.</li>
-        <li><strong>AI assistants you connect</strong>, like Claude or ChatGPT, see the links, file names and share details they handle for you, under their own privacy policies. If an assistant gives us a public link to a file, we download it from there to share it. The assistant on your own computer keeps links out of the chat.</li>
-      </ul>
-      <p>We don't sell or share your data with anyone else.</p>
+      <h2>4. Services that handle your data</h2>
+      <p>This is every company involved in running the website. When this list changes, this page changes with it.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Service</th><th>What it does</th><th>What it can see</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosts the site and runs its server code</td><td>Every request, including your IP address, like any web host. Encrypted files pass through it.</td></tr>
+            <tr><td><a href="https://turso.tech/privacy-policy" target="_blank" rel="noopener noreferrer">Turso</a></td><td>The database (in the United States)</td><td>Everything in section 1, as stored: encrypted files and the rest.</td></tr>
+            <tr><td><a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noopener noreferrer">Lemon Squeezy</a></td><td>Sells Pro, as the seller of record</td><td>Your payment details, name and email, only if you buy Pro. Not your username or files.</td></tr>
+            <tr><td><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub</a></td><td>Hosts the code and desktop app downloads</td><td>Downloads and update checks from the desktop app.</td></tr>
+            <tr><td>AI assistants you connect</td><td>Claude, ChatGPT and others, only if you connect them</td><td>The links, names and details they handle for you, under their own policies. The assistant on your own computer keeps links out of the chat.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section id="retention">
-      <h2>4. How long we keep it</h2>
+      <h2>5. How long we keep it</h2>
       <ul>
-        <li>A file's link stops working the moment it expires. The file and everything stored about it are erased the next time cleanup runs, which happens every time anyone uploads.</li>
-        <li>If you delete a file, or decline one sent to you, it's erased straight away. A Works once file is erased the moment it's opened.</li>
-        <li>File requests are erased when they expire (after at most 30 days) or when you close them.</li>
-        <li>Your account stays until you delete it. Deleting it from the account menu erases it and every file you've shared from it right away.</li>
+        <li>A file's link stops working the moment it expires (after 1 hour to 10 days, as you choose), and the file and everything stored about it are erased at the next cleanup, which runs whenever anyone uploads.</li>
+        <li>Deleting a file, or declining one sent to you, erases it straight away. A Works once file is erased when it's opened.</li>
+        <li>Open receipts go when the link would have expired. File requests go when they expire (30 days at most) or you close them.</li>
+        <li>A team's inbox and request links go when the team is deleted.</li>
+        <li>Your account stays until you delete it (Settings → Delete account), which erases it and every file shared from it right away. The key log keeps a record that the account existed (section 1).</li>
       </ul>
     </section>
 
     <section id="browser">
-      <h2>5. What's stored in your browser</h2>
-      <p>Your sign-in lasts until you close the browser. While you're signed in, your private key is kept in the browser in a form it can use but never read out, and it's deleted when you sign out. So you can find your shares again, the browser keeps a list of them, and the keys that let you delete them, for up to 30 days, along with the shares you deleted so they don't come back. It also keeps a few anonymous tokens, the public keys of people you've sent to, the last state of the key log it checked, that you accepted the terms, and whether notifications are on. All of this stays on your device, and you can clear it in your browser settings.</p>
+      <h2>6. What stays in your browser</h2>
+      <p>Your sign-in lasts until you close the browser. While you're signed in, your private key is kept in the browser in a form it can use but never read out, and it's deleted when you sign out. The browser also keeps: your list of shares and their delete keys (up to 30 days), a few anonymous tokens, the public keys of people you've sent to, the last state of the key log it checked, a random code used only to make open receipts, that you accepted the terms, and your Settings (notifications, the crosshair, what new shares start with). None of it leaves your device, and you can clear it in your browser's settings. If you install ShareSecure to your phone's home screen, things you share to it wait on the phone until you choose to share them.</p>
     </section>
 
     <section id="security">
-      <h2>6. How your files are protected</h2>
-      <p>By default, files are end-to-end encrypted: your browser encrypts the file, its name, any note and any drawings before they're uploaded, and the key is only in the link (after the <code>#</code>, the part browsers never send to a server). We store files we can't read. Files are padded to standard sizes, so we only know roughly how big they are. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it, and your account's private key is stored locked with a key only your browser has.</p>
-      <p>If you turn end-to-end encryption off, each file is encrypted on the server with its own key derived from a master key we hold. That protects files if the database is copied, but whoever controls the server could decrypt them while they exist. End-to-end encrypted files you share or send from the website use anonymous tokens, so we can't tell which account shared or sent them. (Files an assistant connected through our servers shares for you are tied to your account, so it can list and delete them.) We do see who a file was sent to, and when. If that matters, run ShareSecure yourself.</p>
-      <p>See the <a href="/security">security page</a> for how to report a problem.</p>
+      <h2>7. How your files are protected</h2>
+      <p>By default your browser encrypts the file, its name, any note and any drawings (AES-256-GCM) before they're uploaded, and the key lives only in the link after the <code>#</code>, which browsers never send to a server. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it.</p>
+      <p>If you turn end-to-end encryption off, the file is encrypted on the server with a key derived from a master key we hold, so whoever controls the server could read it while it exists. If that matters, keep end-to-end encryption on, or run ShareSecure yourself.</p>
+      <p>Watermarks and screenshot deterrents make leaks traceable and casual copying harder; they can't stop screenshots or a phone camera, and we don't claim they do. See the <a href="/security">security page</a> for the details and how to report a problem. If we ever learn of a breach affecting your data, we'll say so on the website and in the changelog as soon as we can.</p>
+    </section>
+
+    <section id="rights">
+      <h2>8. Your rights and choices</h2>
+      <ul>
+        <li><strong>See and delete your data.</strong> Your shares, inbox and requests are in the app; delete any of them, or your whole account, at any time.</li>
+        <li><strong>Turn things off.</strong> Disconnect AI assistants, turn off notifications and change what new shares start with in Settings.</li>
+        <li><strong>Ask us.</strong> To ask what we hold about you, or to exercise rights you have where you live (such as access, correction, deletion or objection under the GDPR or US state laws), email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> with your username. We'll answer within 30 days. Since we don't have your email address unless you write to us, we can't verify you any other way than by you proving you can sign in.</li>
+        <li><strong>Pro.</strong> Manage or cancel your subscription with Lemon Squeezy; their own policy covers your payment details.</li>
+      </ul>
     </section>
 
     <section id="self-hosted">
-      <h2>7. The desktop app and self-hosted copies</h2>
-      <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer, and we never receive any of it unless you link a ShareSecure account (see below). A few things still reach the internet:</p>
+      <h2>9. The desktop app and self-hosted copies</h2>
+      <p>When you run ShareSecure yourself, your account, files and encryption key stay on your own computer. We never receive any of it unless you link a ShareSecure account. A few things still reach the internet:</p>
       <ul>
-        <li>If you link a ShareSecure account to send files to usernames, the app signs in to that account with your username and password (the password isn't kept, only the sign-in token). Each file you send to a username is uploaded as an encrypted copy to ShareSecure's servers under that account. It expires when your share does, is deleted when you delete the share or unlink the account, and is covered by the rest of this policy.</li>
-        <li>To make share links work for other devices, the app uses a public relay (localtunnel at loca.lt). The relay can see traffic that passes through it. If you have your own domain, you can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting.</li>
+        <li>If you link a ShareSecure account to send files to usernames, each file you send is uploaded as an encrypted copy under that account, and this policy covers it.</li>
+        <li>To make links work for other devices, the app uses a public relay (localtunnel at loca.lt), which can see traffic passing through it. You can turn it off with the <code>USE_LOCAL_TUNNEL</code> setting if you have your own domain.</li>
         <li>The app checks GitHub for updates.</li>
       </ul>
-      <p>The self-hosted version also removes author and editing details from PDF and Word files when you upload them.</p>
-    </section>
-
-    <section id="choices">
-      <h2>8. Your choices</h2>
-      <p>You can delete any file you've shared at any time from Your shares, and delete your whole account from the account menu. You can also turn off AI assistant access there. To ask what we hold about you, email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> with your username.</p>
+      <p>The desktop app can hide windows showing view-only files from screenshots and screen recordings (Windows and macOS). That setting stays on your computer.</p>
     </section>
 
     <section id="children">
-      <h2>9. Children</h2>
-      <p>ShareSecure isn't meant for children under 13, and we don't knowingly let them use it.</p>
+      <h2>10. Children</h2>
+      <p>ShareSecure isn't meant for children under 13, and we don't knowingly let them use it. If you think a child has an account, email us and we'll delete it.</p>
+    </section>
+
+    <section id="faq">
+      <h2>11. Questions people ask</h2>
+      <h3>Can ShareSecure read my files?</h3>
+      <p>Not end-to-end encrypted ones, which is the default. The key never reaches us. We can read files you upload with end-to-end encryption turned off, while they exist.</p>
+      <h3>Does the person I send to learn who I am?</h3>
+      <p>A link doesn't say who made it. A file sent to a username arrives without the sender's name unless you write it in the note.</p>
+      <h3>Can someone screenshot my file?</h3>
+      <p>Yes, if they're determined. No website can fully stop it. The watermark makes a screenshot traceable to one opening of the link, and the desktop app can hide files from screen capture.</p>
+      <h3>Do you sell data or show ads?</h3>
+      <p>No. ShareSecure is paid for by people who choose Pro.</p>
+      <h3>Where can I see how this policy has changed?</h3>
+      <p>Every version of this page is in the project's history <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/privacy.html" target="_blank" rel="noopener noreferrer">on GitHub</a>.</p>
     </section>
 
     <section id="changes">
-      <h2>10. Changes</h2>
-      <p>If we change this policy, we'll update this page and the date at the top.</p>
+      <h2>12. Changes to this policy</h2>
+      <p>If we change this policy, we'll update this page and the date at the top, note it in the <a href="/changelog">changelog</a>, and the change will be visible line by line on GitHub. We won't use data we already hold in a new way without saying so here first.</p>
     </section>
 
   </main>

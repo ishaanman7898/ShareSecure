@@ -448,3 +448,11 @@ h2 .section-num {
 .legal .summary ul { gap: 4px; }
 .legal .muted { color: var(--text-muted); font-size: 0.92rem; }
 
+
+/* the services table in the privacy policy, scrolling sideways on a phone */
+.legal .table-wrap { overflow-x: auto; margin: 12px 0 4px; }
+.legal table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.legal th, .legal td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line, rgba(127,127,127,0.25)); }
+.legal th { font-weight: 600; white-space: nowrap; }
+.legal .toc { margin: 28px 0 40px; }
+.legal .page-meta a { color: inherit; }
