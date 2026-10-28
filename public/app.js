@@ -2839,16 +2839,18 @@ for (const pref of Object.keys(SHARE_DEFAULTS)) {
 }
 applyShareDefaults();
 
-// ── the crosshair ────────────────────────────────────────────────────────────
-// Only on this page (the home page), only with a mouse or trackpad, and it
-// turns off in Settings → Appearance.
+// ── corner brackets ──────────────────────────────────────────────────────────
+// Brackets that lock onto buttons, links and the rosette as the pointer moves
+// over them. Only on this page (the home page), only with a mouse or trackpad,
+// and they turn off in Settings → Appearance.
 const CROSSHAIR_KEY = 'crosshair';
 const crosshairWanted = () => { try { return localStorage.getItem(CROSSHAIR_KEY) !== 'off'; } catch { return true; } };
 let removeCrosshair = null;
 function syncCrosshair() {
   const on = crosshairWanted() && window.matchMedia?.('(pointer: fine)').matches && !document.body.classList.contains('in-settings');
   if (on && !removeCrosshair) {
-    removeCrosshair = mountCrosshair({ color: '#ffffff', blendMode: 'difference', opacity: 0.7, thickness: 1, smoothing: 0.35, targetEffect: 'lock', showCoordinates: true });
+    // just the corner brackets, in a soft grey: no lines and no ring on click
+    removeCrosshair = mountCrosshair({ lines: false, clickPulse: false, color: '#c4c4c4', blendMode: 'difference', opacity: 0.85, thickness: 1, smoothing: 0.35, targetEffect: 'lock', showCoordinates: true });
   } else if (!on && removeCrosshair) {
     removeCrosshair();
     removeCrosshair = null;

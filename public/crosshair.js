@@ -1,8 +1,8 @@
-// The crosshair that follows the pointer on the home page: two thin lines,
-// the pointer's position where they meet the edges, and corner brackets that
-// lock onto links and buttons. Purely decoration, drawn on a canvas that never
-// takes clicks; it sits still for people who prefer reduced motion and turns
-// off in Settings → Appearance.
+// Corner brackets that lock onto links, buttons and the home page's rosette
+// as the pointer moves over them (with lines: true, also the full crosshair: two
+// lines and the pointer's position at the edges). Purely decoration, drawn on
+// a canvas that never takes clicks; it sits still for people who prefer
+// reduced motion and turns off in Settings → Appearance.
 //
 // Ported to plain JavaScript from the Crosshair component in React Bits
 // (https://reactbits.dev, MIT License, © David Haz).
@@ -28,6 +28,7 @@ const toRgb = (ctx, color) => {
 // → a function that removes it again
 export function mountCrosshair({
   container = null,
+  lines = true,
   color = '#ffffff',
   thickness = 1,
   opacity = 0.85,
@@ -43,6 +44,7 @@ export function mountCrosshair({
   zIndex = 10000,
 } = {}) {
   const s = {
+    lines,
     color,
     thickness: clamp(thickness, 0.5, 8),
     opacity: clamp(opacity, 0, 1),
@@ -152,7 +154,7 @@ export function mountCrosshair({
   const draw = () => {
     ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
-    if (state.presence > 0.001) {
+    if (s.lines && state.presence > 0.001) {
       ctx.globalAlpha = state.presence * s.opacity * (1 - 0.6 * state.lock.alpha);
       ctx.lineWidth = s.thickness;
       ctx.lineCap = s.lineStyle === 'dotted' ? 'round' : 'butt';
