@@ -27,7 +27,7 @@ Upload almost any file (documents, spreadsheets, images, video, ZIPs), several f
 
 | | Where your files live | Links work | Limits |
 |---|---|---|---|
-| **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day (Pro: 100), 10 MB each |
+| **[Website](https://sharesecure-du8.pages.dev)** | ShareSecure's servers (Cloudflare + Turso), encrypted | Any time until they expire | 5 uploads a day, 10 MB each, all free |
 | **[Desktop app](https://github.com/ishaanman7898/ShareSecure/releases/latest)** | Only your computer | Until they expire, while the computer is on | 100 MB each (10 MB to send to usernames), no daily limit |
 | **[Self-hosted](#self-hosting)** (command line or Docker) | Only your machine or server | While the server is running | 100 MB each (10 MB to send to usernames), no daily limit |
 
@@ -54,7 +54,7 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Each person gets their own copy as a request to accept or decline, and isn't told who sent it.
 - **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
-- **Teams** (Pro, account menu → *Teams*): a shared inbox and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
+- **Teams** (beta, free, account menu → *Teams*; in the desktop app they open signed in with your linked account): a shared inbox members add files to, and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
 - **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
 - **From the desktop app**, sending and receiving use a ShareSecure account. The app makes one with your desktop username and password when you set it up or sign in (or links it, if the website already has that account with that password), so you never have to visit the website. Files sent to your username arrive in the app's inbox; once you accept one it's decrypted and kept on your computer, with the sender's settings. To use a different account, link it in **Settings → ShareSecure account**. Sending uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 
@@ -230,7 +230,7 @@ packages/     sharesecure-mcp, the local MCP server (npm)
 scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
 tests/        security tests for the website and self-hosted server, and the
               RFC test vectors they check against
-docs/         security and signing
+docs/         ARCHITECTURE.md (how it all fits together), security and signing
 db/           the database tables, for reference (the API creates them itself)
 ```
 
@@ -258,10 +258,8 @@ settings (as encrypted secrets, under Pages → Settings → Variables and Secre
 | `TOKEN_SECRET` | Signs sessions. Any long random string. |
 | `TAG_SECRET` | Optional. Keys the hashes that stand in for account ids; defaults to `TOKEN_SECRET`. |
 | `TOKEN_ISSUER_KEY` | Signs anonymous tokens (`npm run token-key`). Pin its id in `public/tokens.js`. |
-| `LEMONSQUEEZY_CHECKOUT_URL` | Optional. The Pro product's checkout link. Without it, Pro can't be bought. |
-| `LEMONSQUEEZY_WEBHOOK_SECRET` | Optional. Signing secret of a Lemon Squeezy webhook pointed at `/api/plan/webhook`, sending the `subscription_*` events. |
 
-To sell Pro: make a subscription product in Lemon Squeezy, set its confirmation redirect to `https://<site>/?plan=1`, add a webhook to `/api/plan/webhook` with the subscription events, and set the two settings above. Checkout carries a random claim code, never the username (see `functions/_plans.js`).
+Everything is free; there are no paid plans.
 
 ## License
 

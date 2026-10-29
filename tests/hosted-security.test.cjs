@@ -1325,61 +1325,9 @@ test('open receipts are gone: a receipt key sent with an upload is ignored and t
   await assert.rejects(load('api/receipts/[shortId].js'));
 });
 
-// ── plans and teams ─────────────────────────────────────────────────────────
-const planEnv = { ...env, LEMONSQUEEZY_WEBHOOK_SECRET: 'test-only-webhook-secret', LEMONSQUEEZY_CHECKOUT_URL: 'https://shop.invalid/buy/1' };
-const planCall = (pathParts, { user = null, method = 'GET', body, headers = {} } = {}) => load('api/plan/[[path]].js').then(m => m.onRequest({
-  env: planEnv, waitUntil: p => p.catch(() => {}), params: { path: pathParts },
-  request: new Request('https://sharesecure.test/api/plan/' + pathParts.join('/'), { method, headers: { ...(user ? { Authorization: 'Bearer ' + tokens[user] } : {}), ...headers }, ...(body === undefined ? {} : { body }) }),
-}));
-async function webhook(event, secret = planEnv.LEMONSQUEEZY_WEBHOOK_SECRET) {
-  const body = JSON.stringify(event);
-  const sig = require('node:crypto').createHmac('sha256', secret).update(body).digest('hex');
-  return planCall(['webhook'], { method: 'POST', body, headers: { 'X-Signature': sig, 'Content-Type': 'application/json' } });
-}
-const subEvent = (name, status, claim) => ({
-  meta: { event_name: name, custom_data: claim ? { claim } : undefined },
-  data: { id: '4242', attributes: { status, renews_at: new Date(Date.now() + 30 * 86400000).toISOString(), ends_at: null, user_email: 'payer@example.invalid' } },
-});
-const claimAs = (user, code) => planCall(['claim'], { user, method: 'POST', body: JSON.stringify({ code }), headers: { 'Content-Type': 'application/json' } });
-
-test('plans: a payment reaches the account only through its claim code, nothing about the payer is kept, and Pro gives more tokens', async () => {
-  const before = await (await planCall([], { user: 'alice' })).json();
-  assert.equal(before.plan.id, 'free');
-  assert.equal(before.checkoutUrl, 'https://shop.invalid/buy/1');
-
-  const code = sealed.toB64url(sealed.newFileKey());
-  // an unsigned or wrongly signed webhook does nothing
-  assert.equal((await webhook(subEvent('subscription_created', 'active', code), 'wrong-secret')).status, 401);
-  assert.equal((await claimAs('alice', code)).status, 202);
-
-  assert.equal((await webhook(subEvent('subscription_created', 'active', code))).status, 200);
-  // nothing that names the payer is stored, and the subscription id only as a keyed hash
-  const kept = JSON.stringify(db.prepare('SELECT * FROM plan_claims').all());
-  assert(!kept.includes('payer@') && !kept.includes('4242') && !kept.includes(code));
-
-  // someone without the code gets nothing; alice's browser hands hers in
-  assert.equal((await claimAs('mallory', sealed.toB64url(sealed.newFileKey()))).status, 202);
-  const claimed = await claimAs('alice', code);
-  assert.equal(claimed.status, 200);
-  assert.equal((await claimed.json()).plan.id, 'pro');
-  // a code works once
-  assert.equal((await claimAs('mallory', code)).status, 202);
-
-  // Pro means more tokens a day; the tokens are the same as anyone's
-  const tokensApi = await load('api/tokens.js');
-  const left = async user => (await (await tokensApi.onRequestGet(context('/api/tokens', { user, method: 'GET' }))).json()).left;
-  assert((await left('alice')).upload > 50);
-  assert((await left('mallory')).upload <= 5);
-
-  // renewals keep it; when the subscription expires, Pro ends
-  await webhook(subEvent('subscription_payment_success', 'active', code));
-  assert.equal((await (await planCall([], { user: 'alice' })).json()).plan.id, 'pro');
-  await webhook(subEvent('subscription_expired', 'expired', code));
-  assert.equal((await (await planCall([], { user: 'alice' })).json()).plan.id, 'free');
-  // the claim code isn't kept again once an account has it
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM plan_claims').get().n, 0);
-  // back on Pro for the team tests
-  db.prepare("UPDATE users SET plan = 'pro', plan_until = ? WHERE username = 'alice'").run(new Date(Date.now() + 30 * 86400000).toISOString());
+// ── teams ───────────────────────────────────────────────────────────────────
+test('everything is free: there are no paid plans to buy', async () => {
+  await assert.rejects(load('api/plan/[[path]].js'));
 });
 
 test('teams: only members open team files, branding is checked, admins decide, and removing someone shuts them out', async () => {
@@ -1394,8 +1342,9 @@ test('teams: only members open team files, branding is checked, admins decide, a
   const pkcs8 = sealed.toB64url(new Uint8Array(await crypto.subtle.exportKey('pkcs8', team.privateKey)));
   const ringFor = publicKey => sealed.sealText(publicKey, JSON.stringify({ keys: [pkcs8] }), 'team');
 
-  // teams need Pro, and the key has to arrive sealed
-  assert.equal((await call([], { user: 'bob', method: 'POST', body: { name: 'Bob and Co', public_key: team.publicKey, key_box: await ringFor(keyPairs.bob.publicKey) } })).status, 402);
+  // teams are free (bob is on Free), and the key has to arrive sealed
+  const bobs = await call([], { user: 'bob', method: 'POST', body: { name: 'Bob and Co', public_key: team.publicKey, key_box: await ringFor(keyPairs.bob.publicKey) } });
+  assert.equal(bobs.status, 200, await bobs.clone().text());
   assert.equal((await call([], { method: 'POST', body: { name: 'Acme', public_key: team.publicKey, key_box: pkcs8 } })).status, 400);
   // a logo has to really be a PNG or JPEG: SVG (which can carry script) is refused
   const svg = 'data:image/png;base64,' + Buffer.from('<svg onload="alert(1)"/>').toString('base64');
@@ -1408,8 +1357,32 @@ test('teams: only members open team files, branding is checked, admins decide, a
   assert.equal((await call([id, 'members'], { user: 'mallory', method: 'POST', body: { username: 'mallory', key_box: await ringFor(keyPairs.alice.publicKey) } })).status, 404);
   assert.equal((await call([id, 'members'], { method: 'POST', body: { username: 'bob', role: 'member', key_box: await ringFor(keyPairs.bob.publicKey) } })).status, 200);
   const bobsView = (await (await call([], { user: 'bob' })).json()).teams.find(t => t.id === id);
-  assert.equal(bobsView.role, 'member'); assert.equal(bobsView.paid, true);
+  assert.equal(bobsView.role, 'member');
   assert.deepEqual(JSON.parse(await sealed.openText(keyPairs.bob.privateKey, bobsView.key_box, 'team')).keys, [pkcs8]);
+  // any member can add a file for the team, sealed to the team's key; nobody else can
+  const addAs = (user, form) => teamsApi({
+    env, waitUntil: p => p.catch(() => {}), params: { path: [id, 'inbox'] },
+    request: new Request(`https://sharesecure.test/api/teams/${id}/inbox`, { method: 'POST', headers: { Authorization: 'Bearer ' + tokens[user] }, body: form }),
+  });
+  const teamFileKey = sealed.newFileKey();
+  const teamForm = async (sealedParts = true) => {
+    const form = new FormData();
+    form.set('file', new File([await sealed.lockFile(teamFileKey, new TextEncoder().encode('minutes'))], 'sealed.bin'));
+    form.set('meta', sealedParts ? await sealed.lockMeta(teamFileKey, { name: 'minutes.txt', type: 'text/plain' }) : 'minutes.txt');
+    form.set('inbox_key', await sealed.sealKey(team.publicKey, teamFileKey));
+    form.set('note', await sealed.lockText(teamFileKey, 'From @bob', 'note'));
+    return form;
+  };
+  assert.equal((await addAs('mallory', await teamForm())).status, 404);
+  assert.equal((await addAs('bob', await teamForm(false))).status, 400);
+  const added = await addAs('bob', await teamForm());
+  assert.equal(added.status, 200, await added.clone().text());
+  const addedId = (await added.clone().json()).id;
+  const inboxNow = (await (await call([id, 'inbox'])).json()).files;
+  const addedRow = inboxNow.find(f => f.short_id === addedId);
+  assert(addedRow && addedRow.via_request === null, 'a member’s file is in the team inbox');
+  assert.equal(await sealed.unlockText(await sealed.openKey(team.privateKey, addedRow.inbox_key), addedRow.note, 'note'), 'From @bob');
+
   // members can't change the team or remove people
   assert.equal((await call([id], { user: 'bob', method: 'PATCH', body: { name: 'Bobs' } })).status, 403);
   assert.equal((await call([id, 'members', 'alice'], { user: 'bob', method: 'DELETE' })).status, 403);
@@ -1432,8 +1405,9 @@ test('teams: only members open team files, branding is checked, admins decide, a
   const link = `https://sharesecure.test/q/${rid}#r=${sealed.toB64url(key)}&pk=${team.publicKey}`;
   assert.equal((await sendThroughRequest(link, 'Signed letter', 'letter.txt')).status, 200);
   const inbox = await (await call([id, 'inbox'], { user: 'bob' })).json();
-  assert.equal(inbox.files.length, 1);
-  const file = inbox.files[0];
+  // the file bob added, and the one sent through the link
+  assert.equal(inbox.files.length, 2);
+  const file = inbox.files.find(f => f.via_request === rid);
   const fileKey = await sealed.openKey(team.privateKey, file.inbox_key);
   assert.equal((await sealed.unlockMeta(fileKey, file.original_filename)).name, 'letter.txt');
   assert.equal((await call([id, 'inbox'], { user: 'mallory' })).status, 404);

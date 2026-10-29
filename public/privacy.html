@@ -42,7 +42,7 @@
         <li>Shares go up with anonymous tokens, so we can't tell which account shared what.</li>
         <li>No analytics, no ads, no tracking cookies. Our code doesn't log IP addresses.</li>
         <li>Everything is erased when it expires, and you can delete your account and files at any time.</li>
-        <li>If you pay for Pro, the payment company handles your card and email. We never see them.</li>
+        <li>ShareSecure is free. There's nothing to pay for, so we never ask for payment details.</li>
       </ul>
     </div>
 
@@ -80,10 +80,8 @@
       <p>To enforce daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code) and the files tagged to an account in the last 24 hours. Spent tokens are remembered for two days so none can be used twice.</p>
       <h3>Files sent to you, and file requests</h3>
       <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, a keyed code standing in for the sender is kept on the copy until you accept it, and in a log erased after 24 hours. File requests you make are stored under your account with what you asked for sealed so we can't read it; files sent through them are sealed to your key.</p>
-      <h3>Teams</h3>
+      <h3>Teams (beta)</h3>
       <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team's keys, sealed to each member so we can't open them. Files sent through a team's request links are sealed to the team's key in the sender's browser. We do know who is in which team.</p>
-      <h3>Pro</h3>
-      <p>Lemon Squeezy takes the payment and handles your card, name and email; we never see them, and it isn't told your ShareSecure username. We keep only that your account is on Pro, until when, and a keyed code standing in for the subscription so renewals and cancellations reach your account. Pro gives your account more anonymous tokens a day; those tokens look like anyone else's, so being on Pro doesn't tie any share to you.</p>
       <h3>Assistants, sends waiting for approval, and links that work once</h3>
       <p>When an assistant sends a file to someone not on your list, the send waits sealed to your own key for up to a week; your list of people is sealed the same way. After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
     </section>
@@ -95,7 +93,7 @@
 
     <section id="use">
       <h2>3. How we use it</h2>
-      <p>Only to run ShareSecure: to store and serve your files until they expire, deliver what you send, enforce the limits, keep accounts secure, and give you the plan you paid for. We don't build profiles, and we don't look through files (we can't open end-to-end encrypted ones). We may act on a specific file or account if it's reported as breaking the <a href="/terms">terms</a> or the law requires it.</p>
+      <p>Only to run ShareSecure: to store and serve your files until they expire, deliver what you send, enforce the limits, keep accounts secure. We don't build profiles, and we don't look through files (we can't open end-to-end encrypted ones). We may act on a specific file or account if it's reported as breaking the <a href="/terms">terms</a> or the law requires it.</p>
     </section>
 
     <section id="others">
@@ -107,7 +105,6 @@
           <tbody>
             <tr><td><a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosts the site and runs its server code</td><td>Every request, including your IP address, like any web host. Encrypted files pass through it.</td></tr>
             <tr><td><a href="https://turso.tech/privacy-policy" target="_blank" rel="noopener noreferrer">Turso</a></td><td>The database (in the United States)</td><td>Everything in section 1, as stored: encrypted files and the rest.</td></tr>
-            <tr><td><a href="https://www.lemonsqueezy.com/privacy" target="_blank" rel="noopener noreferrer">Lemon Squeezy</a></td><td>Sells Pro, as the seller of record</td><td>Your payment details, name and email, only if you buy Pro. Not your username or files.</td></tr>
             <tr><td><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub</a></td><td>Hosts the code and desktop app downloads</td><td>Downloads and update checks from the desktop app.</td></tr>
             <tr><td>AI assistants you connect</td><td>Claude, ChatGPT and others, only if you connect them</td><td>The links, names and details they handle for you, under their own policies. The assistant on your own computer keeps links out of the chat.</td></tr>
           </tbody>
@@ -144,7 +141,6 @@
         <li><strong>See and delete your data.</strong> Your shares, inbox and requests are in the app; delete any of them, or your whole account, at any time.</li>
         <li><strong>Turn things off.</strong> Disconnect AI assistants, turn off notifications and change what new shares start with in Settings.</li>
         <li><strong>Ask us.</strong> To ask what we hold about you, or to exercise rights you have where you live (such as access, correction, deletion or objection under the GDPR or US state laws), email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> with your username. We'll answer within 30 days. Since we don't have your email address unless you write to us, we can't verify you any other way than by you proving you can sign in.</li>
-        <li><strong>Pro.</strong> Manage or cancel your subscription with Lemon Squeezy; their own policy covers your payment details.</li>
       </ul>
     </section>
 
@@ -173,7 +169,7 @@
       <h3>Can someone screenshot my file?</h3>
       <p>Yes, if they're determined. No website can fully stop it. The watermark makes a screenshot traceable to one opening of the link, and the desktop app can hide files from screen capture.</p>
       <h3>Do you sell data or show ads?</h3>
-      <p>No. ShareSecure is paid for by people who choose Pro.</p>
+      <p>No. ShareSecure is free and run by one person; there are no ads and nothing is sold.</p>
       <h3>Where can I see how this policy has changed?</h3>
       <p>Every version of this page is in the project's history <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/privacy.html" target="_blank" rel="noopener noreferrer">on GitHub</a>.</p>
     </section>

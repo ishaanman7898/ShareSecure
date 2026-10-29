@@ -248,7 +248,6 @@ let currentShortId = null;
 let currentDeleteToken = null;
 let currentHistoryRecord = null;
 let userToken = sessionStorage.getItem('user_token');
-let planState = null;   // { id, until, upload, … } once known (see functions/_plans.js)
 let customExpiryHours = null;
 let selfHostMode = false;
 
@@ -2177,7 +2176,31 @@ function renderCloud() {
   renderSendHint();
 }
 
+// Teams live on the website. The desktop app opens them in a window of their
+// own, signed in with the account linked here (teams:open in desktop/main.js),
+// so there's no second sign-in. With no account linked, linking comes first.
+function initDesktopTeams() {
+  const teams = window.shareSecureDesktop?.teams;
+  if (!teams) return;
+  for (const id of ['menu-teams', 'settings-teams']) {
+    const link = document.getElementById(id);
+    if (!link) continue;
+    link.classList.remove('hidden', 'web-only-item');
+    link.addEventListener('click', async e => {
+      e.preventDefault();
+      closeMenu();
+      if (!cloudState.linked) {
+        showToast('Link your ShareSecure account to use Teams here.', 'info', 5000);
+        openCloudModal();
+        return;
+      }
+      if (!(await teams.open().catch(() => false))) showToast('Couldn’t open Teams. Link your account again and try once more.', 'error', 6000);
+    });
+  }
+}
+
 async function initCloudLink() {
+  initDesktopTeams();
   renderSendHint();
   try {
     const res = await fetch('/api/cloud', { headers: authHeaders() });
@@ -2603,95 +2626,16 @@ document.addEventListener('keydown', (e) => {
   if (!resultCard.classList.contains('hidden')) closeResult();
 });
 
-// ── plan: Free or Pro ────────────────────────────────────────────────────────
-// Paying starts with a random claim code made here. Checkout carries it, so
-// the payment company never learns your username, and the server only links
-// the payment to your account when this browser hands the code in.
-const planModal = document.getElementById('plan-modal');
-const CLAIM_KEY = 'plan_claim';
-let planInfo = null;
-
-async function loadPlan() {
-  if (!userToken || selfHostMode) return null;
-  try {
-    const res = await fetch('/api/plan', { headers: authHeaders() });
-    if (!res.ok) return null;
-    planInfo = await res.json();
-    planState = planInfo.plan;
-    document.getElementById('menu-plan-name').textContent = 'Coming soon';
-    document.getElementById('menu-plan')?.classList.remove('hidden');
+// ── Teams (beta) ─────────────────────────────────────────────────────────────
+// Everything is free, Teams included. On the website they're a page of their
+// own (/teams); the desktop app opens them with its linked account
+// (initDesktopTeams).
+document.addEventListener('sharesecure:ready', () => {
+  // wait for sign-in to settle
+  setTimeout(() => {
+    if (!userToken || selfHostMode) return;
     document.getElementById('menu-teams')?.classList.remove('hidden');
     document.getElementById('settings-teams')?.classList.remove('hidden');
-    return planInfo;
-  } catch { return null; }
-}
-
-function renderPlan() {
-  if (!planInfo) return;
-  const { plan, plans, checkoutUrl, manageUrl } = planInfo;
-  for (const el of planModal.querySelectorAll('[data-limit]')) {
-    const [id, key] = el.dataset.limit.split('.');
-    if (plans?.[id]?.[key] !== undefined) el.textContent = plans[id][key];
-  }
-  document.getElementById('plan-card-free').classList.toggle('is-current', plan.id === 'free');
-  document.getElementById('plan-card-pro').classList.toggle('is-current', plan.id === 'pro');
-  const until = plan.until ? new Date(plan.until).toLocaleDateString() : null;
-  document.getElementById('plan-status').textContent = plan.id === 'pro'
-    ? `You’re on Pro${until ? `, paid until ${until}` : ''}.`
-    : checkoutUrl ? 'You’re on Free.' : 'You’re on Free. Pro isn’t available to buy yet.';
-  const upgrade = document.getElementById('plan-upgrade');
-  upgrade.classList.toggle('hidden', plan.id === 'pro' || !checkoutUrl);
-  const manage = document.getElementById('plan-manage');
-  manage.href = manageUrl || '#';
-  manage.classList.toggle('hidden', plan.id !== 'pro');
-}
-
-// Paid plans aren't on sale yet, so Plan says so instead of opening its page.
-document.getElementById('menu-plan')?.addEventListener('click', () => {
-  closeMenu();
-  showToast('Paid plans are coming soon. Everything you have now stays free.', 'info', 4000);
-});
-
-document.getElementById('plan-upgrade')?.addEventListener('click', () => {
-  if (!planInfo?.checkoutUrl) return;
-  const code = toB64url(crypto.getRandomValues(new Uint8Array(32)));
-  try { localStorage.setItem(CLAIM_KEY, code); } catch {}
-  const url = new URL(planInfo.checkoutUrl);
-  url.searchParams.set('checkout[custom][claim]', code);
-  location.href = url.href;
-});
-
-// Back from checkout (or any later visit while a code is waiting): hand the
-// code in. The payment can reach the server a little after you do.
-async function redeemClaim() {
-  let code = null;
-  try { code = localStorage.getItem(CLAIM_KEY); } catch {}
-  if (!code || !userToken || selfHostMode) return;
-  for (let i = 0; i < 12; i++) {
-    const res = await fetch('/api/plan/claim', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ code }),
-    }).catch(() => null);
-    if (res?.ok) {
-      try { localStorage.removeItem(CLAIM_KEY); } catch {}
-      await loadPlan();
-      refill(tokenUsername(), authHeaders());
-      showToast('You’re on Pro. Thank you!', 'success', 6000);
-      return;
-    }
-    if (res?.status !== 202) return;
-    await new Promise(r => setTimeout(r, 5000));
-  }
-}
-
-document.addEventListener('sharesecure:ready', () => {
-  const params = new URLSearchParams(location.search);
-  const wantsPlan = params.has('plan');
-  if (wantsPlan) history.replaceState(null, '', location.pathname);
-  // wait for sign-in to settle, then pick up the plan and any waiting payment
-  setTimeout(async () => {
-    await loadPlan();
-    redeemClaim();
-    if (wantsPlan && planInfo) showToast('Paid plans are coming soon.', 'info', 4000);
   }, 600);
 }, { once: true });
 
@@ -2771,7 +2715,7 @@ function openSettings() {
   closeMenu();
   if (!document.body.classList.contains('is-logged-in')) return;
   document.getElementById('settings-username').textContent = tokenUsername() || '';
-  document.getElementById('settings-teams')?.classList.toggle('hidden', !planInfo);
+  if (!window.shareSecureDesktop) document.getElementById('settings-teams')?.classList.toggle('hidden', !userToken);
   document.getElementById('app-grid')?.classList.add('hidden');
   settingsView.classList.remove('hidden');
   document.body.classList.add('in-settings');

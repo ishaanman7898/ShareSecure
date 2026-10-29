@@ -8,10 +8,9 @@
 // your inbox sealed, so the server never sees a file, its name, the note or the label.
 import { getDb, migrateOnce, getUserTag, ensureFileColumns, randomId, LINK_ID_LENGTH, bufToB64, findUser } from './_turso.js';
 import { isSealed, MAX_SEALED_FILE, BOX_OVERHEAD, newFileKey, lockText, sealKey, toB64url } from '../public/sealed.js';
-import { planFor } from './_plans.js';
-import { ensureTeamTables, mayRequestFor, isMember, teamBranding } from './_teams.js';
+import { ensureTeamTables, mayRequestFor, isMember, teamBranding, MAX_TEAM_FILES } from './_teams.js';
 
-export const MAX_OPEN = 10;            // open requests per account on the free plan (Pro: see _plans.js)
+export const MAX_OPEN = 10;            // open requests per account
 export const MAX_FILES = 20;           // files one request can take
 const MAX_HOURS = 30 * 24;             // a request stays open at most 30 days
 const MAX_FILE_HOURS = 240;            // what's received lasts at most 10 days, like any link
@@ -41,7 +40,6 @@ export async function ensureRequestTables(db) {
   await ensureTeamTables(db);
 }
 
-const MAX_TEAM_FILES = 500;   // files waiting in one team inbox
 
 // "…/q/<id>#r=…&pk=…"
 export const requestLink = (origin, id, requestKey, publicKey) => `${origin}/q/${id}#r=${toB64url(requestKey)}&pk=${publicKey}`;
@@ -64,7 +62,7 @@ export async function openRequest(userId, { label, owner_box, max_files, hours, 
   const open = (await db.execute(team
     ? { sql: 'SELECT COUNT(*) AS n FROM file_requests WHERE team_id = ?', args: [team] }
     : { sql: 'SELECT COUNT(*) AS n FROM file_requests WHERE owner_id = ? AND team_id IS NULL', args: [userId] })).rows[0];
-  const most = team ? 50 : (await planFor(db, userId)).requests;
+  const most = team ? 50 : MAX_OPEN;
   if (Number(open?.n) >= most) return { error: `${team ? 'This team already has' : 'You already have'} ${most} open file requests. Close one first.`, status: 429 };
 
   const id = randomId(10);

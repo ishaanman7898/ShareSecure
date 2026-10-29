@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
     get: () => ipcRenderer.invoke('notifications:get'),
     set: (kind, on) => ipcRenderer.invoke('notifications:set', String(kind), on === true),
   },
+  // the website's Teams page, signed in with the linked account → false if none is linked
+  teams: {
+    open: () => ipcRenderer.invoke('teams:open'),
+  },
   signIn: {
     load: () => ipcRenderer.invoke('signin:load'),
     save: (username, password) => ipcRenderer.invoke('signin:save', String(username), String(password)),

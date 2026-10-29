@@ -10,14 +10,16 @@
 // They also lose the team inbox straight away, since only members can list it.
 //
 // The server does know who is in which team: that's what a team is. It still
-// can't read the team's files, labels or notes. Making a team needs Pro.
-import { getDb, migrateOnce, findUser, ensureUserColumns, ensureFileColumns, randomId, deleteBranch } from './_turso.js';
-import { isSealed, isPublicKey } from '../public/sealed.js';
+// can't read the team's files, labels or notes. Teams are free (up to
+// MAX_TEAMS made per account, MAX_MEMBERS people each).
+import { getDb, migrateOnce, findUser, ensureUserColumns, ensureFileColumns, randomId, deleteBranch, LINK_ID_LENGTH, bufToB64 } from './_turso.js';
+import { isSealed, isPublicKey, MAX_SEALED_FILE, BOX_OVERHEAD } from '../public/sealed.js';
 import { magicOf } from '../public/filetypes.js';
-import { planFor } from './_plans.js';
 
 export const MAX_MEMBERS = 25;
 export const MAX_TEAMS = 3;          // teams one account can make
+export const MAX_TEAM_FILES = 500;   // files in one team inbox
+const MAX_FILE_HOURS = 240;          // a team file lasts at most 10 days, like any link
 const MAX_LOGO = 60 * 1024;          // bytes, before base64
 const nowIso = () => new Date().toISOString();
 const err = (error, status = 400) => ({ error, status });
@@ -72,12 +74,6 @@ async function adminCount(db, teamId) {
   return Number((await db.execute({ sql: "SELECT COUNT(*) AS n FROM team_members WHERE team_id = ? AND role = 'admin'", args: [teamId] })).rows[0]?.n || 0);
 }
 
-// A team can take files while one of its admins is on Pro.
-export async function teamIsPaid(db, teamId) {
-  const admins = (await db.execute({ sql: "SELECT user_id FROM team_members WHERE team_id = ? AND role = 'admin'", args: [teamId] })).rows;
-  for (const a of admins) if ((await planFor(db, Number(a.user_id))).teams) return true;
-  return false;
-}
 
 function cleanBranding({ name, color, logo }) {
   const out = {};
@@ -116,7 +112,7 @@ export async function myTeams(env, userId) {
     args: [userId],
   })).rows;
   const out = [];
-  for (const r of rows) out.push({ ...r, members: Number(r.members), paid: await teamIsPaid(db, r.id) });
+  for (const r of rows) out.push({ ...r, members: Number(r.members) });
   return out;
 }
 
@@ -125,7 +121,6 @@ export async function myTeams(env, userId) {
 export async function createTeam(env, userId, body) {
   const db = getDb(env);
   await ensureTeamTables(db);
-  if (!(await planFor(db, userId)).teams) return err('Teams come with Pro.', 402);
   const made = Number((await db.execute({ sql: 'SELECT COUNT(*) AS n FROM teams WHERE created_by = ?', args: [userId] })).rows[0]?.n || 0);
   if (made >= MAX_TEAMS) return err(`You can make up to ${MAX_TEAMS} teams.`, 429);
   if (!isPublicKey(String(body.public_key || '')) || !isKeyBox(body.key_box)) return err('The team’s key has to be made and sealed in your browser.');
@@ -269,8 +264,9 @@ export async function rotateKeys(env, userId, teamId, { public_key, boxes }) {
 }
 
 // ── the team inbox ───────────────────────────────────────────────────────────
-// Files that came in through the team's request links. Their names and notes
-// are sealed; inbox_key is the file's key sealed to the team.
+// Files that came in through the team's request links, or that members added
+// (via_request is empty). Their names and notes are sealed; inbox_key is the
+// file's key sealed to the team.
 export async function teamInbox(env, userId, teamId) {
   const db = getDb(env);
   await ensureTeamTables(db);
@@ -284,6 +280,46 @@ export async function teamInbox(env, userId, teamId) {
     args: [me.id],
   })).rows.map(r => ({ ...r, note: r.inbox_note, e2e: true }));
   return { files };
+}
+
+// A member putting a file in the team inbox themselves, sealed in their
+// browser exactly like a file sent through a team request link: the file and
+// its name locked with a fresh key, that key sealed to the team (inbox_key),
+// and a sealed note saying who added it. The server knows a member added a
+// file, but can't read it, its name or the note.
+// → { added: true, id } or { error, status }
+export async function addTeamFile(env, userId, teamId, form) {
+  const file = form.get('file');
+  const meta = String(form.get('meta') || '');
+  const inboxKey = String(form.get('inbox_key') || '');
+  const note = String(form.get('note') || '');
+  if (!file || typeof file === 'string') return err('No file was sent.');
+  if (file.size > MAX_SEALED_FILE) return err('That file is over 10 MB.', 413);
+  if (!isSealed(meta) || meta.length > 2000 || !isSealed(inboxKey) || inboxKey.length > 300 || (note && (!isSealed(note) || note.length > 1000))) {
+    return err('The file, its name and its key have to be sealed in your browser first.');
+  }
+  const buffer = await file.arrayBuffer();
+  if (new Uint8Array(buffer)[0] !== 1 || buffer.byteLength < BOX_OVERHEAD + 4) return err('That isn’t a sealed file.');
+
+  const db = getDb(env);
+  await ensureTeamTables(db);
+  const me = await membership(db, teamId, userId);
+  if (!me) return err('Team not found.', 404);
+  const waiting = (await db.execute({ sql: 'SELECT COUNT(*) AS n FROM files WHERE team_id = ? AND is_active = 1', args: [me.id] })).rows[0];
+  if (Number(waiting?.n) >= MAX_TEAM_FILES) return err('This team’s inbox is full. Delete some files first.', 429);
+
+  const hours = Math.min(Math.max(Number(form.get('hours')) || MAX_FILE_HOURS, 1), MAX_FILE_HOURS);
+  const shortId = randomId(LINK_ID_LENGTH);
+  await db.execute({
+    sql: `INSERT INTO files (short_id, original_filename, mime_type, size_bytes, file_data, expires_at, delete_token,
+            user_id, user_tag, integrity_hash, compressed, cluster_id, allow_annotations, allow_download, require_account,
+            is_active, inbox_status, inbox_note, e2e, inbox_key, uploaded_at, via_request, team_id)
+          VALUES (?, ?, 'e2e', ?, ?, ?, ?, NULL, NULL, '', 0, ?, 0, 1, 1, 1, 'team', ?, 1, ?, ?, NULL, ?)`,
+    args: [shortId, meta, buffer.byteLength - BOX_OVERHEAD, 'e2e:' + bufToB64(buffer),
+      new Date(Date.now() + hours * 3600 * 1000).toISOString(), randomId(24),
+      shortId, note || null, inboxKey, nowIso(), me.id],
+  });
+  return { added: true, id: shortId };
 }
 
 export async function deleteTeamFile(env, userId, teamId, shortId) {
@@ -311,6 +347,5 @@ export async function mayRequestFor(db, teamId, userId) {
   const me = await membership(db, teamId, userId);
   if (!me) return err('Team not found.', 404);
   if (me.requests_by === 'admins' && me.role !== 'admin') return err('Only the team’s admins can make its request links.', 403);
-  if (!(await teamIsPaid(db, me.id))) return err('This team’s Pro plan has ended. An admin can renew it.', 402);
   return null;
 }

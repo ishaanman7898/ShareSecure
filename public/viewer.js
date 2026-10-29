@@ -1318,8 +1318,6 @@ let annColor = '#111111';
 let annStrokes = {};
 let annSaveTimer = null;
 
-function isMobile() { return window.innerWidth <= 800; }
-
 // Annotations belong to this link's owner, who proves it with the delete token.
 function annHeaders(extra = {}) {
   return myDeleteToken ? { ...extra, 'X-Delete-Token': myDeleteToken } : extra;

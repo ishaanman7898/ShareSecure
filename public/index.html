@@ -73,6 +73,7 @@
           <a class="menu-item web-only-item hidden" role="menuitem" href="/teams" id="menu-teams">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span>Teams</span>
+            <span class="menu-meta">Beta</span>
           </a>
           <a class="menu-item web-only" role="menuitem" href="/download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
@@ -117,16 +118,11 @@
       <div class="settings-group">
         <h2>Account</h2>
         <p class="settings-who">Signed in as <strong id="settings-username"></strong></p>
-          <button class="menu-item web-only-item hidden" id="menu-plan">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            <span>Plan</span>
-            <span class="menu-meta" id="menu-plan-name"></span>
-            <span class="settings-hint">Paid plans are coming soon</span>
-          </button>
           <a class="menu-item web-only-item hidden" href="/teams" id="settings-teams">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <span>Teams</span>
-            <span class="settings-hint">Shared inboxes and branded request links</span>
+            <span class="menu-meta">Beta</span>
+            <span class="settings-hint">Work on files together: a shared inbox, request links with your name and logo</span>
           </a>
           <button class="menu-item web-only-item hidden" id="menu-code">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
@@ -542,43 +538,6 @@
       <div class="modal-block hidden" id="ask-done">
         <div class="code-box"><code id="ask-link"></code><button class="btn btn-ghost btn-copy" data-copy="ask-link">Copy</button></div>
         <p class="field-hint">Send this link to whoever has the file. What you asked for is in the part after #, so ShareSecure never sees it, and so is your public key, so their browser locks the file to you and nobody can swap in another key.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal hidden" id="plan-modal" data-dialog role="dialog" aria-modal="true" aria-labelledby="plan-title">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="plan-title">Your plan</h2>
-        <button class="btn-icon" data-close aria-label="Close">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="plan-cards">
-        <div class="plan-card" id="plan-card-free">
-          <h3>Free</h3>
-          <ul>
-            <li><span data-limit="free.upload">5</span> shares a day</li>
-            <li><span data-limit="free.send">60</span> sends a day</li>
-            <li><span data-limit="free.requests">10</span> open file requests</li>
-            <li>Every file type and folders</li>
-          </ul>
-        </div>
-        <div class="plan-card" id="plan-card-pro">
-          <h3>Pro</h3>
-          <ul>
-            <li><span data-limit="pro.upload">100</span> shares a day</li>
-            <li><span data-limit="pro.send">300</span> sends a day</li>
-            <li><span data-limit="pro.requests">50</span> open file requests</li>
-            <li>Teams: a shared inbox, request links with your name and logo, admins</li>
-          </ul>
-        </div>
-      </div>
-      <p class="modal-text" id="plan-status"></p>
-      <p class="modal-text field-hint">Paying doesn’t tie your shares to you. Shares still go up with anonymous tokens, and a Pro token looks the same as anyone’s. ShareSecure knows your account is Pro; the payment company knows who paid; neither knows what you share. ShareSecure never sees your card or email.</p>
-      <div class="modal-actions">
-        <a class="btn btn-ghost hidden" id="plan-manage" target="_blank" rel="noopener noreferrer">Manage or cancel</a>
-        <button type="button" class="btn btn-primary hidden" id="plan-upgrade">Go Pro</button>
       </div>
     </div>
   </div>

@@ -16,7 +16,6 @@ import {
 import { spendToken, issuerAccount, issuedToday, DAILY } from '../_tokens.js';
 import { detectType, nameFor, canView, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from '../../public/filetypes.js';
 import { isSealed, MAX_FILE, MAX_SEALED_FILE, BOX_OVERHEAD } from '../../public/sealed.js';
-import { planFor } from '../_plans.js';
 
 const limitReached = n => Response.json({ error: `Upload limit reached (${n} files per 24h)` }, { status: 429 });
 
@@ -95,7 +94,7 @@ export async function onRequestPost(context) {
   await ensureFileColumns(db);
 
   const userTag = auth ? await getUserTag(auth.userId, env) : null;
-  const daily = auth ? (await planFor(db, auth.userId)).upload : DAILY.upload;
+  const daily = DAILY.upload;
   if (auth && await usedToday(db, auth, userTag, env) >= daily) return limitReached(daily);
 
   // anything from a minute to 10 days

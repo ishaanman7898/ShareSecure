@@ -6,9 +6,10 @@
 // the key the team really holds, and a server that swapped in its own key is
 // caught (the "doesn't match" warning).
 import {
-  makeKeyPair, sealText, openText, openKey, sealKey, unlockMeta, unlockText, lockText, newFileKey, linkWithKey,
+  makeKeyPair, sealText, openText, openKey, sealKey, unlockMeta, unlockText, lockText, lockFile, lockMeta, newFileKey, linkWithKey,
   importPrivateKey, toB64url, fromB64url, fingerprint,
 } from './sealed.js';
+import { detectType, nameFor, NOT_UTF8, TYPES_ERROR, ENCODING_ERROR } from './filetypes.js';
 import { myKeys, publicKeyFor } from './keys.js';
 import { confirmAction } from './confirm.js';
 
@@ -29,11 +30,13 @@ function toast(message, type = 'info') {
   setTimeout(() => t.remove(), 4000);
 }
 
+// body: an object (sent as JSON) or a FormData (sent as it is)
 async function api(path, { method = 'GET', body } = {}) {
+  const isForm = body instanceof FormData;
   const res = await fetch(path, {
     method,
-    headers: { ...auth, ...(body ? { 'Content-Type': 'application/json' } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
+    headers: { ...auth, ...(body && !isForm ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
   });
   if (res.status === 401) { location.replace('/signin?next=/teams'); throw new Error('Sign in again.'); }
   const data = await res.json().catch(() => ({}));
@@ -75,30 +78,42 @@ async function openTeamBox(privateKeys, box) {
 
 // ── state ────────────────────────────────────────────────────────────────────
 let me = null;
-let plan = null;
 let teams = [];
 let current = null;   // { team, keys }
 
+const colorOf = t => (/^#[0-9a-f]{6}$/i.test(t.color || '') ? t.color : '');
+const roleText = t => `${t.members} ${t.members === 1 ? 'person' : 'people'} · you’re ${t.role === 'admin' ? 'an admin' : 'a member'}`;
+const initialOf = t => (t.name || '?').trim().charAt(0).toUpperCase();
+// the team's logo, or its first letter on its colour
+const badge = t => (t.logo
+  ? `<img src="${escapeHtml(t.logo)}" alt="" width="44" height="44" />`
+  : `<span class="team-initial" aria-hidden="true">${escapeHtml(initialOf(t))}</span>`);
+
 async function loadTeams() {
-  [{ teams }, { plan }] = await Promise.all([api('/api/teams'), api('/api/plan')]);
-  $('plan-chip').textContent = plan.id === 'pro' ? 'Pro' : 'Free plan';
-  show('create-form', plan.teams);
-  show('upsell', !plan.teams);
-  $('team-list').innerHTML = teams.length ? teams.map(t => `
-    <div class="file-item">
-      <span class="team-swatch" style="background:${/^#[0-9a-f]{6}$/i.test(t.color || '') ? t.color : 'var(--ink)'}"></span>
-      <div class="file-item-info">
-        <span class="file-item-name">${escapeHtml(t.name)}</span>
-        <span class="file-item-meta">${t.members} ${t.members === 1 ? 'person' : 'people'} · you’re ${t.role === 'admin' ? 'an admin' : 'a member'}${t.paid ? '' : ' · Pro has ended'}</span>
-      </div>
-      <div class="file-item-actions"><button class="btn btn-ghost btn-small" data-open="${escapeHtml(t.id)}">Open</button></div>
-    </div>`).join('') : '<p class="teams-empty">You’re not in a team yet.</p>';
+  ({ teams } = await api('/api/teams'));
+  $('team-list').innerHTML = teams.map(t => `
+    <button type="button" class="team-card" data-open="${escapeHtml(t.id)}" style="--team:${colorOf(t) || 'var(--ink)'}">
+      ${badge(t)}
+      <span class="team-card-info">
+        <span class="team-card-name">${escapeHtml(t.name)}</span>
+        <span class="file-item-meta">${roleText(t)}</span>
+      </span>
+    </button>`).join('');
+  show('teams-intro', !teams.length);
 }
 
 $('team-list').addEventListener('click', e => {
   const btn = e.target.closest('[data-open]');
   if (btn) openTeam(btn.dataset.open);
 });
+
+function showCreate(on) {
+  show('create-form', on);
+  show('new-team-btn', !on);
+  if (on) $('create-name').focus();
+}
+$('new-team-btn').addEventListener('click', () => showCreate(true));
+$('create-cancel').addEventListener('click', () => { $('create-error').textContent = ''; showCreate(false); });
 
 $('create-form').addEventListener('submit', async e => {
   e.preventDefault();
@@ -113,6 +128,7 @@ $('create-form').addEventListener('submit', async e => {
       body: { name, color: $('create-color').value, public_key: key.publicKey, key_box: await sealRing(me.publicKey, { keys: [key.pkcs8] }) },
     });
     $('create-name').value = '';
+    showCreate(false);
     await loadTeams();
     openTeam(id);
   } catch (err) {
@@ -135,10 +151,18 @@ async function openTeam(id) {
   show('teams-home', false);
   show('team-view');
   $('team-name').textContent = team.name;
-  $('team-meta').textContent = `${team.members} ${team.members === 1 ? 'person' : 'people'} · you’re ${team.role === 'admin' ? 'an admin' : 'a member'}`;
+  $('team-meta').textContent = roleText(team);
   $('team-logo').src = team.logo || '';
   show('team-logo', Boolean(team.logo));
-  $('team-banner').style.setProperty('--team', /^#[0-9a-f]{6}$/i.test(team.color || '') ? team.color : 'transparent');
+  $('team-initial').textContent = initialOf(team);
+  show('team-initial', !team.logo);
+  $('team-banner').style.setProperty('--team', colorOf(team) || 'var(--ink)');
+  $('count-inbox').textContent = '';
+  $('count-requests').textContent = '';
+  $('count-members').textContent = String(team.members);
+  $('inbox-search').value = '';
+  resetAdd();
+  window.scrollTo(0, 0);
   // the key the server lists isn't the one the team holds: don't use it
   $('team-warning').textContent = keys.matches ? '' : 'The team key the server lists doesn’t match the one your team holds. New request links use your team’s own key; an admin should make a new team key.';
   document.querySelectorAll('.admin-only').forEach(el => show(el, team.role === 'admin'));
@@ -147,10 +171,13 @@ async function openTeam(id) {
   $('settings-color').value = team.color || '#1e3fd8';
   $('settings-requests').value = team.requests_by;
   pickTab('inbox');
+  // the request links' count, without opening the tab
+  loadRequests().catch(() => {});
 }
 
 $('team-back').addEventListener('click', () => {
   current = null;
+  resetAdd();
   history.replaceState(null, '', '/teams');
   show('team-view', false);
   show('teams-home');
@@ -182,19 +209,98 @@ async function loadInbox() {
     }
     rows.push({ ...f, name, note, url });
   }
+  inboxRows = rows;
+  $('count-inbox').textContent = rows.length ? String(rows.length) : '';
+  show('inbox-search', rows.length > 5);
+  renderInbox();
+}
+
+let inboxRows = [];
+
+function renderInbox() {
+  const q = $('inbox-search').value.trim().toLowerCase();
+  const rows = q ? inboxRows.filter(f => `${f.name} ${f.note || ''}`.toLowerCase().includes(q)) : inboxRows;
   $('team-inbox').innerHTML = rows.length ? rows.map(f => `
     <div class="file-item">
       <div class="file-item-info">
         <span class="file-item-name">${escapeHtml(f.name)}</span>
-        <span class="file-item-meta">${formatSize(f.size_bytes || 0)} · arrived ${new Date(f.uploaded_at).toLocaleString()}</span>
-        ${f.note ? `<span class="file-item-meta">“${escapeHtml(f.note)}”</span>` : ''}
+        <span class="file-item-meta">${formatSize(f.size_bytes || 0)} · ${f.via_request ? 'through a request link' : 'added by a member'} · ${new Date(f.uploaded_at).toLocaleString()}</span>
+        ${f.note ? `<span class="file-item-meta team-file-from">${escapeHtml(f.note)}</span>` : ''}
       </div>
       <div class="file-item-actions">
-        ${f.url ? `<a class="btn btn-ghost btn-small" href="${escapeHtml(f.url)}">Open</a>` : ''}
+        ${f.url ? `<a class="btn btn-ghost btn-small" href="${escapeHtml(f.url)}" target="_blank" rel="noopener noreferrer">Open</a>` : ''}
         <button class="btn btn-ghost btn-small" data-delete-file="${escapeHtml(f.short_id)}">Delete</button>
       </div>
-    </div>`).join('') : '<p class="teams-empty">Nothing yet. Files sent through the team’s request links land here.</p>';
+    </div>`).join('')
+    : `<p class="teams-empty">${q ? 'No files match.' : 'No files yet. Add one above, or send out a request link.'}</p>`;
 }
+$('inbox-search').addEventListener('input', renderInbox);
+
+// ── adding a file for the team ───────────────────────────────────────────────
+// Locked here with a fresh key, and that key sealed to the team's own public
+// key (worked out from the key ring, never taken from the server), with a
+// sealed note saying who added it: the same as a file through a team request link.
+let addFile = null;
+
+function resetAdd() {
+  addFile = null;
+  $('add-file').value = '';
+  $('add-note').value = '';
+  $('add-error').textContent = '';
+  $('add-drop-text').innerHTML = '<strong>Add a file for the team</strong> or drop it here · up to 10 MB';
+  show('add-details', false);
+  show('add-actions', false);
+}
+
+function pickAddFile(file) {
+  if (!file) return;
+  $('add-error').textContent = '';
+  if (file.size > 10 * 1024 * 1024) { $('add-error').textContent = 'That file is over 10 MB.'; return; }
+  addFile = file;
+  $('add-drop-text').innerHTML = `<strong>${escapeHtml(file.name)}</strong> · ${formatSize(file.size)} · choose another`;
+  show('add-details');
+  show('add-actions');
+}
+
+$('add-file').addEventListener('change', () => pickAddFile($('add-file').files[0]));
+$('add-drop').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('add-file').click(); }
+});
+$('add-drop').addEventListener('dragover', e => { e.preventDefault(); $('add-drop').classList.add('dragover'); });
+$('add-drop').addEventListener('dragleave', () => $('add-drop').classList.remove('dragover'));
+$('add-drop').addEventListener('drop', e => {
+  e.preventDefault();
+  $('add-drop').classList.remove('dragover');
+  pickAddFile(e.dataTransfer.files[0]);
+});
+$('add-cancel').addEventListener('click', resetAdd);
+
+$('add-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!addFile || !current) return;
+  $('add-btn').disabled = true;
+  $('add-error').textContent = '';
+  try {
+    const bytes = new Uint8Array(await addFile.arrayBuffer());
+    const type = detectType(bytes, addFile.name, addFile.type);
+    if (!type || type === NOT_UTF8) throw new Error(type ? ENCODING_ERROR : TYPES_ERROR);
+    const key = newFileKey();
+    const message = $('add-note').value.trim();
+    const form = new FormData();
+    form.append('file', new Blob([await lockFile(key, bytes)]), 'sealed.bin');
+    form.append('meta', await lockMeta(key, { name: nameFor('', addFile.name, type), type }));
+    form.append('inbox_key', await sealKey(current.keys.publicKey, key));
+    form.append('note', await lockText(key, `From @${me.username}${message ? `: ${message}` : ''}`, 'note'));
+    form.append('hours', $('add-hours').value);
+    await api(`/api/teams/${current.team.id}/inbox`, { method: 'POST', body: form });
+    toast('Added for the team.', 'success');
+    resetAdd();
+    loadInbox().catch(err => toast(err.message, 'error'));
+  } catch (err) {
+    $('add-error').textContent = err.message;
+  }
+  $('add-btn').disabled = false;
+});
 
 $('team-inbox').addEventListener('click', async e => {
   const btn = e.target.closest('[data-delete-file]');
@@ -232,6 +338,8 @@ async function loadRequests() {
     </div>`).join('') : '<p class="teams-empty">No open request links.</p>';
   const mayMake = current.team.requests_by !== 'admins' || current.team.role === 'admin';
   show('request-form', mayMake);
+  show('request-admins-only', !mayMake);
+  $('count-requests').textContent = rows.length ? String(rows.length) : '';
 }
 
 $('request-form').addEventListener('submit', async e => {
@@ -277,6 +385,7 @@ let members = [];
 
 async function loadMembers() {
   ({ members } = await api(`/api/teams/${current.team.id}/members`));
+  $('count-members').textContent = String(members.length);
   const admin = current.team.role === 'admin';
   $('team-members').innerHTML = members.map(m => `
     <div class="file-item">

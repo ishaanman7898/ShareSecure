@@ -571,6 +571,84 @@ ipcMain.handle('notifications:set', (e, kind, on) => {
   return readNotifyPrefs();
 });
 
+// ── Teams, with your linked account ─────────────────────────────────────────
+// Teams live on the website. Instead of signing in there a second time, the
+// app opens the website's Teams page in a window of its own, signed in as the
+// ShareSecure account linked to this computer: the sign-in and the account's
+// key come from this computer's server over IPC, and go straight into that
+// window's storage. The window has its own in-memory session, so they're gone
+// when the app quits, and the app's other windows never see them.
+function linkedSession() {
+  if (!server?.connected) return Promise.resolve(null);
+  return new Promise(resolve => {
+    const timer = setTimeout(() => { server?.off('message', onReply); resolve(null); }, 3000);
+    function onReply(message) {
+      if (message?.type !== 'cloud-session') return;
+      clearTimeout(timer);
+      server?.off('message', onReply);
+      resolve(message.session || null);
+    }
+    server.on('message', onReply);
+    server.send({ type: 'cloud-session' });
+  });
+}
+
+let teamsWin = null;
+async function openTeams() {
+  if (teamsWin && !teamsWin.isDestroyed()) { teamsWin.show(); teamsWin.focus(); return true; }
+  const session = await linkedSession();
+  if (!session) return false;
+  const w = new BrowserWindow({
+    width: 1100, height: 820, minWidth: 380, minHeight: 560,
+    title: 'ShareSecure Teams', icon: ICON, backgroundColor: '#000000', autoHideMenuBar: true, show: false,
+    webPreferences: { contextIsolation: true, sandbox: true, partition: 'teams' },
+  });
+  teamsWin = w;
+  w.on('closed', () => { if (teamsWin === w) teamsWin = null; });
+  // the website stays in this window; anything else opens in the browser
+  const onSite = url => { try { return new URL(url).origin === CLOUD; } catch { return false; } };
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  w.webContents.on('will-navigate', (e, url) => {
+    if (onSite(url)) return;
+    e.preventDefault();
+    if (/^https?:/.test(url)) shell.openExternal(url);
+  });
+  w.once('ready-to-show', () => w.show());
+  try {
+    // a page on the website with no script of its own, to sign in from
+    await w.loadURL(`${CLOUD}/robots.txt`);
+    await w.webContents.executeJavaScript(`(async s => {
+      sessionStorage.setItem('user_token', s.token);
+      sessionStorage.setItem('user_name', s.username);
+      const pkcs8 = Uint8Array.from(atob(s.privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+      const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+      const db = await new Promise((ok, fail) => {
+        const req = indexedDB.open('sharesecure', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('keys');
+        req.onsuccess = () => ok(req.result);
+        req.onerror = () => fail(req.error);
+      });
+      await new Promise((ok, fail) => {
+        const tx = db.transaction('keys', 'readwrite');
+        tx.objectStore('keys').put({ username: s.username, publicKey: s.publicKey, privateKey }, 'me');
+        tx.oncomplete = ok;
+        tx.onerror = () => fail(tx.error);
+      });
+      db.close();
+    })(${JSON.stringify(session)})`);
+    await w.loadURL(`${CLOUD}/teams`);
+  } catch {
+    if (!w.isDestroyed()) w.close();
+    return false;
+  }
+  return true;
+}
+
+ipcMain.handle('teams:open', async e => (fromApp(e) ? openTeams() : false));
+
 // ── saved sign-in ───────────────────────────────────────────────────────────
 // The app remembers your username and password so it signs you in at launch.
 // They're encrypted with the operating system's key store (safeStorage), one
