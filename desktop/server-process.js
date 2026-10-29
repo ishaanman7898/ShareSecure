@@ -6,7 +6,6 @@
 require('../server/index.js');
 const crypto = require('crypto');
 const { db } = require('../server/db');
-const { decryptString, getEncKey } = require('../server/utils');
 const session = require('../server/session');
 const settings = require('../server/settings');
 const events = require('../server/events');
@@ -37,26 +36,8 @@ function resetPassword(password) {
   return owner.username;
 }
 
-// The linked ShareSecure account, for opening the website's Teams page in the
-// app already signed in (see teams:open in main.js). Only the app can ask, over
-// this IPC line; nothing on the network reaches it. → null when not linked
-function cloudSession() {
-  try {
-    const encKey = getEncKey();
-    const token = settings.get('cloudToken') && decryptString(settings.get('cloudToken'), encKey);
-    const pkcs8 = settings.get('cloudKey') && decryptString(settings.get('cloudKey'), encKey);
-    const username = settings.get('cloudUsername');
-    if (!token || !pkcs8 || !username) return null;
-    // the public half, as the website writes it: the raw 65-byte point
-    const jwk = crypto.createPublicKey(crypto.createPrivateKey({ key: Buffer.from(pkcs8, 'base64url'), format: 'der', type: 'pkcs8' })).export({ format: 'jwk' });
-    const publicKey = Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, 'base64url'), Buffer.from(jwk.y, 'base64url')]).toString('base64url');
-    return { token, username, privateKey: pkcs8, publicKey };
-  } catch { return null; }
-}
-
 process.on('message', message => {
   if (message === 'stop') process.exit(0);
-  if (message?.type === 'cloud-session') process.send({ type: 'cloud-session', session: cloudSession() });
   if (message === 'live?') process.send({ live: anyLive() });
   if (message?.type === 'reset-password') process.send({ type: 'reset-password', username: resetPassword(message.password) });
 });

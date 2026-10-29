@@ -2,7 +2,7 @@
 // marked data-crosshair-target as the pointer moves over them (crosshair.js,
 // with its lines and coordinates turned off). Only on the public pages: not
 // in the file viewer, where nothing should sit over a document, nor anywhere
-// you use once signed in (your files, Settings, Teams). Only with a mouse or
+// you use once signed in (your files, Settings). Only with a mouse or
 // trackpad, still for people who prefer reduced motion, and off in Settings →
 // Appearance.
 import { mountCrosshair } from './crosshair.js';

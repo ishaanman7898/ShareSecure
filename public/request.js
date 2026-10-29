@@ -27,9 +27,7 @@ async function load() {
   let label = '';
   try { label = await unlockText(requestKey, info.label, 'request'); } catch { stop('This link doesn’t match its request. Ask for the link again.'); return; }
   remaining = info.remaining;
-  // a team's link shows the team's own name, colour and logo
-  asker = info.team ? info.team.name : `@${info.username}`;
-  if (info.team) showTeam(info.team);
+  asker = `@${info.username}`;
   until = new Date(info.expires_at).toLocaleString();
   showRemaining();
   $('req-label').textContent = label;
@@ -43,24 +41,6 @@ function showRemaining() {
   $('req-sub').textContent = remaining > 0
     ? `${asker} asked for a file. ${remaining === 1 ? 'One file' : `Up to ${remaining} files`} can be sent, until ${until}.`
     : `${asker} asked for a file.`;
-}
-
-function showTeam(team) {
-  $('req-brand-name').textContent = team.name;
-  // the server only keeps PNG and JPEG logos, checked from their bytes
-  if (team.logo && /^data:image\/(png|jpeg);base64,/.test(team.logo)) {
-    $('req-brand-logo').src = team.logo;
-    $('req-brand-logo').classList.remove('hidden');
-  }
-  if (team.color && /^#[0-9a-f]{6}$/i.test(team.color)) {
-    const n = parseInt(team.color.slice(1), 16);
-    const light = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 150;
-    const root = document.documentElement.style;
-    root.setProperty('--accent', team.color);
-    root.setProperty('--accent-strong', team.color);
-    root.setProperty('--on-accent', light ? '#000000' : '#ffffff');
-  }
-  $('req-brand').classList.remove('hidden');
 }
 
 // Several files go as one, packed into a ZIP here, so they use one place.

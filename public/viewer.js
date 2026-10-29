@@ -4,7 +4,7 @@ import { contentMatches, isAllowedType, nameFor, canView, kindName, detectType, 
 import { listEntries, readEntry } from './zip.js';
 import { protectionsFor, usernameFromSession, watermarkText, mountWatermark, installDeterrents, HONEST_NOTE } from './protect.js';
 import { sealFor } from './keys.js';
-import { takeToken } from './tokens.js';
+import { anonToken } from './tokens.js';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   '/vendor/pdf.worker.min.mjs';
 
@@ -1203,15 +1203,26 @@ function showSendDialog() {
         if (!sealedKey) throw new Error(sealedKey === undefined ? 'There’s no user with that name.' : 'They need to sign in to ShareSecure once before they can get end-to-end encrypted files.');
         body.sealed_key = sealedKey;
         if (body.note) body.note = await lockText(fileKey, body.note, 'note');
-        // the delete key proves it's yours, so an anonymous token can stand in for your sign-in
+        // On the website the delete key proves it's yours, so an anonymous token
+        // stands in for your sign-in, and the sign-in is never sent instead. (Only
+        // a server on your own computer answers /api/mode; it sends for you.)
         const user = sessionStorage.getItem('user_name');
-        anonymous = myDeleteToken && user ? takeToken(user, 'send') : null;
+        const onWebsite = !onComputer && !(await fetch('/api/mode').then(r => r.ok, () => false));
+        if (onWebsite) {
+          if (!myDeleteToken || !user || !token) throw new Error('Send it from the browser you shared it from.');
+          anonymous = await anonToken(user, 'send', { Authorization: `Bearer ${token}` });
+          if (!anonymous) throw new Error('You’ve sent as many files as you can today.');
+        }
       }
       const sendWith = h => fetch(api(`/api/send/${myShortId}`), { method: 'POST', headers: h, body: JSON.stringify(body) });
+      const anonHeaders = t => ({ 'Content-Type': 'application/json', 'X-ShareSecure-Token': t });
       let res = anonymous
-        ? await sendWith({ 'Content-Type': 'application/json', 'X-ShareSecure-Token': anonymous })
+        ? await sendWith(anonHeaders(anonymous))
         : await apiFetch(`/api/send/${myShortId}`, { method: 'POST', headers, body: JSON.stringify(body) });
-      if (anonymous && res.status === 401) res = await sendWith(headers);
+      if (anonymous && res.status === 401) {
+        anonymous = await anonToken(sessionStorage.getItem('user_name'), 'send', { Authorization: `Bearer ${token}` });
+        if (anonymous) res = await sendWith(anonHeaders(anonymous));
+      }
       const data = await res.json();
       if (data.sent) {
         close();

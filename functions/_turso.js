@@ -96,7 +96,7 @@ const FILE_COLUMNS = [
   'ALTER TABLE files ADD COLUMN via_request TEXT',           // the file request it was uploaded to
   'ALTER TABLE files ADD COLUMN max_views INTEGER',          // 1 = erased once it's opened (see _burn.js)
   'ALTER TABLE files ADD COLUMN receipt_key TEXT',           // open receipts, removed in 1.18.0: always empty
-  'ALTER TABLE files ADD COLUMN team_id TEXT',               // came in through a team's request link (_teams.js)
+  'ALTER TABLE files ADD COLUMN team_id TEXT',               // Teams, since removed: always empty
   'ALTER TABLE files ADD COLUMN view_opts TEXT',             // watermark / discourage screenshots, encrypted (end to end: in the sealed name instead)
   'CREATE INDEX IF NOT EXISTS idx_files_team ON files(team_id)',
   'CREATE INDEX IF NOT EXISTS idx_files_parent ON files(parent_short_id)',
@@ -110,7 +110,16 @@ const FILE_COLUMNS = [
   'DROP TABLE IF EXISTS receipts',
   'UPDATE files SET receipt_key = NULL WHERE receipt_key IS NOT NULL',
 ];
-export const ensureFileColumns = db => migrateOnce('files', db, FILE_COLUMNS);
+// Teams were removed: their files and tables go.
+const TEAMS_GONE = [
+  'DELETE FROM files WHERE team_id IS NOT NULL',
+  'DROP TABLE IF EXISTS team_members',
+  'DROP TABLE IF EXISTS teams',
+];
+export const ensureFileColumns = async db => {
+  await migrateOnce('files', db, FILE_COLUMNS);
+  await migrateOnce('teams-gone', db, TEAMS_GONE);
+};
 
 // Each account's key pair for end-to-end encryption. The private key is locked
 // with the account password in the browser before it gets here.
@@ -475,16 +484,11 @@ export async function deleteBranch(db, shortId, env) {
 // Some links only open for signed-in people, or for the one person they were
 // sent to. → the response to send back, or null when the viewer may continue.
 export async function signInRequired(file, request, env) {
-  if (!file?.require_account && !file?.recipient_user_tag && !file?.team_id) return null;
+  // a team's file opens for nobody: Teams are gone
+  if (file?.team_id) return Response.json({ error: 'File not found' }, { status: 404 });
+  if (!file?.require_account && !file?.recipient_user_tag) return null;
   const auth = await verifyToken(request.headers.get('Authorization'), env);
   if (!auth) return Response.json({ error: 'Sign in to ShareSecure to open this file.', code: 'sign_in_required' }, { status: 401 });
-  // a file that came in through a team's request link opens for its members
-  if (file.team_id) {
-    const member = (await getDb(env).execute({
-      sql: 'SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?', args: [file.team_id, auth.userId],
-    })).rows.length > 0;
-    return member ? null : Response.json({ error: 'This file belongs to a team you’re not in.', code: 'recipient_required' }, { status: 403 });
-  }
   if (!file.recipient_user_tag || file.recipient_user_tag === await getUserTag(auth.userId, env)) return null;
   return Response.json({ error: 'This file was sent to another account.', code: 'recipient_required' }, { status: 403 });
 }

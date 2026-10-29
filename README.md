@@ -45,7 +45,7 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 - **View-only by default.** Choose per file whether people can download it or draw on it (pen, highlighter, eraser), and whether only people signed in to ShareSecure can open it.
 - **Links branch.** People can reshare a link they were given. Deleting a link removes it and everything shared onward from it; deleting the original removes every link.
 - **Name it what you like** when you share it. Every link comes with a QR code.
-- **Settings** keeps your plan, teams, assistants, notifications, what new shares start with and the desktop app's options on one page.
+- **Settings** keeps your assistants, notifications, what new shares start with (including whether a new link opens the file) and the desktop app's options on one page.
 - **Your shares** lists every live link with a bar for the time it has left, to send or delete. With end-to-end encryption, the list is sealed to your key and follows you to your other devices.
 - **The viewer** shows PDFs, Word documents, images and text in the browser, sharp on high-density screens with zoom for PDFs and images, and goes black when its tab is hidden or loses focus.
 - **Screenshot-resistant and traceable** (off unless you turn it on): a watermark with who opened the file and when, and, for view-only shares, no printing, a blur on PrintScreen, no copying, and in the desktop app a window that screenshots and recordings show as black (Windows and macOS; Linux can't). Browsers can't fully block screenshots or a phone camera, so this is never “screenshot-proof”: the watermark is what makes a leak traceable. [Details](docs/SECURITY.md#screenshots-resistant-and-traceable-not-proof)
@@ -54,7 +54,6 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 
 - **Send to a username.** Type `@names` when you share, or send an existing share later from *Your shares*. Each person gets their own copy as a request to accept or decline, and isn't told who sent it.
 - **Ask for a file.** Make a link anyone can send you a file through, even without an account (*Sent to you → Ask for a file*). Their browser encrypts it to your key, so only you can open it.
-- **Teams** (beta, free, account menu → *Teams*; in the desktop app they open signed in with your linked account): a shared inbox members add files to, and request links with the team's name, colour and logo. Files sent to a team are sealed to the team's key, which is sealed to each member, so any member can open them and ShareSecure can't. Admins add and remove people and choose who can make request links; removing someone shuts them out and gives the team a new key.
 - **Notifications:** a count in the account menu and the tab title, and optional system notifications that don't show file names.
 - **From the desktop app**, sending and receiving use a ShareSecure account. The app makes one with your desktop username and password when you set it up or sign in (or links it, if the website already has that account with that password), so you never have to visit the website. Files sent to your username arrive in the app's inbox; once you accept one it's decrypted and kept on your computer, with the sender's settings. To use a different account, link it in **Settings → ShareSecure account**. Sending uploads an encrypted copy to ShareSecure's servers, so people can get it while your computer is off.
 
@@ -159,19 +158,19 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
 
 ## How files are protected
 
-- **Website, end to end (the default):** the file, its name and type, notes and drawings are encrypted in your browser with AES-256-GCM, using a key that only exists in the link after `#`, and padded to a standard size. An optional passcode makes the link only half the key. Files sent to a username have that key sealed to the recipient's public key (ECDH P-256), so only their browser can open it.
+- **End to end, always (website and desktop app):** the file, its name and type, notes and drawings are encrypted in your browser with AES-256-GCM, using a key that only exists in the link after `#`, and padded to a standard size. An optional passcode makes the link only half the key. Files sent to a username have that key sealed to the recipient's public key (ECDH P-256), so only their browser can open it.
 - **Sign-in** never sends your password (based on OPAQUE, RFC 9807), and your private key is locked with a key only your browser gets from signing in.
-- **Anonymous uploads and sends:** your browser spends blind-signed tokens (RFC 9474) instead of your sign-in, so the server can enforce daily limits without knowing who uploaded or sent a file.
+- **Anonymous uploads, sends and deletes:** your browser (and the desktop app) spends blind-signed tokens (RFC 9474) instead of your sign-in, and never falls back to it, so the server can enforce daily limits without knowing who uploaded, sent or deleted a file.
 - **Security codes** let you check nobody swapped someone's key, and your browser warns you if a contact's key ever changes.
 - **A public key log** records every account's key in an append-only Merkle tree. Every key you're given must come with proof it's in the log, your browser checks the log shows your own key, and anyone can audit the whole log (`node scripts/kt-monitor.mjs`; a public check runs daily). A server trying to read someone's files would have to publish a second key for them where everyone can see it.
 - **No third-party code:** pdf.js and mammoth are served from the site, and the desktop app runs everything from its own copy.
-- Otherwise, files, their names and notes are encrypted on the server with AES-256-GCM.
-  - **Website (end to end off):** each file's key is derived from a server master key.
-  - **Self-hosted:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
+- On top of that, stored files are encrypted again at rest with AES-256-GCM.
+  - **Website:** files from older versions that weren't end to end, and files shared by an assistant connected through ShareSecure's servers, have a key derived from a server master key.
+  - **Self-hosted and desktop:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
 - File types are checked from the file's contents, not its name. The self-hosted server also strips author and editing metadata from PDF and DOCX files.
 - Pages are sent with `noindex`, `no-store` and `frame-ancestors 'none'`, except the public guides and comparisons (`/guides`, `/compare`), which search engines may index.
 
-Files shared with end-to-end encryption off can be read by whoever holds the master key while they exist. Anyone with the whole link (and passcode) can open a file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
+Files shared by an assistant connected through ShareSecure's servers are seen by the server while it encrypts them. Anyone with the whole link (and passcode) can open a file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
 
 ## Self-hosting
 
@@ -228,8 +227,8 @@ desktop/      Electron app, icons, the logo and the update page
 relay/        ShareSecure's relay for links to a computer (Cloudflare Worker: npx wrangler deploy --config relay/wrangler.toml)
 packages/     sharesecure-mcp, the local MCP server (npm)
 scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
-tests/        security tests for the website and self-hosted server, and the
-              RFC test vectors they check against
+tests/        security tests for the website, the self-hosted server and the
+              desktop app's sending, and the RFC test vectors they check against
 docs/         ARCHITECTURE.md (how it all fits together), security and signing
 db/           the database tables, for reference (the API creates them itself)
 ```

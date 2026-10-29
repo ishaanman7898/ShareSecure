@@ -75,13 +75,11 @@
       <p>The file, its name and its type, encrypted. Alongside them: the file's size (padded to a standard size for end-to-end files), when it was uploaded and expires, how many times it's been opened, and the settings you chose (view only, works once, passcode needed, and so on). Notes and drawings are encrypted too. Links reshared from yours point at the same encrypted file; which link a reshare came from is stored only as a keyed code, so the database alone can't show who shared with whom.</p>
       <p>If you turn on a watermark or “discourage screenshots” for a share, that setting is sealed inside the file's encrypted name, so we can't see or change it. The watermark itself is drawn in the viewer's browser; we never learn who looked at a file.</p>
       <h3>Who uploaded what</h3>
-      <p>End-to-end encrypted files shared from the website, the desktop app or the assistant on your own computer go up with anonymous tokens, so nothing ties them to your account. Files shared another way (end-to-end encryption off, or by an assistant connected through our servers) are tagged with a code derived from your account with a secret key, not your username or account number. Your list of shares (“Your shares”) is kept on our servers sealed to your own key, so it follows you between devices and we can't read it.</p>
+      <p>Everything shared from the website, the desktop app or the assistant on your own computer is end-to-end encrypted and goes up with anonymous tokens, never your sign-in, so nothing ties it to your account. Deleting a share uses its delete key, not your sign-in, so that doesn't tie it to you either. Files shared by an assistant connected through our servers are tagged with a code derived from your account with a secret key, not your username or account number. Your list of shares (“Your shares”) is kept on our servers sealed to your own key, so it follows you between devices and we can't read it.</p>
       <h3>Daily limits</h3>
       <p>To enforce daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code) and the files tagged to an account in the last 24 hours. Spent tokens are remembered for two days so none can be used twice.</p>
       <h3>Files sent to you, and file requests</h3>
       <p>When someone sends you a file, we store it with its encrypted note and whether you've accepted it. Sends with an anonymous token can't be traced to the sender. For sends made while signed in, a keyed code standing in for the sender is kept on the copy until you accept it, and in a log erased after 24 hours. File requests you make are stored under your account with what you asked for sealed so we can't read it; files sent through them are sealed to your key.</p>
-      <h3>Teams (beta)</h3>
-      <p>For each team: its name, colour and logo (shown on its request links), which accounts are in it and their roles, and the team's keys, sealed to each member so we can't open them. Files sent through a team's request links are sealed to the team's key in the sender's browser. We do know who is in which team.</p>
       <h3>Assistants, sends waiting for approval, and links that work once</h3>
       <p>When an assistant sends a file to someone not on your list, the send waits sealed to your own key for up to a week; your list of people is sealed the same way. After a Works once link is opened, we keep its id, a hash of its delete key and how many times someone tried it again, for 30 days, so we can tell you about those tries.</p>
     </section>
@@ -118,7 +116,6 @@
         <li>A file's link stops working the moment it expires (after 1 hour to 10 days, as you choose), and the file and everything stored about it are erased at the next cleanup, which runs whenever anyone uploads.</li>
         <li>Deleting a file, or declining one sent to you, erases it straight away. A Works once file is erased when it's opened.</li>
         <li>File requests go when they expire (30 days at most) or you close them.</li>
-        <li>A team's inbox and request links go when the team is deleted.</li>
         <li>Your account stays until you delete it (Settings → Delete account), which erases it and every file shared from it right away. The key log keeps a record that the account existed (section 1).</li>
       </ul>
     </section>
@@ -130,8 +127,8 @@
 
     <section id="security">
       <h2>7. How your files are protected</h2>
-      <p>By default your browser encrypts the file, its name, any note and any drawings (AES-256-GCM) before they're uploaded, and the key lives only in the link after the <code>#</code>, which browsers never send to a server. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it.</p>
-      <p>If you turn end-to-end encryption off, the file is encrypted on the server with a key derived from a master key we hold, so whoever controls the server could read it while it exists. If that matters, keep end-to-end encryption on, or run ShareSecure yourself.</p>
+      <p>Your browser (or the desktop app) encrypts the file, its name, any note and any drawings (AES-256-GCM) before they're uploaded, and the key lives only in the link after the <code>#</code>, which browsers never send to a server. Files sent to a username have their key sealed to that person's account. Your password never reaches us: signing in proves you know it without sending it.</p>
+      <p>Files shared by an assistant connected through our servers, and files from older versions that weren't end-to-end encrypted, are encrypted on the server with a key derived from a master key we hold, so whoever controls the server could read them while they exist. If that matters, use the assistant that runs on your computer, or run ShareSecure yourself.</p>
       <p>Watermarks and screenshot deterrents make leaks traceable and casual copying harder; they can't stop screenshots or a phone camera, and we don't claim they do. See the <a href="/security">security page</a> for the details and how to report a problem. If we ever learn of a breach affecting your data, we'll say so on the website and in the changelog as soon as we can.</p>
     </section>
 

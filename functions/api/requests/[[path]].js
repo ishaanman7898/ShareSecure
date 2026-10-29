@@ -1,6 +1,6 @@
 // /api/requests — file requests (see _requests.js).
-//   GET    /api/requests              your open requests            (signed in; ?team=<id> for a team's)
-//   POST   /api/requests              open one: { label, owner_box, max_files, hours, file_hours, team_id? }, sealed in your browser
+//   GET    /api/requests              your open requests            (signed in)
+//   POST   /api/requests              open one: { label, owner_box, max_files, hours, file_hours }, sealed in your browser
 //   DELETE /api/requests/:id          close one; files already received stay
 //   GET    /api/requests/:id          what the upload page shows    (anyone with the link)
 //   POST   /api/requests/:id/upload   one sealed file (multipart: file, meta, inbox_key, note?)
@@ -40,10 +40,7 @@ export async function onRequest(context) {
     const auth = await verifyToken(request.headers.get('Authorization'), env);
     if (!auth) return fail('Sign in first.', 401);
     if (!id && method === 'GET') {
-      // ?team=<id>: that team's links, for its members
-      const team = new URL(request.url).searchParams.get('team');
-      if (team && !ID.test(team)) return fail('Not found', 404);
-      return Response.json({ requests: await listRequests(auth.userId, env, team || null) });
+      return Response.json({ requests: await listRequests(auth.userId, env) });
     }
     if (!id && method === 'POST') {
       const body = await request.json().catch(() => null);

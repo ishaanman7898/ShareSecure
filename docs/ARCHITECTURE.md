@@ -63,7 +63,6 @@ public/        the browser app (all editions) + shared crypto/format modules
   app.js         everything on index.html (~2900 lines, sectioned by "// ── … ──" headers)
   viewer.html/js the file viewer at /r/<id> (pdf, images, docx, text, media, ZIPs, annotations)
   signin.*       sign in / sign up (website) and owner setup/sign-in (desktop)
-  teams.*        Teams page (website only; the desktop opens it in a window, see below)
   request.*      a file request's upload page /q/<id>
   drop.*         an assistant's upload page /drop/<ticket>
   expired.html, burned.html, 404.html   where gone links land ("Back to home")
@@ -75,7 +74,7 @@ functions/     website API (Cloudflare Pages Functions). _*.js are shared helper
   _tokens.js     anonymous token issuing/spending, and DAILY: the one set of daily limits (everything is free, no plans)
   _kt.js         key log storage
   _mcp.js        the website's MCP server (/mcp)
-  _requests.js   file requests;  _teams.js teams (beta);  _burn.js links that work once
+  _requests.js   file requests;  _burn.js links that work once
   _agent.js      what an assistant may send without asking
   api/…          one file per endpoint group
   l/[[path]].js  /l/<computer>/r/<id>: serves the viewer for links to a desktop app
@@ -93,27 +92,29 @@ server/        Express server for desktop + self-hosted
   updater.js, launcher.js   self-hosted self-update
   settings.js    settings.json next to the DB (secrets encrypted)
 desktop/       Electron
-  main.js        windows, tray, updates, notifications, saved sign-in, Teams window
+  main.js        windows, tray, updates, notifications, saved sign-in
   server-process.js  the Express server, forked as its own process (outlives the app)
-  preload.js     window.shareSecureDesktop: updates, protection, notifications, teams, signIn
+  preload.js     window.shareSecureDesktop: updates, protection, notifications, signIn
 relay/         Cloudflare Worker + Durable Object that carries desktop links
 packages/sharesecure-mcp/   local stdio MCP server (npm package)
 scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log)
-tests/         node:test suites: hosted-security (website), self-hosted
+tests/         node:test suites: hosted-security (website), self-hosted,
+               desktop-send (the desktop's sends against the website's handlers)
 db/            reference schemas (the code creates tables itself)
 docs/          this file, SECURITY.md, SIGNING.md
 ```
 
 ## How a share travels
 
-### Website, end to end (default)
+### Website, always end to end
 
 1. `app.js` `buildUploadForm()`: detect type from bytes, make a random file
    key (`newFileKey`), optional passcode (`passcodeKey`), `lockFile` (padded)
    and `lockMeta` (name, type, watermark/discourage). Seal the key to your own
    public key (`owner_key`) so it shows in Your shares on other devices.
 2. Upload to `/api/upload`, spending an anonymous upload token
-   (`X-ShareSecure-Token`) instead of the sign-in when there is one.
+   (`X-ShareSecure-Token`), never the sign-in: `anonToken()` in tokens.js
+   tops the wallet up first if it's empty. Deletes send only the delete key.
 3. The link is `https://<site>/r/<id>#k=<key>`. `#f=<key>` is a full key (sent
    copies, never need the passcode).
 4. The viewer (`viewer.js`) reads the key from `location.hash`, fetches
@@ -162,17 +163,10 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
   uploads a copy to the website with the linked account and seals it there
   (`routes/cloud.js` `sendToCloud`). That copy lives at most 10 days.
 
-### File requests, teams, burn-after-reading
+### File requests, burn-after-reading
 
 - **File requests** (`_requests.js`, `request.js`): `/q/<id>#r=<request key>&pk=<public key>`.
   The uploader's browser seals to the public key in the link.
-- **Teams (beta)** (`_teams.js`, `teams.js`): free for everyone (up to 3 made
-  per account, 25 members, 500 files). Each team has a key pair; the private
-  half is sealed to each member. Files reach the team inbox two ways, both
-  sealed to the team key in a browser: members add them on the Teams page
-  (`POST /api/teams/:id/inbox`, with a sealed "From @name" note), and anyone
-  uploads through a team request link. Removing someone rotates the key in an
-  admin's browser.
 - **Burn** (`_burn.js`): website only; the first open erases the file and a
   tombstone remembers later tries so the owner can be warned.
 
@@ -185,20 +179,21 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
 - The window loads `http://localhost:<port>`. Share links opened inside the
   app are mapped back to localhost (`inApp()`); other URLs open in the browser.
 - IPC with the server process (`process.send`): `stop`, `live?`,
-  `reset-password`, `cloud-session`, and from the server `notify` events.
+  `reset-password`, and from the server `notify` events.
 - **Notifications** (`server/events.js` → server-process → `main.js`
   `notifyFromServer`): expired, opened (via relay), received, updates.
   Preferences and one-time flags in `notifications.json` in userData.
   Only while the app runs (the bare server process can't show any).
-- **Teams on desktop**: Teams live on the website. `teams:open` asks the
-  server process for the linked account's token and private key over IPC and
-  writes them into a separate in-memory-session window on the website's
-  origin (sessionStorage `user_token`/`user_name`, IndexedDB `keys/me`),
-  then loads `/teams`. No second sign-in; nothing crosses HTTP.
 - **Linked account**: signing in to the desktop app auto-creates/links a
   website account with the same username and password (`/api/cloud/auto`),
   unless the user chose another or unlinked. The token, username and the
   account's private key are kept encrypted in settings.json.
+- **Only this computer**: main.js starts the server with `HOST=127.0.0.1`, so
+  it listens on loopback only (links arrive through the relay), and
+  `server/index.js` then refuses any Host but localhost or `relay.sharesecure`
+  (DNS rebinding). Electron's permissions are limited to clipboard writes,
+  fullscreen and notifications, and windows only ever show the app's own
+  pages or its update page.
 - Data folder: `%APPDATA%\ShareSecure` (dev runs use `ShareSecure-dev`).
   Server log: `server.log` there.
 
@@ -206,7 +201,7 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
 
 When the user says **"push"**, do the whole release:
 
-1. Run `npm test` (both suites must pass).
+1. Run `npm test` (every suite must pass).
 2. Bump `package.json` (`npm version X.Y.Z --no-git-tag-version`): minor for
    features, patch for fixes.
 3. Add a `<section class="release latest">` entry at the top of

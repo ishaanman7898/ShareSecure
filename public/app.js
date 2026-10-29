@@ -6,7 +6,7 @@ import { detectType, nameFor, canView, kindName, NOT_UTF8, TYPES_ERROR, ENCODING
 import { makeZip, safeEntryName } from './zip.js';
 import { toRecipients } from './mcp-common.js';
 import { myKeys, forgetKeys, sealFor, openRow, ownerKeys, myCode, publicKeyFor, trustNewKey, checkLogged } from './keys.js';
-import { refill, takeToken, forgetTokens } from './tokens.js';
+import { refill, anonToken, forgetTokens } from './tokens.js';
 import { loadVault, saveVault } from './vault.js';
 import { prove, postWith } from './opaque.js';
 import { confirmAction } from './confirm.js';
@@ -557,8 +557,7 @@ function clearSelection() {
   updateUploadLabel();
 }
 
-// The button says what will happen: "Send" once there are names to send to.
-// Whether a new link opens the file, remembered in this browser.
+// Whether a new link opens the file (in Settings), remembered in this browser.
 const OPEN_AFTER_KEY = 'ss_open_after';
 const openAfterToggle = document.getElementById('open-after-toggle');
 try { if (localStorage.getItem(OPEN_AFTER_KEY) === '0') openAfterToggle.checked = false; } catch {}
@@ -566,6 +565,7 @@ openAfterToggle?.addEventListener('change', () => {
   try { localStorage.setItem(OPEN_AFTER_KEY, openAfterToggle.checked ? '1' : '0'); } catch {}
 });
 
+// The button says what will happen: "Send" once there are names to send to.
 function updateUploadLabel() {
   uploadBtn.textContent = sendToInput.value.trim() ? 'Send' : 'Create link';
 }
@@ -615,15 +615,9 @@ async function buildUploadForm() {
     discourage: Boolean(document.getElementById('discourage-toggle')?.checked),
   };
 
-  // on your own computer they're always locked: their links go through the relay
-  if (!selfHostMode && !document.getElementById('e2e-toggle')?.checked) {
-    form.append('file', selectedFile);
-    if (displayName) form.append('display_name', displayName);
-    if (view.watermark) form.append('watermark', '1');
-    if (view.discourage) form.append('discourage', '1');
-    return { form, key: null };
-  }
-
+  // Always locked end to end: the server can't read it, and the upload goes
+  // with an anonymous token, so it can't tie it to you either. (On your own
+  // computer its links go through the relay, which must only carry locked bytes.)
   const bytes = new Uint8Array(await selectedFile.arrayBuffer());
   const type = detectType(bytes, selectedFile.name, selectedFile.type);
   if (!type || type === NOT_UTF8) return { error: type ? ENCODING_ERROR : TYPES_ERROR };
@@ -646,8 +640,8 @@ async function buildUploadForm() {
 
 // Sends one upload and resolves with { status, body }. status is 0 if the
 // server couldn't be reached.
-// With an anonymous token it goes without the sign-in, so the server can't
-// tie it to the account.
+// On the website it goes with an anonymous token and never the sign-in, so
+// the server can't tie it to the account.
 function sendUpload(formData, withBearer, token = null) {
   return new Promise(resolve => {
     const xhr = new XMLHttpRequest();
@@ -716,11 +710,20 @@ uploadBtn.addEventListener('click', async () => {
     resetUploadButton();
     return;
   }
-  // end-to-end uploads spend an anonymous token when there is one; if it's
-  // refused (say, it ran out at midnight) the upload goes signed in instead
-  const token = built.key && !selfHostMode ? takeToken(tokenUsername(), 'upload') : null;
-  let result = await sendUpload(built.form, !token, token);
-  if (token && result.status === 401) result = await sendUpload((await buildAgain(built)).form, true);
+  // On the website an upload spends an anonymous token, never the sign-in. One
+  // refused (say, it ran out at midnight) is swapped for a fresh one.
+  let result;
+  if (selfHostMode) result = await sendUpload(built.form, true);
+  else {
+    let token = await anonToken(tokenUsername(), 'upload', authHeaders());
+    // none to be had: the session ended, or today's uploads are used up
+    result = token ? await sendUpload(built.form, false, token)
+      : { status: (await sessionStillValid()) ? 429 : 401, body: { error: 'You’ve shared as many files as you can today.' } };
+    if (token && result.status === 401) {
+      token = await anonToken(tokenUsername(), 'upload', authHeaders());
+      if (token) result = await sendUpload((await buildAgain(built)).form, false, token);
+    }
+  }
 
   if (result.status === 200) {
     const data = result.body;
@@ -734,8 +737,9 @@ uploadBtn.addEventListener('click', async () => {
     sendToInput.value = '';
     clearSelection();
     progressWrap.classList.add('hidden');
-    if (userToken) updateDashboard();
-    if (selfHostMode) renderFileList(loadUploadHistory());
+    // the list is already here; asking the server for it now would line a
+    // signed-in request up with the anonymous upload
+    renderFileList(loadUploadHistory());
   } else if (result.status === 401 && !(await sessionStillValid())) {
     showToast('Your session ended. Sign in again to upload.', 'warn', 6000);
     logout();
@@ -1469,21 +1473,19 @@ document.getElementById('check-code-form')?.addEventListener('submit', async e =
   }
 });
 
-// The passcode only applies to end-to-end encrypted links.
+// Every share is end to end now, so a passcode can always be added.
 function syncPasscodeField() {
-  const on = selfHostMode || document.getElementById('e2e-toggle')?.checked;
-  document.getElementById('passcode-wrap')?.classList.toggle('hidden', !on);
+  document.getElementById('passcode-wrap')?.classList.remove('hidden');
   updateAdvancedState();
 }
-document.getElementById('e2e-toggle')?.addEventListener('change', syncPasscodeField);
 
 // The folded "Advanced" section says what it's set to, e.g.
 // "End-to-end encrypted · view only", so nobody has to open it to check.
 function updateAdvancedState() {
   const checked = id => document.getElementById(id)?.checked;
   const parts = [];
-  if (!selfHostMode) parts.push(checked('e2e-toggle') ? 'End-to-end encrypted' : 'Encrypted on the server');
-  if (!selfHostMode && checked('e2e-toggle') && document.getElementById('passcode-input')?.value) parts.push('passcode');
+  if (!selfHostMode) parts.push('End-to-end encrypted');
+  if (document.getElementById('passcode-input')?.value) parts.push('passcode');
   const once = !selfHostMode && checked('burn-toggle');
   if (once) parts.push('works once');
   else {
@@ -1668,7 +1670,6 @@ function initAuth() {
     showSignedIn(username);
     // a self-hosted install has one account, so this only makes sense on the website
     document.getElementById('require-account-wrap')?.classList.remove('hidden');
-    document.getElementById('e2e-wrap')?.classList.remove('hidden');
     document.getElementById('burn-wrap')?.classList.remove('hidden');
     document.getElementById('menu-code')?.classList.remove('hidden');
     document.getElementById('menu-signout-all')?.classList.remove('hidden');
@@ -2117,8 +2118,10 @@ async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(short
         body.sealed_key = sealed;
         if (note) body.note = await lockText(fileKey, note, 'note');
         // with the link's delete key, an anonymous token is enough: the server
-        // doesn't learn who sent it
-        if (key && !selfHostMode) token = takeToken(tokenUsername(), 'send');
+        // doesn't learn who sent it. Never the sign-in instead.
+        if (!key) { result.failed.push({ username, reason: 'Only the browser that shared it can send it.' }); continue; }
+        token = await anonToken(tokenUsername(), 'send', authHeaders());
+        if (!token) { result.failed.push({ username, reason: 'You’ve sent as many files as you can today.' }); continue; }
       }
       if ((!fileKey || selfHostMode) && note) body.note = note;
       const post = headers => fetch(`/api/send/${encodeURIComponent(shortId)}`, {
@@ -2127,7 +2130,10 @@ async function sendToUsers(shortId, input, deleteToken, fileKey = shareKey(short
         body: JSON.stringify(body),
       });
       let res = await post(token ? { 'X-ShareSecure-Token': token } : authHeaders());
-      if (token && res.status === 401) res = await post(authHeaders());
+      if (token && res.status === 401) {
+        token = await anonToken(tokenUsername(), 'send', authHeaders());
+        if (token) res = await post({ 'X-ShareSecure-Token': token });
+      }
       const data = await res.json().catch(() => ({}));
       if (data.sent) result.sent.push(username);
       else if (data.error === 'User not found') result.missing.push(username);
@@ -2176,31 +2182,7 @@ function renderCloud() {
   renderSendHint();
 }
 
-// Teams live on the website. The desktop app opens them in a window of their
-// own, signed in with the account linked here (teams:open in desktop/main.js),
-// so there's no second sign-in. With no account linked, linking comes first.
-function initDesktopTeams() {
-  const teams = window.shareSecureDesktop?.teams;
-  if (!teams) return;
-  for (const id of ['menu-teams', 'settings-teams']) {
-    const link = document.getElementById(id);
-    if (!link) continue;
-    link.classList.remove('hidden', 'web-only-item');
-    link.addEventListener('click', async e => {
-      e.preventDefault();
-      closeMenu();
-      if (!cloudState.linked) {
-        showToast('Link your ShareSecure account to use Teams here.', 'info', 5000);
-        openCloudModal();
-        return;
-      }
-      if (!(await teams.open().catch(() => false))) showToast('Couldn’t open Teams. Link your account again and try once more.', 'error', 6000);
-    });
-  }
-}
-
 async function initCloudLink() {
-  initDesktopTeams();
   renderSendHint();
   try {
     const res = await fetch('/api/cloud', { headers: authHeaders() });
@@ -2381,9 +2363,11 @@ function renderFileList(files) {
       btn.innerHTML = `<svg class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></svg>`;
       btn.disabled = true;
       try {
+        // the delete key alone, when there is one: the sign-in with it would
+        // tell the server whose share this was
         const res = await fetch(`/api/delete/${encodeURIComponent(shortId)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          headers: { 'Content-Type': 'application/json', ...(deleteToken && !selfHostMode ? {} : authHeaders()) },
           body: JSON.stringify({ deleteToken }),
         });
         const data = await res.json().catch(() => ({}));
@@ -2626,19 +2610,6 @@ document.addEventListener('keydown', (e) => {
   if (!resultCard.classList.contains('hidden')) closeResult();
 });
 
-// ── Teams (beta) ─────────────────────────────────────────────────────────────
-// Everything is free, Teams included. On the website they're a page of their
-// own (/teams); the desktop app opens them with its linked account
-// (initDesktopTeams).
-document.addEventListener('sharesecure:ready', () => {
-  // wait for sign-in to settle
-  setTimeout(() => {
-    if (!userToken || selfHostMode) return;
-    document.getElementById('menu-teams')?.classList.remove('hidden');
-    document.getElementById('settings-teams')?.classList.remove('hidden');
-  }, 600);
-}, { once: true });
-
 // ── mode detection + app initialisation ──────────────────────────────────────
 const tcModal = document.getElementById('tc-modal');
 const acceptTcBtn = document.getElementById('accept-tc-btn');
@@ -2715,7 +2686,6 @@ function openSettings() {
   closeMenu();
   if (!document.body.classList.contains('is-logged-in')) return;
   document.getElementById('settings-username').textContent = tokenUsername() || '';
-  if (!window.shareSecureDesktop) document.getElementById('settings-teams')?.classList.toggle('hidden', !userToken);
   document.getElementById('app-grid')?.classList.add('hidden');
   settingsView.classList.remove('hidden');
   document.body.classList.add('in-settings');

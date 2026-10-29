@@ -3,7 +3,7 @@
 // server runs in a process of its own, which outlives the app: share links keep
 // working after you quit, until the last one expires. Your ShareSecure account
 // is the website; the app only links to it to send files to usernames.
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage, session } = require('electron');
 const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -118,6 +118,8 @@ async function startServer() {
       ...process.env,
       ELECTRON_RUN_AS_NODE: '1',
       PORT: String(port),
+      // only this computer can connect; links come in through the relay
+      HOST: '127.0.0.1',
       DATA_DIR,
       ENV_FILE: path.join(DATA_DIR, '.env'),
       SHARESECURE_DESKTOP: '1',
@@ -187,6 +189,8 @@ function inApp(url) {
   return null;
 }
 
+const UPDATING_PAGE = require('url').pathToFileURL(path.join(__dirname, 'updating.html')).href;
+
 function wireLinks(contents) {
   contents.setWindowOpenHandler(({ url }) => {
     const target = inApp(url);
@@ -195,7 +199,8 @@ function wireLinks(contents) {
     return { action: 'deny' };
   });
   contents.on('will-navigate', (e, url) => {
-    if (inApp(url) || url.startsWith('file:')) return;
+    // the app's own update page is the only local file a window may show
+    if (inApp(url) || url.split(/[?#]/)[0] === UPDATING_PAGE) return;
     e.preventDefault();
     if (/^https?:/.test(url)) shell.openExternal(url);
   });
@@ -571,84 +576,6 @@ ipcMain.handle('notifications:set', (e, kind, on) => {
   return readNotifyPrefs();
 });
 
-// ── Teams, with your linked account ─────────────────────────────────────────
-// Teams live on the website. Instead of signing in there a second time, the
-// app opens the website's Teams page in a window of its own, signed in as the
-// ShareSecure account linked to this computer: the sign-in and the account's
-// key come from this computer's server over IPC, and go straight into that
-// window's storage. The window has its own in-memory session, so they're gone
-// when the app quits, and the app's other windows never see them.
-function linkedSession() {
-  if (!server?.connected) return Promise.resolve(null);
-  return new Promise(resolve => {
-    const timer = setTimeout(() => { server?.off('message', onReply); resolve(null); }, 3000);
-    function onReply(message) {
-      if (message?.type !== 'cloud-session') return;
-      clearTimeout(timer);
-      server?.off('message', onReply);
-      resolve(message.session || null);
-    }
-    server.on('message', onReply);
-    server.send({ type: 'cloud-session' });
-  });
-}
-
-let teamsWin = null;
-async function openTeams() {
-  if (teamsWin && !teamsWin.isDestroyed()) { teamsWin.show(); teamsWin.focus(); return true; }
-  const session = await linkedSession();
-  if (!session) return false;
-  const w = new BrowserWindow({
-    width: 1100, height: 820, minWidth: 380, minHeight: 560,
-    title: 'ShareSecure Teams', icon: ICON, backgroundColor: '#000000', autoHideMenuBar: true, show: false,
-    webPreferences: { contextIsolation: true, sandbox: true, partition: 'teams' },
-  });
-  teamsWin = w;
-  w.on('closed', () => { if (teamsWin === w) teamsWin = null; });
-  // the website stays in this window; anything else opens in the browser
-  const onSite = url => { try { return new URL(url).origin === CLOUD; } catch { return false; } };
-  w.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  w.webContents.on('will-navigate', (e, url) => {
-    if (onSite(url)) return;
-    e.preventDefault();
-    if (/^https?:/.test(url)) shell.openExternal(url);
-  });
-  w.once('ready-to-show', () => w.show());
-  try {
-    // a page on the website with no script of its own, to sign in from
-    await w.loadURL(`${CLOUD}/robots.txt`);
-    await w.webContents.executeJavaScript(`(async s => {
-      sessionStorage.setItem('user_token', s.token);
-      sessionStorage.setItem('user_name', s.username);
-      const pkcs8 = Uint8Array.from(atob(s.privateKey.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
-      const privateKey = await crypto.subtle.importKey('pkcs8', pkcs8, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
-      const db = await new Promise((ok, fail) => {
-        const req = indexedDB.open('sharesecure', 1);
-        req.onupgradeneeded = () => req.result.createObjectStore('keys');
-        req.onsuccess = () => ok(req.result);
-        req.onerror = () => fail(req.error);
-      });
-      await new Promise((ok, fail) => {
-        const tx = db.transaction('keys', 'readwrite');
-        tx.objectStore('keys').put({ username: s.username, publicKey: s.publicKey, privateKey }, 'me');
-        tx.oncomplete = ok;
-        tx.onerror = () => fail(tx.error);
-      });
-      db.close();
-    })(${JSON.stringify(session)})`);
-    await w.loadURL(`${CLOUD}/teams`);
-  } catch {
-    if (!w.isDestroyed()) w.close();
-    return false;
-  }
-  return true;
-}
-
-ipcMain.handle('teams:open', async e => (fromApp(e) ? openTeams() : false));
-
 // ── saved sign-in ───────────────────────────────────────────────────────────
 // The app remembers your username and password so it signs you in at launch.
 // They're encrypted with the operating system's key store (safeStorage), one
@@ -739,6 +666,12 @@ app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
   // lets pages hide their "get the app" and "host it yourself" links in here
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
+  // Electron says yes to every permission a page asks for unless told otherwise.
+  // The app's pages only copy links, go full screen for video and show
+  // notifications; never the camera, microphone, location or screen.
+  const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'notifications']);
+  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(ALLOWED_PERMISSIONS.has(permission)));
+  session.defaultSession.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission));
   forgetAccountMode();
   await start();
   if (process.argv.includes(BACKGROUND_FLAG)) {

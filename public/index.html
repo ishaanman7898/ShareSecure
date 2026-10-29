@@ -70,17 +70,12 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span>Settings</span>
           </button>
-          <a class="menu-item web-only-item hidden" role="menuitem" href="/teams" id="menu-teams">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>Teams</span>
-            <span class="menu-meta">Beta</span>
-          </a>
           <a class="menu-item web-only" role="menuitem" href="/download">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
             <span>Get the desktop app</span>
           </a>
           <div class="menu-sep" role="separator"></div>
-          <button class="menu-item" role="menuitem" id="logout-btn">
+          <button class="menu-item menu-item-danger" role="menuitem" id="logout-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             <span>Sign out</span>
           </button>
@@ -118,12 +113,6 @@
       <div class="settings-group">
         <h2>Account</h2>
         <p class="settings-who">Signed in as <strong id="settings-username"></strong></p>
-          <a class="menu-item web-only-item hidden" href="/teams" id="settings-teams">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span>Teams</span>
-            <span class="menu-meta">Beta</span>
-            <span class="settings-hint">Work on files together: a shared inbox, request links with your name and logo</span>
-          </a>
           <button class="menu-item web-only-item hidden" id="menu-code">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             <span>Security code</span>
@@ -152,7 +141,11 @@
 
       <div class="settings-group">
         <h2>New shares start with</h2>
-        <p class="settings-hint">You can still change each share in its Advanced options. All off unless you turn them on.</p>
+        <p class="settings-hint">You can still change watermarks and screenshots for each share in its Advanced options.</p>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>Open the file after creating its link</span><span class="settings-hint">In a window of its own, the way the people you share it with see it. On by default.</span></span>
+            <span class="switch"><input type="checkbox" id="open-after-toggle" checked /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
           <label class="settings-switch">
             <span class="settings-switch-text"><span>Watermark with who opened it</span><span class="settings-hint">A faint mark with their username (or Guest), the time and the link’s id. Traceable, not screenshot-proof.</span></span>
             <span class="switch"><input type="checkbox" id="default-watermark" /><span class="switch-track" aria-hidden="true"></span></span>
@@ -281,23 +274,12 @@
             <span id="custom-expiry-err" class="field-error" role="alert"></span>
           </div>
 
-          <label class="switch" title="Opens the new link in a window of its own, the way the people you share it with see it.">
-            <input type="checkbox" id="open-after-toggle" checked />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">Open the file after creating its link</span>
-          </label>
-
           <details class="advanced" id="advanced">
             <summary>
               <span class="advanced-title">Advanced</span>
               <span class="advanced-state" id="advanced-state"></span>
             </summary>
             <div class="advanced-body">
-          <label class="switch hidden" id="e2e-wrap" title="The file is locked in this browser before it's uploaded. The key goes in the link after #, which is never sent to ShareSecure.">
-            <input type="checkbox" id="e2e-toggle" checked />
-            <span class="switch-track" aria-hidden="true"></span>
-            <span class="switch-text">End-to-end encrypted (ShareSecure can’t read it)</span>
-          </label>
           <div class="field hidden" id="passcode-wrap">
             <label for="passcode-input">Passcode</label>
             <input type="text" id="passcode-input" class="text-input" autocomplete="off" spellcheck="false" maxlength="128" placeholder="Needed with the link to open it" />

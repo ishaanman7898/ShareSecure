@@ -56,6 +56,23 @@ app.use((req, _res, next) => {
   next();
 });
 
+// ── only this computer (desktop) ─────────────────────────────────────────────
+// The desktop app's server listens on loopback only (HOST, set by
+// desktop/main.js): links reach it through the relay, never the local network.
+// A web page could still point a domain of its own at 127.0.0.1 (DNS
+// rebinding) to read /api/mode and learn this computer's relay id, which would
+// tie a visitor to every link they've shared. So the Host must be this
+// computer's own name, or the relay's (relay.js sets it on what it forwards).
+const LOOPBACK_ONLY = ['127.0.0.1', '::1', 'localhost'].includes(process.env.HOST);
+const OWN_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', 'relay.sharesecure']);
+if (LOOPBACK_ONLY) {
+  app.use((req, res, next) => {
+    const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+    if (OWN_HOSTS.has(host)) return next();
+    res.status(421).json({ error: 'Not found' });
+  });
+}
+
 // ── security headers ─────────────────────────────────────────────────────────
 app.use((_req, res, next) => {
   // Prevent the browser from sending the current URL as a Referer on any request
@@ -240,7 +257,10 @@ setInterval(sweep, 30 * 1000);
 // its old name, from when that was localtunnel.
 const useRelay = process.env.USE_RELAY !== 'false' && process.env.USE_LOCAL_TUNNEL !== 'false';
 
-app.listen(PORT, async () => {
+// HOST limits who can connect (the desktop app: loopback only); without it,
+// every interface, as a self-hosted server needs.
+const HOST = process.env.HOST || null;
+const onListen = async () => {
   const { DATA_DIR, DB_PATH } = require('./db');
   console.log(`\n  ShareSecure  →  http://localhost:${PORT}`);
   
@@ -263,4 +283,10 @@ app.listen(PORT, async () => {
   } else {
     console.log('  Encryption   →  AES-256-GCM enabled\n');
   }
-});
+};
+if (!HOST) app.listen(PORT, onListen);
+else {
+  app.listen(PORT, HOST, onListen);
+  // "localhost" can be IPv6 first; that loopback too, where there is one
+  if (HOST === '127.0.0.1') require('http').createServer(app).listen(PORT, '::1').on('error', () => {});
+}

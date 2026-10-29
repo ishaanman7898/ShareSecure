@@ -6,7 +6,7 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 ## How files are protected
 
-**End-to-end encryption** (on by default on the website and for AI assistants)
+**End-to-end encryption** (always on for the website and desktop app; on by default for AI assistants)
 
 - Your browser encrypts the file, its name and type, any note and any drawings with AES-256-GCM before uploading. The key is only in the link, after `#k=`, which browsers never send to a server. ShareSecure stores files it can't read.
 - Files are padded to standard sizes (1 KB, 2 KB, 4 KB … 8 MB, 10 MB), so the server only learns roughly how big a file is.
@@ -27,8 +27,10 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 **Uploads and sends that can't be tied to you** (Privacy Pass-style tokens, [`public/blindrsa.js`](../public/blindrsa.js))
 
 - While you're signed in, your browser picks up a few tokens a day. The server signs them blinded ([RFC 9474](https://www.rfc-editor.org/rfc/rfc9474) blind RSA), so it never sees the token it signed.
-- End-to-end uploads and sends spend a token instead of your sign-in. The server can check the token is real and unspent, but it can't tell which account it gave it to. The daily limits (5 uploads, 60 sends) still hold.
-- Tokens are picked up a while before they're used, so timing doesn't link them either.
+- Uploads and sends spend a token instead of your sign-in. The server can check the token is real and unspent, but it can't tell which account it gave it to. The daily limits (5 uploads, 60 sends) still hold.
+- They never fall back to the sign-in. If the wallet is empty, a token is fetched first; if none can be had, the share doesn't happen. The server also ignores a sign-in sent alongside a token, so a careless client can't tag an upload.
+- Tokens are picked up a while before they're used (a whole day's uploads at once), so timing doesn't link them either. Nothing signed in is sent right after an upload, and deleting a share uses only its delete key.
+- The desktop app works the same way for the copies it puts on the website to send to usernames, and a send an assistant leaves waiting for your approval is posted a few minutes after its anonymous upload.
 - Your list of shares is kept on the server sealed to your own key (padded to 4 KB steps), so "Your shares" still works on every device.
 
 **Nobody can swap someone's key unnoticed**
@@ -65,10 +67,16 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - The desktop app, signed in to an account, runs the website's code from its own copy instead of downloading it, so a compromised server can't change the code that encrypts your files.
 - **Anyone can check the website serves exactly this repository's code.** `npm run verify-site` fetches every file the browser runs from the live site and compares it byte for byte with your checkout, printing each file's SHA-256. A public [GitHub Action](../.github/workflows/verify-site.yml) runs the same check after every deploy and every day, so a changed page would show up there.
 
+**The desktop app's server only answers this computer**
+
+- It listens on loopback only, so nobody on your network can reach it; links come in through the relay. It also refuses any request whose Host isn't this computer (or the relay), so a web page can't point a domain at 127.0.0.1 (DNS rebinding) to read this computer's relay id and tie you to your links.
+- The app's windows can't use the camera, microphone, location or screen capture (Electron allows them unless told not to), and only ever show the app's own pages.
+- An assistant connector URL (`/connect/<token>`) carries the token in its path, so it passes through Cloudflare and the relay on the way to your computer. The relay keeps no logs, but treat the URL like a password, and replace the token if it leaks.
+
 **Everything else**
 
 - Links expire after 1 minute to 10 days. Expired files are erased.
-- Files shared with end-to-end encryption turned off are still encrypted on the server, each with its own key.
+- Files that aren't end to end (from older versions, or shared by an assistant through ShareSecure's servers) are still encrypted on the server, each with its own key.
 - The self-hosted server checks file types by their contents and strips author and editing metadata from PDF and DOCX files.
 - Pages send `noindex`, `no-store` and `frame-ancestors 'none'`; only the public guides and comparisons (`/guides`, `/compare`) can be indexed, and they hold nothing private. There are no analytics.
 - Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
@@ -107,6 +115,8 @@ These deter casual copying. The watermark is what makes a leak traceable.
 - **The site check proves what the server sends to whoever checks**, not that it sends everyone the same page: a server targeting one person could still give them different code. The desktop app avoids that (it runs its own copy), and a browser-side check (like WEBCAT) is the next step.
 - **The website itself is still served by the server.** In a browser, you trust the page you load. The desktop app doesn't have this problem.
 - **The server knows who a file was sent to, and when.** It doesn't know who sent it.
+- **Desktop links share an address.** Every link from one computer goes through `/l/<computer id>/`, so anyone holding two of your desktop links can tell they came from the same computer, and the relay sees that computer's IP address while it's connected. Website links don't have this.
+- **Timing and IP addresses.** With little traffic, a token picked up shortly before an upload (a new browser, or after using up the wallet) could hint at who uploaded. Your IP address does the same for anyone who sees it.
 - **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
 
 ## Removed

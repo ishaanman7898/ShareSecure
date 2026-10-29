@@ -40,9 +40,10 @@ export async function onRequestPost(context) {
   const e2e = form.get('e2e') === '1';
   if (file.size > (e2e ? MAX_SEALED_FILE : MAX_FILE)) return Response.json({ error: 'File too large. Max 10MB.' }, { status: 413 });
 
-  // a signed-in account, or (end to end only) an anonymous token
-  const auth = await verifyToken(request.headers.get('Authorization'), env);
-  const anonymous = !auth && e2e && await spendToken(request, env, 'upload');
+  // an anonymous token (end to end only), or a signed-in account. A token wins
+  // when both come: the sign-in alongside it would tag the row to the account
+  const anonymous = e2e && request.headers.has('X-ShareSecure-Token') && await spendToken(request, env, 'upload');
+  const auth = anonymous ? null : await verifyToken(request.headers.get('Authorization'), env);
   if (!auth && !anonymous) return Response.json({ error: 'Sign in to share files.' }, { status: 401 });
 
   const buffer = await file.arrayBuffer();

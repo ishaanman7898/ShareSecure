@@ -563,7 +563,8 @@ test('tokens: anonymous uploads and sends, each token once, within the daily lim
     return `${kind}.${info.day}.${sealed.toB64url(nonce)}.${sealed.toB64url(sig)}`;
   };
 
-  // an upload with a token and no sign-in: the row says nothing about bob
+  // an upload with a token says nothing about bob, even with his sign-in sent
+  // alongside: the token wins, so a careless client can't tag the row
   const fileKey = sealed.newFileKey();
   const sealedForm = async () => {
     const form = new FormData();
@@ -573,7 +574,7 @@ test('tokens: anonymous uploads and sends, each token once, within the daily lim
     return form;
   };
   const token = await getToken('upload');
-  const up = await uploadHandler(context('/api/upload', { user: null, headers: { 'X-ShareSecure-Token': token }, body: await sealedForm() }));
+  const up = await uploadHandler(context('/api/upload', { user: 'bob', headers: { 'X-ShareSecure-Token': token }, body: await sealedForm() }));
   assert.equal(up.status, 200, await up.clone().text());
   const share = await up.json();
   assert.equal(share.anonymous, true);
@@ -1323,124 +1324,6 @@ test('open receipts are gone: a receipt key sent with an upload is ignored and t
   assert.equal(info.receiptKey, undefined);
   assert.equal(db.prepare('SELECT receipt_key FROM files WHERE short_id = ?').get(share.shortId).receipt_key, null);
   await assert.rejects(load('api/receipts/[shortId].js'));
-});
-
-// ── teams ───────────────────────────────────────────────────────────────────
-test('everything is free: there are no paid plans to buy', async () => {
-  await assert.rejects(load('api/plan/[[path]].js'));
-});
-
-test('teams: only members open team files, branding is checked, admins decide, and removing someone shuts them out', async () => {
-  freshDay();
-  const teamsApi = (await load('api/teams/[[path]].js')).onRequest;
-  const call = (pathParts, { user = 'alice', method = 'GET', body } = {}) => teamsApi({
-    env, waitUntil: p => p.catch(() => {}), params: { path: pathParts },
-    request: new Request('https://sharesecure.test/api/teams/' + pathParts.join('/'), { method, headers: { Authorization: 'Bearer ' + tokens[user], 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }),
-  });
-  const json = { 'Content-Type': 'application/json' };
-  const team = await sealed.makeKeyPair();
-  const pkcs8 = sealed.toB64url(new Uint8Array(await crypto.subtle.exportKey('pkcs8', team.privateKey)));
-  const ringFor = publicKey => sealed.sealText(publicKey, JSON.stringify({ keys: [pkcs8] }), 'team');
-
-  // teams are free (bob is on Free), and the key has to arrive sealed
-  const bobs = await call([], { user: 'bob', method: 'POST', body: { name: 'Bob and Co', public_key: team.publicKey, key_box: await ringFor(keyPairs.bob.publicKey) } });
-  assert.equal(bobs.status, 200, await bobs.clone().text());
-  assert.equal((await call([], { method: 'POST', body: { name: 'Acme', public_key: team.publicKey, key_box: pkcs8 } })).status, 400);
-  // a logo has to really be a PNG or JPEG: SVG (which can carry script) is refused
-  const svg = 'data:image/png;base64,' + Buffer.from('<svg onload="alert(1)"/>').toString('base64');
-  assert.equal((await call([], { method: 'POST', body: { name: 'Acme', public_key: team.publicKey, key_box: await ringFor(keyPairs.alice.publicKey), logo: svg } })).status, 400);
-  const made = await call([], { method: 'POST', body: { name: 'Acme Legal', color: '#1E3FD8', public_key: team.publicKey, key_box: await ringFor(keyPairs.alice.publicKey) } });
-  assert.equal(made.status, 200, await made.clone().text());
-  const { id } = await made.json();
-
-  // only admins add people; the key ring is sealed to the person added
-  assert.equal((await call([id, 'members'], { user: 'mallory', method: 'POST', body: { username: 'mallory', key_box: await ringFor(keyPairs.alice.publicKey) } })).status, 404);
-  assert.equal((await call([id, 'members'], { method: 'POST', body: { username: 'bob', role: 'member', key_box: await ringFor(keyPairs.bob.publicKey) } })).status, 200);
-  const bobsView = (await (await call([], { user: 'bob' })).json()).teams.find(t => t.id === id);
-  assert.equal(bobsView.role, 'member');
-  assert.deepEqual(JSON.parse(await sealed.openText(keyPairs.bob.privateKey, bobsView.key_box, 'team')).keys, [pkcs8]);
-  // any member can add a file for the team, sealed to the team's key; nobody else can
-  const addAs = (user, form) => teamsApi({
-    env, waitUntil: p => p.catch(() => {}), params: { path: [id, 'inbox'] },
-    request: new Request(`https://sharesecure.test/api/teams/${id}/inbox`, { method: 'POST', headers: { Authorization: 'Bearer ' + tokens[user] }, body: form }),
-  });
-  const teamFileKey = sealed.newFileKey();
-  const teamForm = async (sealedParts = true) => {
-    const form = new FormData();
-    form.set('file', new File([await sealed.lockFile(teamFileKey, new TextEncoder().encode('minutes'))], 'sealed.bin'));
-    form.set('meta', sealedParts ? await sealed.lockMeta(teamFileKey, { name: 'minutes.txt', type: 'text/plain' }) : 'minutes.txt');
-    form.set('inbox_key', await sealed.sealKey(team.publicKey, teamFileKey));
-    form.set('note', await sealed.lockText(teamFileKey, 'From @bob', 'note'));
-    return form;
-  };
-  assert.equal((await addAs('mallory', await teamForm())).status, 404);
-  assert.equal((await addAs('bob', await teamForm(false))).status, 400);
-  const added = await addAs('bob', await teamForm());
-  assert.equal(added.status, 200, await added.clone().text());
-  const addedId = (await added.clone().json()).id;
-  const inboxNow = (await (await call([id, 'inbox'])).json()).files;
-  const addedRow = inboxNow.find(f => f.short_id === addedId);
-  assert(addedRow && addedRow.via_request === null, 'a member’s file is in the team inbox');
-  assert.equal(await sealed.unlockText(await sealed.openKey(team.privateKey, addedRow.inbox_key), addedRow.note, 'note'), 'From @bob');
-
-  // members can't change the team or remove people
-  assert.equal((await call([id], { user: 'bob', method: 'PATCH', body: { name: 'Bobs' } })).status, 403);
-  assert.equal((await call([id, 'members', 'alice'], { user: 'bob', method: 'DELETE' })).status, 403);
-
-  // bob makes a team request link; the page shows the team, not who made it
-  const key = sealed.newFileKey();
-  const teamRequest = async user => requestCall([], { user, method: 'POST', headers: json,
-    body: JSON.stringify({ team_id: id, label: await sealed.lockText(key, 'Engagement letter', 'request'), owner_box: await sealed.sealKey(team.publicKey, key), max_files: 5, hours: 24 }) });
-  const opened = await teamRequest('bob');
-  assert.equal(opened.status, 200, await opened.clone().text());
-  const rid = (await opened.json()).id;
-  const info = await (await requestCall([rid])).json();
-  assert.equal(info.username, null);
-  assert.deepEqual(info.team, { name: 'Acme Legal', color: '#1e3fd8', logo: null });
-  // mallory isn't in the team, so she can't make its links or see them
-  assert.equal((await teamRequest('mallory')).status, 404);
-  assert.deepEqual((await (await requestCall([], { user: 'mallory' })).json()).requests.filter(r => r.id === rid), []);
-
-  // a client sends a file: it lands in the team inbox, sealed to the team
-  const link = `https://sharesecure.test/q/${rid}#r=${sealed.toB64url(key)}&pk=${team.publicKey}`;
-  assert.equal((await sendThroughRequest(link, 'Signed letter', 'letter.txt')).status, 200);
-  const inbox = await (await call([id, 'inbox'], { user: 'bob' })).json();
-  // the file bob added, and the one sent through the link
-  assert.equal(inbox.files.length, 2);
-  const file = inbox.files.find(f => f.via_request === rid);
-  const fileKey = await sealed.openKey(team.privateKey, file.inbox_key);
-  assert.equal((await sealed.unlockMeta(fileKey, file.original_filename)).name, 'letter.txt');
-  assert.equal((await call([id, 'inbox'], { user: 'mallory' })).status, 404);
-  // it's in nobody's personal inbox
-  const alicesInbox = await (await (await load('api/inbox/index.js')).onRequestGet(context('/api/inbox', { user: 'alice', method: 'GET' }))).json();
-  assert(!alicesInbox.files.some(f => f.short_id === file.short_id));
-
-  // members open it; nobody else can, even with the id, and it can't be reshared
-  const raw = user => rawHandler(context('/api/raw/' + file.short_id, { user, method: 'GET', params: { shortId: file.short_id } }));
-  assert.equal(new TextDecoder().decode(await sealed.unlockFile(fileKey, new Uint8Array(await (await raw('bob')).arrayBuffer()))), 'Signed letter');
-  assert.equal((await raw('mallory')).status, 403);
-  assert.equal((await raw(null)).status, 401);
-  assert.equal((await reshareHandler(context('/api/reshare/' + file.short_id, { user: 'bob', params: { shortId: file.short_id } }))).status, 403);
-  assert.equal((await infoHandler(context('/api/info/' + file.short_id, { user: 'mallory', method: 'GET', params: { shortId: file.short_id } }))).status, 403);
-
-  // making links can be limited to admins
-  assert.equal((await call([id], { method: 'PATCH', body: { requests_by: 'admins' } })).status, 200);
-  assert.equal((await teamRequest('bob')).status, 403);
-
-  // a key change has to cover everyone still in
-  const next = await sealed.makeKeyPair();
-  assert.equal((await call([id, 'keys'], { method: 'PUT', body: { public_key: next.publicKey, boxes: { alice: await ringFor(keyPairs.alice.publicKey) } } })).status, 409);
-  // the last admin can't leave; once bob is removed he's shut out
-  assert.equal((await call([id, 'members', 'alice'], { method: 'DELETE' })).status, 409);
-  assert.equal((await call([id, 'members', 'bob'], { method: 'DELETE' })).status, 200);
-  assert.equal((await raw('bob')).status, 403);
-  assert.equal((await call([id, 'inbox'], { user: 'bob' })).status, 404);
-  assert.equal((await call([id, 'keys'], { method: 'PUT', body: { public_key: next.publicKey, boxes: { alice: await ringFor(keyPairs.alice.publicKey) } } })).status, 200);
-
-  // deleting the team erases its inbox and links
-  assert.equal((await call([id], { method: 'DELETE' })).status, 200);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM files WHERE team_id = ?').get(id).n, 0);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM file_requests WHERE team_id = ?').get(id).n, 0);
 });
 
 // ── screenshot resistance (public/protect.js) ───────────────────────────────

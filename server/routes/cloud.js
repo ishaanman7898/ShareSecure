@@ -100,9 +100,11 @@ const lib = () => Promise.all([
 ]).then(([sealed, filetypes, blindrsa, kt, common]) => ({ ...sealed, ...filetypes, ...blindrsa, ...kt, toRecipients: common.toRecipients }));
 
 // ── anonymous tokens ─────────────────────────────────────────────────────────
-// A few tokens are kept here (encrypted, like everything in settings), topped
-// up a while after linking or starting, never right before they're spent.
-const KEEP = { upload: 2, send: 10 };
+// A day's worth of tokens is kept here (encrypted, like everything in
+// settings), topped up a while after linking or starting. Uploads and sends of
+// locked shares never fall back to the account's sign-in: with none left, one
+// is fetched first (anonToken), since a signed-in upload names the account.
+const KEEP = { upload: 5, send: 20 };
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function loadTokens() {
@@ -127,15 +129,24 @@ function takeToken(kind) {
   return `${t.kind}.${t.day}.${t.nonce}.${t.sig}`;
 }
 
-let refilling = false;
-async function refillTokens() {
+// a short random wait between tokens, so they don't arrive as one burst (tests skip it)
+let pause = () => new Promise(r => setTimeout(r, 500 + Math.random() * 2000));
+
+// One top-up at a time; calling again while one runs waits for it.
+let refilling = null;
+function refillTokens() {
+  if (!cloudToken()) return Promise.resolve();
+  if (!refilling) refilling = fill().finally(() => { refilling = null; });
+  return refilling;
+}
+
+async function fill() {
   const token = cloudToken();
-  if (refilling || !token) return;
-  refilling = true;
   try {
     const { issuerKey, blind, finalize, tokenMessage, newFileKey, toB64url, fromB64url } = await lib();
     const auth = { Authorization: `Bearer ${token}` };
     const info = await cloudFetch('/api/tokens', { headers: auth });
+    if (info.status === 401) { forgetToken(); return; }
     if (info.status !== 200 || !info.body.available || !info.body.left) return;
     // only the key pinned for this site (see public/tokens.js)
     const { trustedIssuer } = await import('../../public/tokens.js');
@@ -144,7 +155,7 @@ async function refillTokens() {
     for (const kind of ['upload', 'send']) {
       let want = Math.min(KEEP[kind] - loadTokens().filter(t => t.kind === kind).length, info.body.left[kind]);
       while (want-- > 0) {
-        await new Promise(r => setTimeout(r, 500 + Math.random() * 2000));
+        await pause();
         const nonce = newFileKey();
         const msg = tokenMessage(kind, info.body.day, info.body.keyId, nonce);
         const { blinded, inv } = await blind(key, msg);
@@ -158,8 +169,16 @@ async function refillTokens() {
         saveTokens([...loadTokens(), { kind, day: info.body.day, nonce: toB64url(nonce), sig: toB64url(sig) }]);
       }
     }
-  } catch { /* without tokens, uploads and sends use the account's sign-in */ }
-  finally { refilling = false; }
+  } catch { /* no tokens: anonToken says so, and nothing goes signed in instead */ }
+}
+
+// A token to spend, topping up first if there are none → header value, or null
+// when the account has used today's.
+async function anonToken(kind) {
+  const token = takeToken(kind);
+  if (token) return token;
+  await refillTokens();
+  return takeToken(kind);
 }
 
 // some minutes from now, so getting tokens and spending them don't line up
@@ -254,18 +273,16 @@ function cloudCopy(shortId, token, keyB64 = null) {
     // it's only ever for the people it's sent to, who are signed in
     form.append('require_account', '1');
 
-    // an anonymous token when there is one, so the upload isn't tied to the account
-    const anon = takeToken('upload');
-    let { status: code, body } = await cloudFetch('/api/upload', {
-      method: 'POST',
-      headers: anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (anon && code === 401) {
-      ({ status: code, body } = await cloudFetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }));
-    }
-    if (anon) refillLater();
-    if (code === 401) return { status: 401, error: 'link_expired' };
+    // an anonymous token, never the account's sign-in, so the upload can't be
+    // tied to the account; one refused (it ran out at midnight) is swapped once
+    const upload = anon => cloudFetch('/api/upload', { method: 'POST', headers: { 'X-ShareSecure-Token': anon }, body: form });
+    let anon = await anonToken('upload');
+    if (!anon && !cloudToken()) return { status: 401, error: 'link_expired' };
+    if (!anon) return { status: 429, error: 'Your ShareSecure account has reached today’s upload limit. Try again tomorrow.' };
+    let { status: code, body } = await upload(anon);
+    if (code === 401 && (anon = await anonToken('upload'))) ({ status: code, body } = await upload(anon));
+    refillLater();
+    if (code === 401) return { status: 429, error: 'Your ShareSecure account has reached today’s upload limit. Try again tomorrow.' };
     if (code === 429) return { status: 429, error: 'Your ShareSecure account has reached today’s upload limit. Try again tomorrow.' };
     if (code !== 200 || !body.shortId) return { status: 502, error: body.error || 'ShareSecure didn’t take the file. Try again.' };
 
@@ -311,13 +328,16 @@ async function sendOne(shortId, username, note, keyB64 = null) {
       const fileKey = fromB64url(copy.key);
       request.sealed_key = await sealKey(theirKey, fileKey);
       if (note) request.note = await lockText(fileKey, note, 'note');
-      anon = takeToken('send');
+      // anonymous, never the sign-in: the delete key proves the copy is ours
+      anon = await anonToken('send');
+      if (!anon && !cloudToken()) return { status: 401, body: { error: 'link_expired' } };
+      if (!anon) return { status: 429, body: { error: 'Your ShareSecure account has sent as many files as it can today. Try again tomorrow.' } };
     }
     const send = headers => cloudFetch(`/api/send/${encodeURIComponent(copy.id)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(request),
     });
     let { status: code, body } = await send(anon ? { 'X-ShareSecure-Token': anon } : { Authorization: `Bearer ${token}` });
-    if (anon && code === 401) ({ status: code, body } = await send({ Authorization: `Bearer ${token}` }));
+    if (anon && code === 401 && (anon = await anonToken('send'))) ({ status: code, body } = await send({ 'X-ShareSecure-Token': anon }));
     if (anon) refillLater();
     if (code === 401) {
       forgetToken();
@@ -346,9 +366,21 @@ async function agentMode(token) {
 // Keeps a send for the owner's OK on the website: which copy, to whom, and its
 // key, sealed to the account's own key, so the server can't read any of it.
 // The owner's browser opens it and sends it anonymously if they approve.
+// The copy was just uploaded anonymously, so the box (posted signed in) goes
+// a few minutes later: straight away, the timing would tie the two together.
 async function holdForApproval(shortId, username, note, token) {
   const copy = await cloudCopy(shortId, token);
   if (copy.error) return { status: copy.status, body: { error: copy.error } };
+  const later = (1 + Math.random() * 4) * 60 * 1000;
+  setTimeout(() => {
+    postHold(copy, username, note, cloudToken() || token)
+      .then(out => { if (out.status !== 202) console.error('  [cloud] A send waiting for approval couldn’t be kept:', out.body.error); })
+      .catch(() => console.error('  [cloud] A send waiting for approval couldn’t be kept.'));
+  }, later).unref?.();
+  return { status: 202, body: { waiting: true } };
+}
+
+async function postHold(copy, username, note, token) {
   const me = settings.get('cloudUsername');
   const ownKey = me ? await publicKeyOf(me) : null;
   if (!ownKey) return { status: 409, body: { error: 'The linked account has no key yet. Sign in on the website once.' } };
@@ -415,12 +447,14 @@ async function forgetCloudCopy(shortId) {
 }
 
 // The delete key alone is enough for the website, so this works even after the
-// account's sign-in has expired.
+// account's sign-in has expired. The sign-in is never sent with it: that would
+// tell the website whose anonymous copy this was. (token is only kept for
+// copies from before the delete key was saved.)
 async function deleteCopy(copy, token) {
   try {
     await cloudFetch(`/api/delete/${encodeURIComponent(copy.id)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: { 'Content-Type': 'application/json', ...(!copy.deleteToken && token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ deleteToken: copy.deleteToken }),
     });
   } catch { /* it still expires with the share */ }
@@ -696,3 +730,6 @@ module.exports.syncSoon = syncSoon;
 module.exports.pendingFromCloud = pendingFromCloud;
 module.exports.answerCloud = answerCloud;
 module.exports.CLOUD_PREFIX = CLOUD_PREFIX;
+// for tests
+module.exports.sendOne = sendOne;
+module.exports.noPauses = () => { pause = async () => {}; };

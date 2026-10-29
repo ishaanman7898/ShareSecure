@@ -5,10 +5,14 @@
 // you share end to end or send to someone, a token is spent instead of your
 // sign-in, so the server can't tell the upload or send came from you. Getting
 // tokens early, not right before they're spent, keeps timing from linking them.
+// There's no falling back to the sign-in: with none left, a share waits for one
+// (anonToken), because a signed-in upload is tied to the account for good.
 import { issuerKey, blind, finalize, tokenMessage } from './blindrsa.js';
 import { randomBytes, toB64url, fromB64url } from './sealed.js';
 
-const KEEP = { upload: 2, send: 10 };
+// the whole day's uploads (see DAILY in functions/_tokens.js), so the wallet
+// rarely runs dry and has to be topped up right before a share
+const KEEP = { upload: 5, send: 20 };
 
 // The one token-signing key each ShareSecure site may use, by the SHA-256 of
 // its modulus. If the server hands out any other key, no tokens are taken:
@@ -43,12 +47,17 @@ function save(user, list) {
 
 const pause = ms => new Promise(r => setTimeout(r, ms));
 
-let filling = false;
+let filling = null;
 
 // Tops the wallet up, one token per request with a short random pause between.
-export async function refill(user, authHeaders) {
-  if (filling || !user) return;
-  filling = true;
+// One top-up at a time; calling again while one runs waits for it.
+export function refill(user, authHeaders) {
+  if (!user) return Promise.resolve();
+  if (!filling) filling = fill(user, authHeaders).finally(() => { filling = null; });
+  return filling;
+}
+
+async function fill(user, authHeaders) {
   try {
     const res = await fetch('/api/tokens', { headers: authHeaders });
     if (!res.ok) return;
@@ -73,9 +82,7 @@ export async function refill(user, authHeaders) {
       }
     }
   } catch {
-    // no tokens just means sharing goes through the signed-in session
-  } finally {
-    filling = false;
+    // no tokens: anonToken says so, and nothing is shared signed in instead
   }
 }
 
@@ -87,6 +94,15 @@ export function takeToken(user, kind) {
   const [t] = list.splice(i, 1);
   save(user, list);
   return `${t.kind}.${t.day}.${t.nonce}.${t.sig}`;
+}
+
+// A token to spend, topping the wallet up first if it's empty → the header
+// value, or null when there are none left today (the daily limit).
+export async function anonToken(user, kind, authHeaders) {
+  const token = takeToken(user, kind);
+  if (token) return token;
+  await refill(user, authHeaders);
+  return takeToken(user, kind);
 }
 
 export function forgetTokens(user) {
