@@ -22,6 +22,7 @@ const {
   getEncKey, encryptString, decryptString, decryptWithPerFileKey, decompress,
 } = require('../utils');
 const settings = require('../settings');
+const events = require('../events');
 
 const NOTE_MAX = 140;
 const cloud = () => (process.env.SHARESECURE_CLOUD || 'https://sharesecure-du8.pages.dev').replace(/\/+$/, '');
@@ -217,7 +218,7 @@ function cloudCopy(shortId, token, keyB64 = null) {
   const job = (async () => {
     const generation = copiesGeneration;
     const file = db.prepare('SELECT * FROM files WHERE short_id = ? AND is_active = 1').get(shortId);
-    if (!file || !file.stored_filename || file.expires_at <= new Date().toISOString()) {
+    if (!file || !file.stored_filename || (file.expires_at && file.expires_at <= new Date().toISOString())) {
       return { status: 404, error: 'File not found' };
     }
     const opened = await require('./files').openShare(file, keyB64);
@@ -244,8 +245,9 @@ function cloudCopy(shortId, token, keyB64 = null) {
     // sealed to the linked account too, so it shows in Your shares on the website
     const ownKey = await publicKeyOf(settings.get('cloudUsername') || '').catch(() => null);
     if (ownKey) form.append('owner_key', await sealKey(ownKey, key));
-    // the website's copy lasts exactly as long as the share here
-    const hoursLeft = (new Date(file.expires_at).getTime() - Date.now()) / 3600000;
+    // the website's copy lasts as long as the share here, up to the website's
+    // 10 days (a share here that never expires gets the full 10)
+    const hoursLeft = file.expires_at ? (new Date(file.expires_at).getTime() - Date.now()) / 3600000 : 240;
     form.append('expires_hours', String(Math.min(Math.max(hoursLeft, 1 / 60), 240)));
     form.append('allow_download', file.allow_download ? '1' : '0');
     form.append('allow_annotations', file.allow_annotations ? '1' : '0');
@@ -546,6 +548,7 @@ router.delete('/cloud', requireOwner, (_req, res) => {
 // this computer like a file sent here, with the sender's choices (view only,
 // watermark…), so it opens in this app's own viewer.
 let cloudPending = [];   // [{ row, opened }] waiting on the website
+let notifiedOnce = false; // the first sync only learns what's already waiting
 let lastSync = 0;
 let syncing = null;
 
@@ -619,6 +622,9 @@ async function syncInbox() {
   const live = new Set(rows.map(r => r.short_id));
   for (const id of Object.keys(imported)) if (!live.has(id)) delete imported[id];
   saveImported(imported);
+  const known = new Set(cloudPending.map(p => p.row.short_id));
+  if (pending.some(p => !known.has(p.row.short_id)) && notifiedOnce) events.emit('received', {});
+  notifiedOnce = true;
   cloudPending = pending;
 }
 

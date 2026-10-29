@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const http = require('http');
 const settings = require('./settings');
 const { encryptString, decryptString, getEncKey } = require('./utils');
+const events = require('./events');
 
 const RELAY = (process.env.SHARESECURE_RELAY || 'https://sharesecure-relay.ishman.workers.dev').replace(/\/+$/, '');
 const WEBSITE = (process.env.SHARESECURE_CLOUD || 'https://sharesecure-du8.pages.dev').replace(/\/+$/, '');
@@ -111,6 +112,8 @@ function start(port) {
       const headers = {};
       for (const name of PASS_BACK) if (res.headers[name]) headers[name] = res.headers[name];
       json({ t: 'head', id: m.id, status: res.statusCode, headers });
+      // someone, somewhere else, opening (or saving) one of your links
+      if (res.statusCode === 200 && m.method === 'GET' && /^\/api\/(raw|download)\//.test(m.path)) events.emit('opened', {});
       const credit = { free: IN_FLIGHT, wake: null };
       credits.set(m.id, credit);
       try {

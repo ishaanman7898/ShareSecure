@@ -70,9 +70,13 @@ async function storeFile(file, body, { incoming = false, note = null, seal = fal
   const lockedInBrowser = !incoming && body.e2e === '1';
   const encKey = getEncKey();
 
+  // This computer hosts its own shares, so they can last as long as you like,
+  // or until you delete them ("never"); at least a minute. Files sent to you
+  // keep the website's 10 days at most.
   const rawHours = parseFloat(body.expires_hours) || 1;
-  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), 240); // min 1 min, max 10 days
-  const expires_at = new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
+  const expiresHours = Math.min(Math.max(rawHours, 1 / 60), incoming ? 240 : 100 * 365 * 24);
+  const expires_at = body.expires_hours === 'never' && !incoming ? null
+    : new Date(Date.now() + expiresHours * 3600 * 1000).toISOString();
   const allow_annotations = body.allow_annotations === '1' ? 1 : 0;
   const view = { watermark: body.watermark === '1', discourage: body.discourage === '1' };
 
@@ -382,6 +386,8 @@ router.post('/reshare/:shortId', (req, res) => {
     shortId:     newShortId,
     shortUrl:    `${baseUrl}/r/${newShortId}`,
     deleteToken: newDeleteToken,
+    // the viewer adds the key back to a locked share's new link
+    e2e:         Boolean(file.e2e),
   });
 });
 
@@ -430,9 +436,9 @@ function cleanStrokes(list) {
 }
 
 // ── GET /api/annotations/:shortId ────────────────────────────────────────────
-router.get('/annotations/:shortId', (req, res) => {
+router.get('/annotations/:shortId', async (req, res) => {
   const file = db.prepare(
-    'SELECT annotations, expires_at, allow_annotations, delete_token FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT annotations, expires_at, allow_annotations, delete_token, e2e FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
   if (goneIfExpired(file, res)) return;
@@ -441,8 +447,11 @@ router.get('/annotations/:shortId', (req, res) => {
   }
   if (!file.allow_annotations) return res.json({ annotations: [] });
 
+  await sealedReady;
   const encKey = getEncKey();
   const raw    = decryptString(file.annotations, encKey);
+  // a locked share's drawing is sealed with its key, which only the browser has
+  if (raw && sealed.isSealed(raw)) return res.json({ sealed: raw, annotations: [] });
 
   let annotations = [];
   if (raw) {
@@ -453,9 +462,9 @@ router.get('/annotations/:shortId', (req, res) => {
 });
 
 // ── POST /api/annotations/:shortId ───────────────────────────────────────────
-router.post('/annotations/:shortId', (req, res) => {
+router.post('/annotations/:shortId', async (req, res) => {
   const file = db.prepare(
-    'SELECT short_id, expires_at, allow_annotations, delete_token FROM files WHERE short_id = ? AND is_active = 1'
+    'SELECT short_id, expires_at, allow_annotations, delete_token, e2e FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
   if (goneIfExpired(file, res)) return;
@@ -464,11 +473,20 @@ router.post('/annotations/:shortId', (req, res) => {
   }
   if (!file.allow_annotations) return res.status(403).json({ error: 'Annotations are turned off for this file' });
 
-  const annotations = cleanStrokes((req.body || {}).annotations);
-  if (!annotations) return res.status(400).json({ error: 'Invalid annotations' });
-
-  const annotStr = JSON.stringify(annotations);
-  if (annotStr.length > ANN_MAX_BYTES) return res.status(413).json({ error: 'Annotations too large (max 1 MB)' });
+  // On a locked share the drawing comes sealed with the file's key: it can't
+  // be checked here, only limited in size.
+  let annotStr;
+  if (file.e2e) {
+    await sealedReady;
+    const box = (req.body || {}).sealed;
+    if (typeof box !== 'string' || !sealed.isSealed(box)) return res.status(400).json({ error: 'Drawings on this file have to be sealed.' });
+    annotStr = box;
+  } else {
+    const annotations = cleanStrokes((req.body || {}).annotations);
+    if (!annotations) return res.status(400).json({ error: 'Invalid annotations' });
+    annotStr = JSON.stringify(annotations);
+  }
+  if (annotStr.length > ANN_MAX_BYTES * (file.e2e ? 2 : 1)) return res.status(413).json({ error: 'Annotations too large (max 1 MB)' });
 
   const encKey    = getEncKey();
   const encAnnot  = encryptString(annotStr, encKey);

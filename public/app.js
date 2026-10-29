@@ -285,7 +285,8 @@ function loadUploadHistory() {
       if (f.expires_at && new Date(f.expires_at).getTime() <= now) return false;
       // Remove if the entry is older than 30 days regardless of expiry
       // This limits the permanent paper trail on the uploader's device
-      if (f.uploaded_at && now - new Date(f.uploaded_at).getTime() > HISTORY_MAX_AGE_MS) return false;
+      // (one that never expires stays until it's deleted)
+      if (f.expires_at && f.uploaded_at && now - new Date(f.uploaded_at).getTime() > HISTORY_MAX_AGE_MS) return false;
       return true;
     });
     // write the pruned list back so expired entries don't linger in storage
@@ -330,7 +331,8 @@ expiresSelect.addEventListener('change', () => {
     const now = new Date();
     const max = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000 - 60 * 1000);
     customExpiryInput.min = toLocalDatetimeString(now);
-    customExpiryInput.max = toLocalDatetimeString(max);
+    if (selfHostMode) customExpiryInput.removeAttribute('max');
+    else customExpiryInput.max = toLocalDatetimeString(max);
     if (!customExpiryInput.value) {
       customExpiryInput.value = toLocalDatetimeString(new Date(now.getTime() + 60 * 60 * 1000));
     }
@@ -349,7 +351,7 @@ customExpiryInput.addEventListener('change', () => {
   if (diffMs <= 0) {
     customExpiryErr.textContent = 'Please select a future time.';
     customExpiryHours = null;
-  } else if (diffMs >= 10 * 24 * 60 * 60 * 1000) {
+  } else if (!selfHostMode && diffMs >= 10 * 24 * 60 * 60 * 1000) {
     customExpiryErr.textContent = 'Must be less than 10 days from now.';
     customExpiryHours = null;
   } else {
@@ -386,7 +388,7 @@ function formatCountdown(ms) {
 
 function startResultCountdown(expiresAt) {
   const el = resultExpires;
-  if (!expiresAt) { el.textContent = 'No expiry set'; return; }
+  if (!expiresAt) { el.textContent = 'Never expires'; el.style.color = ''; return; }
 
   const expiry = new Date(expiresAt).getTime();
 
@@ -557,6 +559,14 @@ function clearSelection() {
 }
 
 // The button says what will happen: "Send" once there are names to send to.
+// Whether a new link opens the file, remembered in this browser.
+const OPEN_AFTER_KEY = 'ss_open_after';
+const openAfterToggle = document.getElementById('open-after-toggle');
+try { if (localStorage.getItem(OPEN_AFTER_KEY) === '0') openAfterToggle.checked = false; } catch {}
+openAfterToggle?.addEventListener('change', () => {
+  try { localStorage.setItem(OPEN_AFTER_KEY, openAfterToggle.checked ? '1' : '0'); } catch {}
+});
+
 function updateUploadLabel() {
   uploadBtn.textContent = sendToInput.value.trim() ? 'Send' : 'Create link';
 }
@@ -679,7 +689,7 @@ uploadBtn.addEventListener('click', async () => {
 
   if (expiresSelect.value === 'custom') {
     if (!customExpiryHours) {
-      showToast('Pick an expiry time within the next 10 days.', 'warn');
+      showToast(selfHostMode ? 'Pick an expiry time in the future.' : 'Pick an expiry time within the next 10 days.', 'warn');
       return;
     }
   }
@@ -777,8 +787,8 @@ function showResult(data, file, delivery, built = {}) {
   vaultChanged();
   if (data.burn) watchBurn({ id: data.shortId, delete_token: data.deleteToken, name: usedName });
 
-  // a new link opens in a new tab; one sent to people doesn't need to
-  if (!delivery) window.open(data.shortUrl, '_blank', 'noopener,noreferrer');
+  // a new link opens in a new tab, if you want it to; one sent to people doesn't need to
+  if (!delivery && openAfterToggle?.checked) window.open(data.shortUrl, '_blank', 'noopener,noreferrer');
 
   openResult(record, { delivery });
 }
@@ -833,7 +843,7 @@ function openResult(record, { delivery = null, title = 'Link created' } = {}) {
   qrCanvasEl.innerHTML = '';
   loadQRCode().then(() => {
     qrInstance = new QRCode(qrCanvasEl, {
-      text: url, width: 200, height: 200,
+      text: url, width: 432, height: 432,   // drawn at twice its size, so it stays sharp
       colorDark: '#000000', colorLight: '#ffffff',
       correctLevel: QRCode.CorrectLevel.M
     });
@@ -1724,10 +1734,22 @@ window.addEventListener('popstate', () => {
 document.addEventListener('sharesecure:ready', () => { if (location.hash === '#home' && homeShown()) showHome(true); }, { once: true });
 
 // ── self-hosted: the owner signs in; nobody else can upload ──────────────────
+// This computer hosts its own shares, so they can last longer than the
+// website's 10 days, or until you delete them. (A copy sent to a username
+// lives on the website, so it still goes after 10 days.)
+function addLongerExpiries() {
+  if (expiresSelect.querySelector('option[value="never"]')) return;
+  const custom = expiresSelect.querySelector('option[value="custom"]');
+  for (const [value, label] of [['720', '30 days'], ['2160', '90 days'], ['8760', '1 year'], ['never', 'Never (until you delete it)']]) {
+    expiresSelect.insertBefore(new Option(label, value), custom);
+  }
+}
+
 function initSelfHost() {
   selfHostMode = true;
   // file requests live on the website, where people can reach them
   document.getElementById('ask-file-btn').classList.add('hidden');
+  addLongerExpiries();
   const username = userToken && tokenUsername();
   if (!username) {
     // a session that can't be read is dropped, or the sign-in page (which
@@ -2363,6 +2385,12 @@ function renderFileList(files) {
     files.forEach(f => {
       const row = fileList.querySelector(`[data-short-id="${CSS.escape(f.short_id)}"]`);
       if (!row) return;
+      const bar = row.querySelector('.expiry-bar');
+      if (!f.expires_at) {
+        row.querySelector('.file-item-time').textContent = 'Never expires';
+        bar.style.setProperty('--left', '1');
+        return;
+      }
       const end = new Date(f.expires_at).getTime();
       const remaining = end - Date.now();
       if (remaining <= 0) { forgetShare(f.short_id); return; }
@@ -2370,7 +2398,6 @@ function renderFileList(files) {
       // the bar shows how much of the link's life is left
       const start = new Date(f.uploaded_at).getTime();
       const left = end > start ? Math.min(1, remaining / (end - start)) : 1;
-      const bar = row.querySelector('.expiry-bar');
       bar.style.setProperty('--left', left.toFixed(4));
       bar.classList.toggle('is-low', left < 0.1);
     });
@@ -2776,6 +2803,14 @@ async function syncDesktopSettings() {
   const state = await protection?.get().catch(() => null);
   box.closest('.settings-switch').classList.toggle('hidden', !state?.supported);
   box.checked = Boolean(state?.hideViewOnly);
+  const prefs = await window.shareSecureDesktop?.notifications?.get().catch(() => null);
+  for (const toggle of document.querySelectorAll('[data-notify]')) toggle.checked = Boolean(prefs?.[toggle.dataset.notify]);
+}
+for (const toggle of document.querySelectorAll('[data-notify]')) {
+  toggle.addEventListener('change', async () => {
+    const prefs = await window.shareSecureDesktop?.notifications?.set(toggle.dataset.notify, toggle.checked).catch(() => null);
+    toggle.checked = Boolean(prefs?.[toggle.dataset.notify]);
+  });
 }
 document.getElementById('protect-desktop')?.addEventListener('change', async e => {
   const state = await window.shareSecureDesktop?.protection?.set(e.target.checked).catch(() => null);

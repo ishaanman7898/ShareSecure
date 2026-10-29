@@ -516,7 +516,8 @@ function askOpenOnce() {
 
 // ── countdown ─────────────────────────────────────────────────────────────────
 function startCountdown(expiresAt) {
-  if (!expiresAt) return;
+  // a share on someone's own computer can last until they delete it
+  if (!expiresAt) { $('countdown-text').textContent = 'Never expires'; return; }
   const expiry = new Date(expiresAt).getTime();
   const wrap = $('countdown-wrap');
   const text = $('countdown-text');
@@ -1268,7 +1269,7 @@ function openSharePanel() {
     .then(r => r.json())
     .then(data => {
       // a new link to an end-to-end encrypted file carries the same key
-      if (linkKey && data.e2e) data.shortUrl = linkWithKey(data.shortUrl, linkKey);
+      if (linkKey && (data.e2e || fileInfo?.e2e)) data.shortUrl = linkWithKey(data.shortUrl, linkKey, fromLink.full ? 'f' : 'k');
       const ownerUrl = data.shortUrl;
       $('share-link-text').textContent = ownerUrl;
 

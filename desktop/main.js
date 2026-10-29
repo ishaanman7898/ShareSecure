@@ -36,6 +36,8 @@ const UPDATES_FILE = path.join(USER_DIR, 'updates.json');
 // your saved sign-in, encrypted by the operating system (see saved sign-in below)
 const SIGNIN_FILE = path.join(USER_DIR, 'signin.json');
 const PROTECT_FILE = path.join(USER_DIR, 'protection.json');
+// which notifications you want, and the one-time ones already shown
+const NOTIFY_FILE = path.join(USER_DIR, 'notifications.json');
 // the full-bleed tile reads better at window and tray sizes than the Mac-grid one
 const ICON = path.join(__dirname, 'icon-win.png');
 
@@ -43,7 +45,6 @@ let win = null;
 let tray = null;
 let quitting = false;
 let origin = '';
-let toldAboutTray = false;
 let server = null;      // this computer's server process, while the app runs it
 let publicBase = null;  // the public address share links are made with (the website's /l/<this computer>)
 
@@ -130,6 +131,7 @@ async function startServer() {
   fs.closeSync(log);
   server.unref();
   fs.writeFileSync(SERVER_FILE, JSON.stringify({ pid: server.pid, port }));
+  server.on('message', message => { if (message?.type === 'notify') notifyFromServer(message); });
   const started = server;
   let ready = false;
   started.once('exit', () => {
@@ -162,8 +164,14 @@ setInterval(() => { if (server) refreshPublicBase(); }, 30 * 1000);
 function hasLiveLinks() {
   if (!server?.connected) return Promise.resolve(false);
   return new Promise(resolve => {
-    const timer = setTimeout(() => resolve(false), 1000);
-    server.once('message', message => { clearTimeout(timer); resolve(message?.live === true); });
+    const timer = setTimeout(() => { server?.off('message', onReply); resolve(false); }, 1000);
+    function onReply(message) {
+      if (typeof message?.live !== 'boolean') return;
+      clearTimeout(timer);
+      server?.off('message', onReply);
+      resolve(message.live);
+    }
+    server.on('message', onReply);
     server.send('live?');
   });
 }
@@ -224,14 +232,8 @@ function createMain(url) {
     if (quitting) return;
     e.preventDefault();
     win.hide();
-    if (!toldAboutTray && Notification.isSupported()) {
-      toldAboutTray = true;
-      new Notification({
-        title: 'ShareSecure is still running',
-        body: 'Your links keep working, even after you quit, until they expire. To stop them, choose Stop sharing and quit from the tray icon.',
-        icon: ICON,
-      }).show();
-    }
+    onceOnly('toldAboutTray', () => notify('ShareSecure is still running',
+      'Your links keep working, even after you quit, until they expire. To stop them, choose Stop sharing and quit from the tray icon.'));
   });
   // "Back to ShareSecure" on the update page, when an update didn't finish
   win.webContents.on('did-navigate-in-page', (_e, url) => {
@@ -286,12 +288,9 @@ function buildTrayMenu() {
 
 async function quit() {
   quitting = true;
-  if (await hasLiveLinks() && Notification.isSupported()) {
-    new Notification({
-      title: 'Your links keep working',
-      body: 'ShareSecure keeps sharing in the background until your links expire, then stops by itself.',
-      icon: ICON,
-    }).show();
+  if (await hasLiveLinks()) {
+    onceOnly('toldAboutQuit', () => notify('Your links keep working',
+      'ShareSecure keeps sharing in the background until your links expire, then stops by itself.'));
   }
   app.quit();
 }
@@ -405,6 +404,7 @@ function notify(title, body, onClick) {
 // (it's in the tray, or another window has the focus).
 function notifyReady(version) {
   if (win && !win.isDestroyed() && win.isVisible() && win.isFocused()) return;
+  if (!readNotifyPrefs().updates) return;
   notify(`ShareSecure ${version} is ready`, 'Click to restart and update. Your links pause for a moment while it installs.', installUpdate);
 }
 
@@ -512,6 +512,63 @@ ipcMain.handle('protection:viewing', (e, { viewOnly, discourage } = {}) => {
   const hide = discourage === true || (viewOnly === true && readProtection().hideViewOnly);
   w.setContentProtection(hide);
   return hide;
+});
+
+// ── notifications ───────────────────────────────────────────────────────────
+// You choose which ones you get, under Desktop app in Settings. "Still running
+// in the background" is said once, ever, not on every close. They never name
+// a file or a person: they stay in the system's notification history.
+const NOTIFY_DEFAULTS = { expired: true, opened: false, received: true, updates: true };
+
+function readNotifyFile() {
+  try { return JSON.parse(fs.readFileSync(NOTIFY_FILE, 'utf8')) || {}; } catch { return {}; }
+}
+function writeNotifyFile(patch) {
+  try {
+    fs.mkdirSync(USER_DIR, { recursive: true });
+    fs.writeFileSync(NOTIFY_FILE, JSON.stringify({ ...readNotifyFile(), ...patch }));
+  } catch {}
+}
+function readNotifyPrefs() {
+  const saved = readNotifyFile().prefs || {};
+  const prefs = {};
+  for (const [kind, on] of Object.entries(NOTIFY_DEFAULTS)) prefs[kind] = typeof saved[kind] === 'boolean' ? saved[kind] : on;
+  return prefs;
+}
+
+// shows it the first time only
+function onceOnly(flag, show) {
+  if (readNotifyFile()[flag]) return;
+  if (show()) writeNotifyFile({ [flag]: true });
+}
+
+// Opens come in bursts (a page, then its retries, then a second person), so
+// they're gathered for a little while into one notification.
+let opens = 0;
+let opensTimer = null;
+function notifyFromServer({ kind, count }) {
+  if (!readNotifyPrefs()[kind]) return;
+  if (kind === 'expired') {
+    notify(count > 1 ? `${count} of your links expired` : 'One of your links expired',
+      'It can’t be opened any more, and the file has been erased from this computer.', showMain);
+  } else if (kind === 'received') {
+    notify('Someone sent you a file', 'Open ShareSecure to accept or decline it.', showMain);
+  } else if (kind === 'opened') {
+    opens++;
+    if (opensTimer) return;
+    opensTimer = setTimeout(() => {
+      notify('Your link was opened', opens > 1 ? `Your links were opened ${opens} times from another device.` : 'Someone opened one of your links from another device.', showMain);
+      opens = 0;
+      opensTimer = null;
+    }, 15 * 1000);
+  }
+}
+
+ipcMain.handle('notifications:get', e => (fromApp(e) ? readNotifyPrefs() : null));
+ipcMain.handle('notifications:set', (e, kind, on) => {
+  if (!fromApp(e) || !(kind in NOTIFY_DEFAULTS)) return null;
+  writeNotifyFile({ prefs: { ...readNotifyPrefs(), [kind]: on === true } });
+  return readNotifyPrefs();
 });
 
 // ── saved sign-in ───────────────────────────────────────────────────────────

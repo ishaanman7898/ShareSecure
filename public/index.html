@@ -180,6 +180,24 @@
             <span class="settings-switch-text"><span>Hide view-only files from screenshots</span><span class="settings-hint">Windows that show a file people can’t download appear black in screenshots and screen recordings. Windows and macOS only. Off by default.</span></span>
             <span class="switch"><input type="checkbox" id="protect-desktop" /><span class="switch-track" aria-hidden="true"></span></span>
           </label>
+          <p class="settings-subhead">Notify me when</p>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>A link expired</span><span class="settings-hint">When one of your links runs out and its file is erased.</span></span>
+            <span class="switch"><input type="checkbox" data-notify="expired" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>A link was opened</span><span class="settings-hint">When someone opens one of your links from another device. It never says who.</span></span>
+            <span class="switch"><input type="checkbox" data-notify="opened" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>A file was sent to you</span><span class="settings-hint">When someone sends a file to your username. You still accept or decline it.</span></span>
+            <span class="switch"><input type="checkbox" data-notify="received" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <label class="settings-switch">
+            <span class="settings-switch-text"><span>An update is ready</span><span class="settings-hint">When a new version has downloaded and is ready to install.</span></span>
+            <span class="switch"><input type="checkbox" data-notify="updates" /><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+          <span class="settings-hint">Only while the app is running, in the window or the tray. Notifications never name the file or the person.</span>
       </div>
 
       <div class="settings-group">
@@ -266,6 +284,12 @@
             <input type="datetime-local" id="custom-expiry-input" class="text-input" required />
             <span id="custom-expiry-err" class="field-error" role="alert"></span>
           </div>
+
+          <label class="switch" title="Opens the new link in a window of its own, the way the people you share it with see it.">
+            <input type="checkbox" id="open-after-toggle" checked />
+            <span class="switch-track" aria-hidden="true"></span>
+            <span class="switch-text">Open the file after creating its link</span>
+          </label>
 
           <details class="advanced" id="advanced">
             <summary>
@@ -672,6 +696,7 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
 
+      <div class="result-main">
       <h2 class="result-title" id="result-title">Link created</h2>
       <p class="result-sub"><span id="result-filename"></span><span id="result-size"></span></p>
       <ul class="result-sent hidden" id="result-sent" aria-live="polite"></ul>
@@ -691,13 +716,14 @@
           <button type="submit" class="btn btn-ghost" id="result-send-btn">Send</button>
         </div>
       </form>
+      </div>
 
       <div class="qr-section">
         <div class="qr-wrap">
           <div id="qr-canvas"></div>
         </div>
         <div class="qr-side">
-          <p>Scan to open the link on another device.</p>
+          <p>Scan to open it on your phone or another device.</p>
           <button class="btn btn-ghost" id="save-qr-btn">Save QR code</button>
         </div>
       </div>

@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
     set: on => ipcRenderer.invoke('protection:set', on === true),
     viewing: ({ viewOnly, discourage } = {}) => ipcRenderer.invoke('protection:viewing', { viewOnly: viewOnly === true, discourage: discourage === true }),
   },
+  // which notifications to show: expired, opened, received, updates
+  notifications: {
+    get: () => ipcRenderer.invoke('notifications:get'),
+    set: (kind, on) => ipcRenderer.invoke('notifications:set', String(kind), on === true),
+  },
   signIn: {
     load: () => ipcRenderer.invoke('signin:load'),
     save: (username, password) => ipcRenderer.invoke('signin:save', String(username), String(password)),

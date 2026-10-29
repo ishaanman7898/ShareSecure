@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { db, UPLOADS_DIR } = require('./db');
+const events = require('./events');
 
 const CHUNK = 64 * 1024;
 
@@ -52,10 +53,14 @@ function purgeWhere(where, params = []) {
 
 // expires_at is always an ISO-8601 UTC string, so plain string comparison is correct.
 function purgeExpired() {
+  const now = new Date().toISOString();
+  const { n } = db.prepare(`SELECT COUNT(*) AS n FROM files
+    WHERE is_active = 1 AND inbox_status IS NULL AND parent_short_id IS NULL AND expires_at IS NOT NULL AND expires_at <= ?`).get(now);
+  if (n) events.emit('expired', { count: n });
   // pending file requests are inactive on purpose, so they're only erased when they expire or are declined
   return purgeWhere(
     "(expires_at IS NOT NULL AND expires_at <= ?) OR (is_active = 0 AND (inbox_status IS NULL OR inbox_status != 'pending'))",
-    [new Date().toISOString()]
+    [now]
   );
 }
 

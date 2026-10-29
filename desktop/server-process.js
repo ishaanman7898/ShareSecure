@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const { db } = require('../server/db');
 const session = require('../server/session');
 const settings = require('../server/settings');
+const events = require('../server/events');
 
 const CHECK_EVERY = 30 * 1000;
 // a link counts until it expires; one without an expiry keeps the server up
@@ -40,6 +41,16 @@ process.on('message', message => {
   if (message === 'live?') process.send({ live: anyLive() });
   if (message?.type === 'reset-password') process.send({ type: 'reset-password', username: resetPassword(message.password) });
 });
+
+// What to notify you about goes to the app, which shows the ones you chose
+// (only while it's running: once you quit, nothing here can show them).
+for (const kind of ['expired', 'opened', 'received']) {
+  events.on(kind, detail => { if (process.connected) process.send({ type: 'notify', kind, ...detail }); });
+}
+// files sent to your username are looked for even with no window open
+setInterval(() => {
+  if (process.connected) require('../server/routes/cloud').syncSoon().catch(() => {});
+}, 60 * 1000).unref();
 
 // the app closed (or crashed): keep the links up until they've all expired
 process.on('disconnect', () => {
