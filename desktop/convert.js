@@ -74,8 +74,13 @@ function identify(head) {
     return ascii(b, 0, 64).includes('webm') ? is('webm', 'video', 'WebM video') : is('mkv', 'video', 'MKV video');
   }
   if (ascii(b, 0, 3) === 'FLV') return is('flv', 'video', 'Flash video');
-  // ASF holds Windows Media video and audio alike, so it's treated as video
-  if (b.length > 4 && b.readUInt32BE(0) === 0x3026B275) return is('wmv', 'video', 'Windows Media file');
+  // ASF holds Windows Media video and audio alike: its header lists each
+  // stream's media type, and a file with no video stream is audio
+  if (b.length > 4 && b.readUInt32BE(0) === 0x3026B275) {
+    const hasVideo = b.includes(Buffer.from('C0EF19BC4D5BCF11A8FD00805F5C442B', 'hex'));
+    const hasAudio = b.includes(Buffer.from('409E69F84D5BCF11A8FD00805F5C442B', 'hex'));
+    return hasAudio && !hasVideo ? is('wma', 'audio', 'Windows Media audio') : is('wmv', 'video', 'Windows Media video');
+  }
   if (b.length > 4 && b.readUInt32BE(0) === 0x000001BA) return is('mpg', 'video', 'MPEG video');
   if (b[0] === 0x47 && b[188] === 0x47) return is('ts', 'video', 'MPEG-TS video');
   if (ascii(b, 0, 4) === 'fLaC') return is('flac', 'audio', 'FLAC audio');

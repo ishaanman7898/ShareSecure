@@ -58,6 +58,11 @@ test('converted files are ones ShareSecure takes, with no metadata left in', { s
     const mkv = make('clip.mkv', '-f', 'lavfi', '-i', 'testsrc=size=321x241:rate=10', '-f', 'lavfi', '-i', 'sine', '-t', '1', '-c:v', 'libx264', '-c:a', 'aac');
     const flac = make('song.flac', '-f', 'lavfi', '-i', 'sine', '-t', '1');
     const bmp = make('scan.bmp', '-f', 'lavfi', '-i', 'testsrc=size=64x64', '-frames:v', '1');
+    // Windows Media audio and video share a container; only video is offered video formats
+    const kindOf = file => converter.identify(fs.readFileSync(file).subarray(0, 4096)).kind;
+    assert.equal(kindOf(make('voice.wma', '-f', 'lavfi', '-i', 'sine', '-t', '1')), 'audio');
+    assert.equal(kindOf(make('clip.wmv', '-f', 'lavfi', '-i', 'testsrc', '-t', '1')), 'video');
+    assert.equal(kindOf(make('clip.ts', '-f', 'lavfi', '-i', 'testsrc', '-t', '1')), 'video');
     for (const file of [mkv, flac, bmp]) {
       const bytes = fs.readFileSync(file);
       assert.equal(detectType(bytes, path.basename(file), ''), null, `${file} isn't taken as it is`);

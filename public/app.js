@@ -495,8 +495,9 @@ async function setFiles(list, folder = null) {
   }
   const type = detectType(new Uint8Array(await file.arrayBuffer()), file.name, file.type);
   if (!type || type === NOT_UTF8) {
-    // one the desktop app can turn into something ShareSecure takes
-    const options = single && !type && await conversionsFor(file);
+    // one the desktop app can turn into something ShareSecure takes. That
+    // includes "text" that isn't UTF-8: Windows calls a .ts video TypeScript.
+    const options = single && await conversionsFor(file);
     if (options) return setFile(file, null, null, options);
     showToast(type ? ENCODING_ERROR : TYPES_ERROR, 'error', 7000);
     return;
