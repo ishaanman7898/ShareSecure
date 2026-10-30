@@ -104,7 +104,7 @@ if (Test-Path (Join-Path $InstallDir ".git")) {
 # -- npm install ---------------------------------------------------------------
 Write-Header "Installing dependencies"
 Set-Location $InstallDir
-npm install --omit=dev --silent
+npm install --omit=dev --omit=optional --silent
 Write-Ok "Dependencies installed"
 
 # -- configure .env ------------------------------------------------------------

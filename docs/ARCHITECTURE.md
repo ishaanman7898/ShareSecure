@@ -94,7 +94,8 @@ server/        Express server for desktop + self-hosted
 desktop/       Electron
   main.js        windows, tray, updates, notifications, saved sign-in
   server-process.js  the Express server, forked as its own process (outlives the app)
-  preload.js     window.shareSecureDesktop: updates, protection, notifications, signIn
+  preload.js     window.shareSecureDesktop: updates, protection, notifications, signIn, convert
+  convert.js     converting a file before it's shared (FFmpeg + HEIC), on this computer only
 relay/         Cloudflare Worker + Durable Object that carries desktop links
 packages/sharesecure-mcp/   local stdio MCP server (npm package)
 scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log)
@@ -194,6 +195,14 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
   (DNS rebinding). Electron's permissions are limited to clipboard writes,
   fullscreen and notifications, and windows only ever show the app's own
   pages or its update page.
+- **Converting** (`desktop/convert.js`): picking a file ShareSecure can't take
+  (HEIC, MKV, FLAC, TIFF…) or one that's too big offers to convert it first;
+  any other image, video or audio file gets an optional "Convert it first?".
+  FFmpeg (`ffmpeg-static`) and `heic-convert` run in the main process, with
+  metadata stripped. They're `optionalDependencies`, so self-hosted installs
+  (`--omit=optional`) skip the 80 MB binary. `scripts/ffmpeg-arch.cjs`
+  (afterPack) swaps in the right FFmpeg when a build targets another
+  processor (Intel Macs); add a pinned sha256 there for any new one.
 - Data folder: `%APPDATA%\ShareSecure` (dev runs use `ShareSecure-dev`).
   Server log: `server.log` there.
 

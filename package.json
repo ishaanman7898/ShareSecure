@@ -1,6 +1,6 @@
 {
   "name": "sharesecure",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "description": "Private, encrypted file sharing — self-hosted edition",
   "main": "desktop/main.js",
   "type": "commonjs",
@@ -30,6 +30,10 @@
     "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "multer": "^2.1.1"
+  },
+  "optionalDependencies": {
+    "ffmpeg-static": "^5.3.0",
+    "heic-convert": "^2.1.0"
   },
   "devDependencies": {
     "electron": "^43.7.5",
@@ -62,8 +66,10 @@
       "!desktop/entitlements.mac.plist"
     ],
     "asarUnpack": [
-      "**/*.node"
+      "**/*.node",
+      "node_modules/ffmpeg-static/**"
     ],
+    "afterPack": "scripts/ffmpeg-arch.cjs",
     "publish": {
       "provider": "github",
       "owner": "ishaanman7898",

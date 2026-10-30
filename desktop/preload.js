@@ -2,7 +2,7 @@
 // What the app's pages can ask of the desktop app: its version and its
 // updates, shown under Updates in the account menu, and your saved sign-in.
 // main.js only answers the app's own pages.
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('shareSecureDesktop', {
   updates: {
@@ -22,6 +22,18 @@ contextBridge.exposeInMainWorld('shareSecureDesktop', {
   notifications: {
     get: () => ipcRenderer.invoke('notifications:get'),
     set: (kind, on) => ipcRenderer.invoke('notifications:set', String(kind), on === true),
+  },
+  // turning a file into another format before it's shared (desktop/convert.js).
+  // The path comes from the File itself, so the page can only name files the
+  // person picked or dropped; one without a path (a pasted image) goes as bytes.
+  convert: {
+    options: head => ipcRenderer.invoke('convert:options', new Uint8Array(head)),
+    run: async (file, to) => {
+      let filePath = '';
+      try { filePath = webUtils.getPathForFile(file); } catch {}
+      const bytes = filePath ? null : new Uint8Array(await file.arrayBuffer());
+      return ipcRenderer.invoke('convert:run', { filePath, bytes, name: file.name, to: String(to) });
+    },
   },
   signIn: {
     load: () => ipcRenderer.invoke('signin:load'),

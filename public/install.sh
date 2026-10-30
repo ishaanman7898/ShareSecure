@@ -135,7 +135,7 @@ fi
 # ── npm install ───────────────────────────────────────────────────────────────
 header "Installing dependencies"
 cd "$INSTALL_DIR"
-npm install --omit=dev --silent
+npm install --omit=dev --omit=optional --silent
 ok "Dependencies installed"
 
 # ── configure .env ────────────────────────────────────────────────────────────

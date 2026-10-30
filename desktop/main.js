@@ -519,6 +519,32 @@ ipcMain.handle('protection:viewing', (e, { viewOnly, discourage } = {}) => {
   return hide;
 });
 
+// ── converting files ────────────────────────────────────────────────────────
+// Before a file is shared, the page can offer to turn it into another format
+// (desktop/convert.js), and a file ShareSecure can't take into one it can.
+// It all happens here, on this computer. The page only ever names a file the
+// person picked or dropped (preload.js reads its path), or hands over bytes.
+const converter = require('./convert');
+
+ipcMain.handle('convert:options', (e, head) => {
+  if (!fromApp(e) || !(head instanceof Uint8Array)) return null;
+  return converter.optionsFor(head.subarray(0, 4096));
+});
+ipcMain.handle('convert:run', async (e, { filePath, bytes, name, to } = {}) => {
+  if (!fromApp(e)) return null;
+  try {
+    return await converter.convert({
+      filePath: typeof filePath === 'string' && filePath ? filePath : null,
+      bytes: bytes instanceof Uint8Array ? bytes : null,
+      name: String(name || ''),
+      to: String(to),
+    });
+  } catch (err) {
+    console.error('convert failed:', err.message);
+    return null;
+  }
+});
+
 // ── notifications ───────────────────────────────────────────────────────────
 // You choose which ones you get, under Desktop app in Settings. "Still running
 // in the background" is said once, ever, not on every close. They never name

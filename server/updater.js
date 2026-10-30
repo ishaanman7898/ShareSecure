@@ -131,12 +131,12 @@ async function installFromGit(tag) {
     await run('git', ['fetch', '--depth=1', '--force', 'origin', `refs/tags/${tag}:refs/tags/${tag}`], ROOT);
     await run('git', ['checkout', '--force', tag], ROOT);
     restoreDb();
-    await run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], ROOT);
+    await run('npm', ['install', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'], ROOT);
   } catch (err) {
     // roll back to the version that was running
     await run('git', ['checkout', '--force', previous], ROOT).catch(() => {});
     restoreDb();
-    await run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], ROOT).catch(() => {});
+    await run('npm', ['install', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'], ROOT).catch(() => {});
     throw err;
   }
 }
@@ -157,14 +157,14 @@ async function installFromTarball(tag) {
     // GNU tar (e.g. from Git for Windows) reads "C:\..." as a remote host.
     await run('tar', ['-xzf', path.basename(archive), '-C', path.basename(src), '--strip-components=1'], tmp);
     // install dependencies in the temp copy first, so a broken release never touches the running copy
-    await run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], src);
+    await run('npm', ['install', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'], src);
     // copy program files only: the loaded SQLite driver in node_modules is locked on Windows
     fs.cpSync(src, ROOT, {
       recursive: true,
       force: true,
       filter: from => !from.startsWith(path.join(src, 'node_modules')),
     });
-    await run('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], ROOT);
+    await run('npm', ['install', '--omit=dev', '--omit=optional', '--no-audit', '--no-fund'], ROOT);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

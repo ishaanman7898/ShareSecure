@@ -470,12 +470,15 @@ async function setFiles(list, folder = null) {
     showToast(`That’s ${entries.length} files. A share can hold up to ${MAX_BUNDLE_FILES}.`, 'error');
     return;
   }
+  const single = entries.length === 1 && !folder;
   const total = entries.reduce((n, e) => n + e.file.size, 0);
   if (total > maxBytes) {
+    // the desktop app can try making one big file smaller first
+    const options = single && await conversionsFor(entries[0].file);
+    if (options) return setFile(entries[0].file, null, null, { ...options, tooBig: true });
     showToast(`${entries.length > 1 ? 'Those files are' : 'File is'} too large (${formatSize(total)}). Max is ${formatSize(maxBytes)}.`, 'error');
     return;
   }
-  const single = entries.length === 1 && !folder;
   let file = entries[0].file;
   if (!single) {
     // a folder from the picker carries its name at the start of each path
@@ -492,13 +495,18 @@ async function setFiles(list, folder = null) {
   }
   const type = detectType(new Uint8Array(await file.arrayBuffer()), file.name, file.type);
   if (!type || type === NOT_UTF8) {
+    // one the desktop app can turn into something ShareSecure takes
+    const options = single && !type && await conversionsFor(file);
+    if (options) return setFile(file, null, null, options);
     showToast(type ? ENCODING_ERROR : TYPES_ERROR, 'error', 7000);
     return;
   }
   setFile(file, type, single ? null : entries.length);
 }
 
-function setFile(file, type, bundled = null) {
+// A file with no type (or too big) can't be shared until it's converted:
+// `needs` is what the desktop app said it can turn it into.
+function setFile(file, type, bundled = null, needs = null) {
   selectedFile = file;
   selectedType = type;
   // fetch what "Create link" needs while the person fills in the form
@@ -506,12 +514,13 @@ function setFile(file, type, bundled = null) {
   fileName.textContent = file.name;
   fileSize.textContent = bundled
     ? `${bundled} files · ${formatSize(file.size)}`
-    : `${kindName(type)} · ${formatSize(file.size)}`;
-  document.getElementById('file-icon').innerHTML = getFileIcon(type);
+    : `${type ? kindName(type) : needs.label} · ${formatSize(file.size)}`;
+  document.getElementById('file-icon').innerHTML = getFileIcon(type || `${needs.kind}/`);
   filePreview.classList.remove('hidden');
   dropZone.classList.add('hidden');
-  uploadBtn.disabled = false;
+  uploadBtn.disabled = Boolean(needs);
   syncSaveOnly();
+  offerConversion(bundled ? null : file, needs);
 
   // Show rename field and pre-fill with filename minus extension
   const nameWrap = document.getElementById('display-name-wrap');
@@ -537,9 +546,70 @@ function syncSaveOnly() {
   updateAdvancedState();
 }
 
+// ── converting (desktop app) ────────────────────────────────────────────────
+// The desktop app can turn a file into another format on this computer before
+// it's shared (desktop/convert.js): a photo into JPEG, a video into MP4. A file
+// ShareSecure can't take, or one that's too big, has to be converted first.
+const converter = window.shareSecureDesktop?.convert;
+const convertRow = document.getElementById('convert-row');
+const convertSelect = document.getElementById('convert-select');
+const convertBtn = document.getElementById('convert-btn');
+let converting = null;   // the file being converted, so a new pick can ignore it
+
+// What the desktop app can turn a file into → { kind, label, targets } or null
+async function conversionsFor(file) {
+  if (!converter) return null;
+  const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+  const options = await converter.options(head).catch(() => null);
+  return options?.targets?.length ? options : null;
+}
+
+async function offerConversion(file, needs) {
+  convertRow?.classList.add('hidden');
+  if (!convertRow || !file) return;
+  const options = needs || await conversionsFor(file);
+  if (!options || selectedFile !== file) return;
+  convertSelect.innerHTML = '';
+  for (const t of options.targets) convertSelect.add(new Option(t.label, t.ext));
+  document.getElementById('convert-note').textContent = !needs
+    ? 'Convert it first? (optional)'
+    : needs.tooBig
+      ? `Too large to share (max ${formatSize(maxBytes)}). Converting it may make it small enough.`
+      : `${needs.label} files can’t be shared as they are. Convert it to share it.`;
+  convertRow.classList.toggle('is-needed', Boolean(needs));
+  convertBtn.disabled = false;
+  convertBtn.textContent = 'Convert';
+  convertRow.classList.remove('hidden');
+}
+
+convertBtn?.addEventListener('click', async () => {
+  const file = selectedFile;
+  if (!file || converting) return;
+  converting = file;
+  convertBtn.disabled = true;
+  convertBtn.textContent = 'Converting…';
+  uploadBtn.disabled = true;   // so the original can't go out mid-way
+  const out = await converter.run(file, convertSelect.value).catch(() => null);
+  converting = null;
+  if (selectedFile !== file) return;   // cleared or replaced meanwhile
+  const failed = message => {
+    showToast(message, 'error', 6000);
+    convertBtn.disabled = false;
+    convertBtn.textContent = 'Convert';
+    uploadBtn.disabled = !selectedType;
+  };
+  const converted = out?.bytes && new File([out.bytes], out.name);
+  const type = converted && detectType(out.bytes, out.name, '');
+  if (!type || type === NOT_UTF8) return failed('Couldn’t convert that file. Try another format.');
+  if (converted.size > maxBytes) return failed(`Converted, it’s still too large (${formatSize(converted.size)}). Max is ${formatSize(maxBytes)}.`);
+  setFile(converted, type);
+  showToast(`Converted to ${out.name.split('.').pop().toUpperCase()}.`, 'success');
+});
+
 function clearSelection() {
   selectedFile = null;
   selectedType = null;
+  convertRow?.classList.add('hidden');
   fileInput.value = '';
   if (folderInput) folderInput.value = '';
   filePreview.classList.add('hidden');
@@ -678,7 +748,7 @@ function resetUploadButton() {
 }
 
 uploadBtn.addEventListener('click', async () => {
-  if (!selectedFile) return;
+  if (!selectedFile || !selectedType) return;
 
   if (expiresSelect.value === 'custom') {
     if (!customExpiryHours) {
