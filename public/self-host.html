@@ -75,6 +75,7 @@
           <tbody>
             <tr><td><code>PORT</code></td><td>3000</td><td>Port the server listens on.</td></tr>
             <tr><td><code>BASE_URL</code></td><td>localhost</td><td>Address used in share links. Set it to your domain if you run it on a server.</td></tr>
+            <tr><td><code>ALLOWED_HOSTS</code></td><td>None</td><td>Other names it answers to, separated by commas. It already answers to localhost, its IP addresses, names only your network has (like <code>nas</code> or <code>nas.local</code>) and <code>BASE_URL</code>, and refuses the rest, so a web page can’t point its own domain at it to read it.</td></tr>
             <tr><td><code>USE_RELAY</code></td><td>true</td><td>Makes links that work from anywhere through ShareSecure’s relay, without showing your address. Shares are locked end to end, so the relay can’t read them. Turn off if you have your own domain.</td></tr>
             <tr><td><code>ENCRYPTION_KEY</code></td><td>Generated</td><td>Encrypts every file on disk. Changing it makes existing files unreadable.</td></tr>
             <tr><td><code>DATA_DIR</code></td><td>App-data folder</td><td>Where the database and encrypted files are stored. Defaults to your user app-data folder.</td></tr>

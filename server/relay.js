@@ -107,20 +107,23 @@ function start(port) {
 
     async function answer(m) {
       if (!allowed(m.method, m.path)) return json({ t: 'head', id: m.id, status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } }), send(frame(m.id, Buffer.from('Not found'))), json({ t: 'end', id: m.id });
-      let res;
-      try { res = await ask(port, m); } catch { return json({ t: 'error', id: m.id }); }
-      const headers = {};
-      for (const name of PASS_BACK) if (res.headers[name]) headers[name] = res.headers[name];
-      json({ t: 'head', id: m.id, status: res.statusCode, headers });
-      // someone, somewhere else, opening (or saving) one of your links
-      if (res.statusCode === 200 && m.method === 'GET' && /^\/api\/(raw|download)\//.test(m.path)) events.emit('opened', {});
-      const credit = { free: IN_FLIGHT, wake: null };
+      // The relay calls an answer off when its reader leaves or stops reading:
+      // then this stops too, instead of waiting for acks that never come.
+      const credit = { free: IN_FLIGHT, wake: null, off: false };
       credits.set(m.id, credit);
+      let res = null;
       try {
+        try { res = await ask(port, m); } catch { return json({ t: 'error', id: m.id }); }
+        if (closed || credit.off) return res.destroy();
+        const headers = {};
+        for (const name of PASS_BACK) if (res.headers[name]) headers[name] = res.headers[name];
+        json({ t: 'head', id: m.id, status: res.statusCode, headers });
+        // someone, somewhere else, opening (or saving) one of your links
+        if (res.statusCode === 200 && m.method === 'GET' && /^\/api\/(raw|download)\//.test(m.path)) events.emit('opened', {});
         for await (const chunk of res) {
           for (let at = 0; at < chunk.length; at += PIECE) {
-            while (credit.free <= 0 && !closed) await new Promise(r => { credit.wake = r; });
-            if (closed) return;
+            while (credit.free <= 0 && !closed && !credit.off) await new Promise(r => { credit.wake = r; });
+            if (closed || credit.off) return res.destroy();
             credit.free--;
             send(frame(m.id, chunk.subarray(at, at + PIECE)));
           }
@@ -154,6 +157,9 @@ function start(port) {
       } else if (m.t === 'ack') {
         const credit = credits.get(m.id);
         if (credit) { credit.free++; credit.wake?.(); credit.wake = null; }
+      } else if (m.t === 'cancel') {
+        const credit = credits.get(m.id);
+        if (credit) { credit.off = true; credit.wake?.(); credit.wake = null; }
       }
     });
     const lost = () => {

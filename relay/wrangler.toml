@@ -1,0 +1,33 @@
+# The relay for links to a ShareSecure on someone's own computer (src/index.js).
+# Deploy with: npx wrangler deploy --config relay/wrangler.toml
+name = "sharesecure-relay"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "COMPUTER"
+class_name = "Computer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Computer"]
+
+# Per visitor (a one-way hash of their address) and computer, per minute, in
+# each Cloudflare location. A computer connects once and stays connected; a
+# viewer opening a link makes a handful of requests.
+[[ratelimits]]
+name = "CONNECTS"
+namespace_id = "74101"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
+[[ratelimits]]
+name = "REQUESTS"
+namespace_id = "74102"
+
+  [ratelimits.simple]
+  limit = 300
+  period = 60

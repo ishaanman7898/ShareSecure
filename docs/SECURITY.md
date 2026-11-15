@@ -75,7 +75,20 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 - **An assistant can't share your keys or ShareSecure's own data by path.** An assistant on this computer can share a file by its path, and a web page or email it read could tell it which. So the desktop app and self-hosted server refuse anything in ShareSecure's data folder (its database, the key that encrypts every file, the linked account's sign-in), the app's own folder, `.env`, and key folders (`~/.ssh`, `~/.aws`, `~/.gnupg` and similar), judged by where the file really is, so a link or junction pointing into one doesn't get past. The local MCP server does the same.
 - **One leaked link can't fill your disk.** Anyone holding a link can branch it (each viewer gets their own), and through the relay nothing says who's asking, so a link stops branching after 1,000 live copies.
 - **FFmpeg is checked before it runs.** The converter is downloaded only after you say yes, from one fixed release, and refused unless its SHA-256 matches the one in the app's code.
+- **No other program can run its own code as ShareSecure.** Electron lets any program start an app's binary as plain Node (`ELECTRON_RUN_AS_NODE`), or with `NODE_OPTIONS` or `--inspect`, and its code then runs as that app: on a Mac, with the app's keychain entry (which unlocks the saved sign-in) and any folders you've let it open. The app turns all three off (Electron's fuses, `electronFuses` in package.json), only loads its code from its `app.asar`, and on Windows and macOS checks that file against a hash built into the app before running it. Its server runs as Electron's utility process instead, and after you quit, in a copy of the app started in the background.
 - An assistant connector URL (`/connect/<token>`) carries the token in its path, so it passes through Cloudflare and the relay on the way to your computer. The relay keeps no logs, but treat the URL like a password, and replace the token if it leaks.
+
+**Nobody holding a link can tie up the computer it's on**
+
+Anyone with a link knows its computer's id, so the relay keeps them from crowding out the computer or anyone else:
+
+- A new connection has 10 seconds to prove it holds the computer's key, and only 4 may try at once (the oldest gives way), so connections that never sign in can't pile up or keep the computer out.
+- Each visitor gets their own allowance for each computer: 20 connections and 300 requests a minute, and at most 16 of the 64 answers a computer can be giving at once. Visitors are counted for a minute under a one-way hash of their address, never the address itself.
+- A body over 900 KB is refused before it's read, and a download whose reader leaves, or takes nothing for a minute, is called off on the computer too.
+
+**A self-hosted server only answers to its own names**
+
+- localhost, addresses typed as numbers, names only your own network has (`nas`, `*.local`, `*.lan`…), `BASE_URL`'s and any in `ALLOWED_HOSTS`. So a web page can't point a domain of its own at it (DNS rebinding) and read it as if it were that site.
 
 **Everything else**
 
@@ -111,6 +124,7 @@ These deter casual copying. The watermark is what makes a leak traceable.
 - **A swapped key is caught by the key log**: a key that isn't in the log is refused, a second key for someone shows up in the log, and a log rewritten after someone looked fails their check.
 - **A tricked assistant** can't send a file to someone off your list without your approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in. On the desktop app and a self-hosted server it can't share the data folder, `.env` or key folders by path either, even through a link or junction.
 - **A leaked link** can't be branched more than 1,000 times on your own computer.
+- **Someone holding a link** can't keep its computer off the relay with connections that never sign in, hold every answer the computer can give, flood it past the rate limits or with a big body, or leave a download hanging on the computer. A web page that points its own domain at a self-hosted server (DNS rebinding) gets no answer.
 - **A tampered FFmpeg download** is refused, and nothing is downloaded until you agree.
 - **Nothing links you to what you share through the local MCP server**: its uploads and sends carry anonymous tokens and no account, the files and copies it makes have no account or sender tag, and the server keeps only boxes it can't open (your rules, your waiting sends, your list of shares).
 
@@ -124,7 +138,7 @@ These deter casual copying. The watermark is what makes a leak traceable.
 - **Desktop links share an address.** Every link from one computer goes through `/l/<computer id>/`, so anyone holding two of your desktop links can tell they came from the same computer, and the relay sees that computer's IP address while it's connected. Website links don't have this.
 - **Timing and IP addresses.** With little traffic, a token picked up shortly before an upload (a new browser, or after using up the wallet) could hint at who uploaded. Your IP address does the same for anyone who sees it.
 - **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
-- **Someone who can already run programs as you on your computer** can get at what the desktop app keeps: its server is started with Electron's run-as-Node mode (so it can outlive the app), which also lets any local program run code as ShareSecure, and the saved sign-in is only as safe as your operating system's key store. Like any desktop app, it can't protect you from malware already on the computer.
+- **Someone who can already run programs as you on your computer** can still read the desktop app's data folder, and the saved sign-in is only as safe as your operating system's key store. Like any desktop app, it can't protect you from malware already on the computer. (On Linux, Electron can't check the app's code against its hash before running it.)
 - **The installers aren't code-signed yet** (see [SIGNING.md](SIGNING.md)), so a download is only as trustworthy as GitHub and its HTTPS. Updates come from the same releases, checked against the SHA-512 listed in the release's `latest.yml`, which guards against a broken download but not against someone who controls the release.
 
 ## Removed

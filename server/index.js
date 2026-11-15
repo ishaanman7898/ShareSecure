@@ -56,22 +56,27 @@ app.use((req, _res, next) => {
   next();
 });
 
-// ── only this computer (desktop) ─────────────────────────────────────────────
-// The desktop app's server listens on loopback only (HOST, set by
-// desktop/main.js): links reach it through the relay, never the local network.
-// A web page could still point a domain of its own at 127.0.0.1 (DNS
-// rebinding) to read /api/mode and learn this computer's relay id, which would
-// tie a visitor to every link they've shared. So the Host must be this
-// computer's own name, or the relay's (relay.js sets it on what it forwards).
+// ── only this server's own names ─────────────────────────────────────────────
+// A web page could point a domain of its own at this server (DNS rebinding)
+// and read it as if it were that site, so only this server's own names are
+// answered (server/hosts.js). The desktop app's server listens on loopback
+// only (HOST, set by desktop/main.js), and answers to localhost and the relay
+// alone (relay.js sets that name on what it forwards). BASE_URL is read now,
+// before the relay sets it to the website's address.
 const LOOPBACK_ONLY = ['127.0.0.1', '::1', 'localhost'].includes(process.env.HOST);
-const OWN_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', 'relay.sharesecure']);
-if (LOOPBACK_ONLY) {
-  app.use((req, res, next) => {
-    const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
-    if (OWN_HOSTS.has(host)) return next();
-    res.status(421).json({ error: 'Not found' });
-  });
-}
+const hosts = require('./hosts');
+const ownName = hosts.hostChecker({
+  loopbackOnly: LOOPBACK_ONLY,
+  baseUrl: process.env.BASE_URL,
+  allowedHosts: process.env.ALLOWED_HOSTS,
+});
+app.use((req, res, next) => {
+  if (ownName(req.headers.host)) return next();
+  if (LOOPBACK_ONLY) return res.status(421).json({ error: 'Not found' });
+  const name = hosts.nameOf(req.headers.host).replace(/[^a-z0-9.:[\]%_~-]/g, '') || 'that name';
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.status(421).type('text/plain').send(`This ShareSecure doesn’t answer to “${name}”. If that’s its address, add it to ALLOWED_HOSTS in .env and restart ShareSecure.`);
+});
 
 // ── security headers ─────────────────────────────────────────────────────────
 app.use((_req, res, next) => {

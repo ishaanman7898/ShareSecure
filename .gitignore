@@ -7,4 +7,6 @@ dist/
 data/
 .env
 wrangler.toml
+# the relay's holds no secrets, and deploying it needs its rate limits
+!relay/wrangler.toml
 CLAUDE.md

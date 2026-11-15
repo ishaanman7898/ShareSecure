@@ -33,12 +33,37 @@
 
     <div class="timeline">
 
-      <!-- v1.27.1 -->
+      <!-- v1.28.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.28.0</span>
+          <span class="release-date">November 2026</span>
+          <span class="status-badge">Latest</span>
+        </div>
+        <div class="release-body">
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>No other program can run code as ShareSecure</strong> Any program on your computer could start the desktop app as plain Node and run its own code as ShareSecure (on a Mac, with the app’s keychain entry, which unlocks your saved sign-in). That’s turned off, along with <code>NODE_OPTIONS</code> and <code>--inspect</code>, and on Windows and macOS the app checks its own code against a hash before it runs.</li>
+              <li><strong>Nobody holding a link can tie up your computer</strong> A link shows its computer’s id, so the relay now gives a new connection 10 seconds to prove it’s the computer, lets only a few try at once, gives each visitor their own share of a computer’s requests (counted for a minute under a one-way hash of their address, never the address), turns away oversized requests unread, and calls off a download on your computer when its reader leaves.</li>
+              <li><strong>Self-hosted servers only answer to their own names</strong> localhost, its IP addresses, names only your network has (like <code>nas.local</code>), <code>BASE_URL</code> and the new <code>ALLOWED_HOSTS</code> setting. So a web page can’t point a domain of its own at your server (DNS rebinding) and read it.</li>
+            </ul>
+          </div>
+          <div class="change-group">
+            <h3>Changed</h3>
+            <ul class="change-list">
+              <li><strong>Links after you quit</strong> While the app is open, its server runs as Electron’s utility process. Quit with links still live and ShareSecure starts again in the background with no window, as a single process, then stops by itself once the last link expires. Opening ShareSecure brings the whole app back.</li>
+              <li><strong>Terms</strong> They now say which law governs them (Illinois) and where disputes go, and that you keep any consumer rights you have where you live. The <a href="/privacy">privacy policy</a> covers how the relay counts visitors.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- v1.27.1 -->
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.27.1</span>
           <span class="release-date">November 2026</span>
-          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
           <div class="change-group">

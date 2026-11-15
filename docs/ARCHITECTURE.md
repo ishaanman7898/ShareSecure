@@ -83,6 +83,7 @@ functions/     website API (Cloudflare Pages Functions). _*.js are shared helper
   l/[[path]].js  /l/<computer>/r/<id>: serves the viewer for links to a desktop app
 server/        Express server for desktop + self-hosted
   index.js       app setup, /api/mode, /r/:id, cleanup sweep, relay start
+  hosts.js       which Host names the server answers to (DNS rebinding)
   db.js          SQLite schema + migrations; data dir per OS
   routes/files.js   upload, info, raw, download, reshare, delete, annotations
   routes/cloud.js   the linked website account: send to usernames, inbox sync
@@ -96,16 +97,16 @@ server/        Express server for desktop + self-hosted
   settings.js    settings.json next to the DB (secrets encrypted)
 desktop/       Electron
   main.js        windows, tray, updates, notifications, saved sign-in
-  server-process.js  the Express server, forked as its own process (outlives the app)
+  server-process.js  the Express server: the app's utility process, or on its own in the background
   preload.js     window.shareSecureDesktop: updates, protection, notifications, signIn, convert
   convert.js     converting a file before it's shared (FFmpeg + HEIC), on this computer only
   ffmpeg.js      fetching FFmpeg the first time it's needed, pinned by sha256
   update-icons.js  every app and web icon from icon-source.png (`npm run icons`)
-relay/         Cloudflare Worker + Durable Object that carries desktop links
+relay/         Cloudflare Worker + Durable Object that carries desktop links (wrangler.toml: its rate limits)
 packages/sharesecure-mcp/   local stdio MCP server (npm package)
 scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log),
                refresh-update-info.mjs (signed Windows installer), mac-licenses.cjs (afterPack)
-tests/         node:test suites: hosted-security (website), self-hosted,
+tests/         node:test suites: hosted-security (website), self-hosted, relay,
                desktop-send (the desktop's sends against the website's handlers),
                desktop-convert; website-schema.sql is the base table they load
 docs/          this file, SECURITY.md, SIGNING.md
@@ -158,8 +159,20 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
 - The viewer knows it's a relay link from the `/l/<computer>/` path prefix
   (`api()` and `pagePrefix` in viewer.js). The website's CSP for `/l/` pages
   allows `connect-src` to the relay.
+- Nobody holding a link may tie the computer up (relay/src/index.js): a new
+  socket has `HELLO_WITHIN` (10 s) to prove its key and only `MAX_PENDING`
+  (4) may try at once, the oldest giving way (an alarm closes the slow ones);
+  each visitor, a one-way hash of their address passed to the Durable Object
+  as `x-relay-visitor`, has Workers rate limits per computer (`CONNECTS`,
+  `REQUESTS` in relay/wrangler.toml) and at most `MAX_PER_VISITOR` of the
+  computer's `MAX_WAITING` answers in progress; bodies over 900 KB are refused
+  unread. An answer whose reader leaves, or takes nothing for `IDLE_WITHIN`,
+  is called off with `{ t: 'cancel', id }`, and relay.js stops reading it.
+  Older computers ignore `cancel`, so the protocol stays compatible.
 - The relay is deployed by hand: `npx wrangler deploy --config relay/wrangler.toml`
-  (that file is local and gitignored). Pushing to main does **not** deploy it.
+  (that file is in git, unlike other wrangler.toml files: it holds no
+  secrets). Pushing to main does **not** deploy it. `tests/relay.test.cjs`
+  runs the Worker in Node with stand-ins for the parts of the runtime it uses.
 
 ### Sending to a username
 
@@ -179,26 +192,40 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
 
 ## The desktop app
 
-- `desktop/main.js` starts `server-process.js` with the Electron binary as
-  Node (`ELECTRON_RUN_AS_NODE`), detached, on a fixed port (port.json, so the
-  page's localStorage origin stays the same). It **outlives the app**: links
-  keep working after quitting until the last one expires, then it exits.
+- `desktop/main.js` runs `server-process.js` as Electron's utility process
+  (`utilityProcess.fork`), on a fixed port (port.json, so the page's
+  localStorage origin stays the same). It stops with the app.
+- **Links outlive the app**: quitting with a link still live (`quit()`, or
+  any other quit while one was live at the last 30-second check) relaunches
+  the app with `--background` (`BACKGROUND_FLAG`, also what Windows starts at
+  sign-in). In the background there's no window or tray, Chromium's GPU and
+  network service run in-process (one process: measured at 115 MB, against
+  90 MB for the bare server run as Node and ~500 MB for the open app), and the server
+  runs in the main process itself; server-process.js exits once nothing is
+  live. Opening ShareSecure meanwhile (`second-instance`, or `activate` on a
+  Mac) relaunches it as the whole app. "Stop sharing and quit" doesn't hand over.
+- **Fuses** (`electronFuses` in package.json): run-as-Node, `NODE_OPTIONS` and
+  `--inspect` are off, and the app only loads its `app.asar`, checked against
+  an integrity hash on Windows and macOS. So nothing may `fork()` the app's
+  binary as Node any more: use `utilityProcess`.
 - The window loads `http://localhost:<port>`. Share links opened inside the
   app are mapped back to localhost (`inApp()`); other URLs open in the browser.
-- IPC with the server process (`process.send`): `stop`, `live?`,
-  `reset-password`, and from the server `notify` events.
+- Messages with the server process (`postMessage` / `process.parentPort`):
+  `stop`, `live?`, `reset-password`, and from the server `notify` events.
 - **Notifications** (`server/events.js` → server-process → `main.js`
   `notifyFromServer`): expired, opened (via relay), received, updates.
   Preferences and one-time flags in `notifications.json` in userData.
-  Only while the app runs (the bare server process can't show any).
+  Only while the app is open (none from the background).
 - **Linked account**: signing in to the desktop app auto-creates/links a
   website account with the same username and password (`/api/cloud/auto`),
   unless the user chose another or unlinked. The token, username and the
   account's private key are kept encrypted in settings.json.
 - **Only this computer**: main.js starts the server with `HOST=127.0.0.1`, so
   it listens on loopback only (links arrive through the relay), and
-  `server/index.js` then refuses any Host but localhost or `relay.sharesecure`
-  (DNS rebinding). Electron's permissions are limited to clipboard writes,
+  `server/hosts.js` then refuses any Host but localhost or `relay.sharesecure`
+  (DNS rebinding). A self-hosted server answers to localhost, addresses
+  typed as numbers, local-only names (one word, `.local`, `.lan`…),
+  `BASE_URL`'s and `ALLOWED_HOSTS`. Electron's permissions are limited to clipboard writes,
   fullscreen and notifications, and windows only ever show the app's own
   pages or its update page.
 - **Converting** (`desktop/convert.js`): picking a file ShareSecure can't take
@@ -289,6 +316,9 @@ Gotchas:
 - Cloudflare Functions get ~10 ms CPU per request: no per-byte JS loops in
   `functions/`.
 - On Windows, `import()` of an absolute path needs `pathToFileURL(...).href`.
+- A packaged app can't be run as Node (fuses), so `ELECTRON_RUN_AS_NODE`
+  tricks only work with the dev binary in node_modules. To try the background
+  mode in dev: `npx electron . --background`.
 
 ## Code style
 

@@ -1,16 +1,33 @@
 'use strict';
 // ShareSecure desktop: a private ShareSecure that runs on this computer. Its
-// server runs in a process of its own, which outlives the app: share links keep
-// working after you quit, until the last one expires. Your ShareSecure account
-// is the website; the app only links to it to send files to usernames.
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage, session, net: electronNet } = require('electron');
-const { fork } = require('child_process');
+// server runs in a process of its own (server-process.js). Share links keep
+// working after you quit, until the last one expires: the app starts again in
+// the background, with no window, just to serve them. Your ShareSecure
+// account is the website; the app only links to it to send files to usernames.
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage, session, utilityProcess, powerMonitor, net: electronNet } = require('electron');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+const util = require('util');
 
 // a dev run (npm run desktop) never touches the installed app's data or lock
 if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'ShareSecure-dev'));
+
+// Set when the app starts only to keep links up: by Windows at sign-in, or by
+// the app itself when you quit with links still live (see quit). No window, no
+// tray: just the server, in this process (runInBackground).
+const BACKGROUND_FLAG = '--background';
+const BACKGROUND = process.argv.includes(BACKGROUND_FLAG);
+if (BACKGROUND) {
+  // Nothing is ever drawn, so Chromium's GPU and network helpers stay inside
+  // this process instead of starting their own: one process, about 25 MB more
+  // than the server alone, instead of the whole app's four or five.
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('in-process-gpu');
+  app.commandLine.appendSwitch('enable-features', 'NetworkServiceInProcess2');
+  app.dock?.hide();
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -19,8 +36,6 @@ if (!app.requestSingleInstanceLock()) {
 
 // the website: where sending to a username goes, and the changelog
 const CLOUD = 'https://sharesecure-du8.pages.dev';
-// set when Windows starts the app at sign-in: bring the links back up, no window
-const BACKGROUND_FLAG = '--background';
 
 // Program files are read-only once packaged, so settings, the encryption key
 // and every stored file live in the user's app-data folder. It's a separate
@@ -45,8 +60,10 @@ let win = null;
 let tray = null;
 let quitting = false;
 let origin = '';
-let server = null;      // this computer's server process, while the app runs it
+let server = null;      // this computer's server (a utility process), while the app runs it
 let publicBase = null;  // the public address share links are made with (the website's /l/<this computer>)
+let liveKnown = false;  // whether a link was live when last asked
+let shuttingDown = false;
 
 // The server listens on every address (IPv6 and IPv4), so probe both: a
 // server holding only one of them still answers http://localhost:<port>.
@@ -62,9 +79,11 @@ const portFree = async port => (await portFreeOn(port, '::')) && (await portFree
 
 // Keep the same port between launches: the page's saved state (your share list,
 // owner keys) belongs to the origin, and a new port would be a new origin.
+// Starting again (into the background, or out of it) frees it a moment later.
 async function choosePort() {
   let saved = null;
   try { saved = JSON.parse(fs.readFileSync(PORT_FILE, 'utf8')).port; } catch {}
+  for (let i = 0; saved && i < 15 && !(await portFree(saved)); i++) await sleep(200);
   for (const port of [saved, 3000, 3100, 3200, 4300, 5300].filter(Boolean)) {
     if (await portFree(port)) {
       fs.mkdirSync(USER_DIR, { recursive: true });
@@ -92,8 +111,9 @@ function isRunning(pid) {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-// A server left running after the app quit (keeping links up) has no line back
-// to this app. Stop it, and start one this app can talk to, on the same port.
+// A server left running by an older version (up to 1.27, the server kept
+// running on its own after you quit) has no line back to this app. Stop it,
+// and start one this app can talk to, on the same port.
 async function stopLeftoverServer() {
   let saved = null;
   try { saved = JSON.parse(fs.readFileSync(SERVER_FILE, 'utf8')); } catch {}
@@ -107,36 +127,41 @@ async function stopLeftoverServer() {
   for (let i = 0; i < 50 && (isRunning(saved.pid) || !(await portFree(saved.port))); i++) await sleep(100);
 }
 
+function serverEnv(port) {
+  return {
+    ...process.env,
+    PORT: String(port),
+    // only this computer can connect; links come in through the relay
+    HOST: '127.0.0.1',
+    DATA_DIR,
+    ENV_FILE: path.join(DATA_DIR, '.env'),
+    SHARESECURE_DESKTOP: '1',
+    // where sending to a username goes, once you link your ShareSecure account
+    SHARESECURE_CLOUD: CLOUD,
+  };
+}
+
+// While the app is open, the server is its utility process: Node.js that
+// Electron starts and stops with the app. (No program can run this app's own
+// binary as plain Node any more: see electronFuses in package.json.)
 async function startServer() {
   await stopLeftoverServer();
   const port = await choosePort();
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  const log = fs.openSync(path.join(USER_DIR, 'server.log'), 'w');
-  // the app's own binary run as Node, detached so it can outlive the app
-  server = fork(path.join(__dirname, 'server-process.js'), [], {
-    env: {
-      ...process.env,
-      ELECTRON_RUN_AS_NODE: '1',
-      PORT: String(port),
-      // only this computer can connect; links come in through the relay
-      HOST: '127.0.0.1',
-      DATA_DIR,
-      ENV_FILE: path.join(DATA_DIR, '.env'),
-      SHARESECURE_DESKTOP: '1',
-      // where sending to a username goes, once you link your ShareSecure account
-      SHARESECURE_CLOUD: CLOUD,
-    },
-    stdio: ['ignore', log, log, 'ipc'],
-    detached: true,
-    windowsHide: true,
+  const started = utilityProcess.fork(path.join(__dirname, 'server-process.js'), [], {
+    env: serverEnv(port),
+    stdio: 'pipe',
+    serviceName: 'ShareSecure server',
   });
-  fs.closeSync(log);
-  server.unref();
-  fs.writeFileSync(SERVER_FILE, JSON.stringify({ pid: server.pid, port }));
-  server.on('message', message => { if (message?.type === 'notify') notifyFromServer(message); });
-  const started = server;
+  server = started;
+  const log = fs.createWriteStream(path.join(USER_DIR, 'server.log'));
+  started.stdout?.pipe(log, { end: false });
+  started.stderr?.pipe(log, { end: false });
+  started.once('spawn', () => fs.writeFileSync(SERVER_FILE, JSON.stringify({ pid: started.pid, port })));
+  started.on('message', message => { if (message?.type === 'notify') notifyFromServer(message); });
   let ready = false;
   started.once('exit', () => {
+    log.end();
     if (server === started) server = null;
     // it stopped while the app still needs it: start it again
     if (ready && !quitting) {
@@ -147,10 +172,11 @@ async function startServer() {
   await waitForServer(origin);
   ready = true;
   await refreshPublicBase();
+  liveKnown = await hasLiveLinks();
 }
 
 function stopServer() {
-  if (server?.connected) server.send('stop');
+  try { server?.postMessage('stop'); } catch {}
 }
 
 // Share links point at the website's address for this computer (server/relay.js).
@@ -160,22 +186,69 @@ async function refreshPublicBase() {
     publicBase = (await res.json()).publicUrl || publicBase;
   } catch {}
 }
-setInterval(() => { if (server) refreshPublicBase(); }, 30 * 1000);
+setInterval(async () => {
+  if (!server) return;
+  refreshPublicBase();
+  liveKnown = await hasLiveLinks();
+}, 30 * 1000);
 
-// Whether any link is still live, that is, whether quitting leaves the server sharing.
+// Whether any link is still live, that is, whether quitting should keep sharing.
 function hasLiveLinks() {
-  if (!server?.connected) return Promise.resolve(false);
+  const asked = server;
+  if (!asked) return Promise.resolve(false);
   return new Promise(resolve => {
-    const timer = setTimeout(() => { server?.off('message', onReply); resolve(false); }, 1000);
+    const timer = setTimeout(() => { asked.off('message', onReply); resolve(false); }, 1000);
     function onReply(message) {
       if (typeof message?.live !== 'boolean') return;
       clearTimeout(timer);
-      server?.off('message', onReply);
+      asked.off('message', onReply);
       resolve(message.live);
     }
-    server.on('message', onReply);
-    server.send('live?');
+    asked.on('message', onReply);
+    try { asked.postMessage('live?'); } catch { clearTimeout(timer); asked.off('message', onReply); resolve(false); }
   });
+}
+
+// Starts this app again once it has quit. An AppImage runs from a folder
+// that's gone by then, so it's the AppImage itself that starts.
+function relaunch(args) {
+  app.relaunch({ args, ...(process.env.APPIMAGE ? { execPath: process.env.APPIMAGE } : {}) });
+}
+const argsWithout = flag => process.argv.slice(1).filter(arg => arg !== flag);
+
+// Quitting with links still live starts the app again in the background,
+// where only the server runs (a fraction of the whole app), and it stops by
+// itself once the last link has expired.
+const keepLinksUp = () => relaunch([...argsWithout(BACKGROUND_FLAG), BACKGROUND_FLAG]);
+
+// ── in the background ───────────────────────────────────────────────────────
+// The server runs in this process until the last link expires (then
+// server-process.js stops it). Its log goes on in server.log.
+async function runInBackground() {
+  app.dock?.hide();
+  startAtSignIn(true);
+  try {
+    await stopLeftoverServer();
+    const port = await choosePort();
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const log = fs.createWriteStream(path.join(USER_DIR, 'server.log'), { flags: 'a' });
+    for (const level of ['log', 'info', 'warn', 'error']) console[level] = (...parts) => log.write(`${util.format(...parts)}\n`);
+    Object.assign(process.env, serverEnv(port));
+    fs.writeFileSync(SERVER_FILE, JSON.stringify({ pid: process.pid, port }));
+    require('./server-process');
+    // and say if ShareSecure updated itself since you last used it
+    announceUpdate();
+  } catch (err) {
+    console.error('background start failed:', err.message);
+    app.exit(1);
+  }
+}
+
+// Opening ShareSecure while it's in the background starts it again as the
+// whole app (links pause for a moment while it does).
+function openTheApp() {
+  relaunch(argsWithout(BACKGROUND_FLAG));
+  app.exit(0);
 }
 
 // Links that belong in the app window. Share links point at the website's
@@ -319,7 +392,7 @@ function buildTrayMenu() {
     { label: 'Licenses', click: () => openWindow(`${origin}/licenses`, { width: 900, height: 820 }) },
     { type: 'separator' },
     { label: 'Quit ShareSecure', click: quit },
-    { label: 'Stop sharing and quit', click: () => { stopServer(); quit(); } },
+    { label: 'Stop sharing and quit', click: stopSharingAndQuit },
   ]));
 }
 
@@ -328,12 +401,19 @@ async function quit() {
   if (await hasLiveLinks()) {
     onceOnly('toldAboutQuit', () => notify('Your links keep working',
       'ShareSecure keeps sharing in the background until your links expire, then stops by itself.'));
+    keepLinksUp();
   }
   app.quit();
 }
 
+function stopSharingAndQuit() {
+  quitting = true;
+  stopServer();
+  app.quit();
+}
+
 // Windows starts the app at sign-in, in the background, so links on this
-// computer come back after a restart. With none live, it exits right away.
+// computer come back after a restart. With none live, it stops in seconds.
 function startAtSignIn(on) {
   if (process.platform !== 'win32' || !app.isPackaged) return;
   app.setLoginItemSettings({ openAtLogin: on, args: [BACKGROUND_FLAG] });
@@ -709,7 +789,7 @@ ipcMain.handle('signin:save', (e, username, password) => {
 // after you confirm it here. Being at this computer is the proof: it's your
 // ShareSecure, and the files don't depend on the password. → username or null
 ipcMain.handle('signin:reset', async (e, password) => {
-  if (!fromApp(e, SIGN_IN) || typeof password !== 'string' || password.length < 8 || !server?.connected) return null;
+  if (!fromApp(e, SIGN_IN) || typeof password !== 'string' || password.length < 8 || !server) return null;
   const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender) || undefined, {
     type: 'question',
     title: 'ShareSecure',
@@ -719,17 +799,18 @@ ipcMain.handle('signin:reset', async (e, password) => {
     message: 'Set a new password for ShareSecure on this computer?',
     detail: 'Your files and links stay as they are. Anywhere else you’re signed in is signed out.',
   });
-  if (response !== 0 || !server?.connected) return null;
+  const asked = server;
+  if (response !== 0 || !asked) return null;
   const username = await new Promise(resolve => {
-    const timer = setTimeout(() => { server?.off('message', onReply); resolve(null); }, 10000);
+    const timer = setTimeout(() => { asked.off('message', onReply); resolve(null); }, 10000);
     function onReply(message) {
       if (message?.type !== 'reset-password') return;
       clearTimeout(timer);
-      server?.off('message', onReply);
+      asked.off('message', onReply);
       resolve(typeof message.username === 'string' ? message.username : null);
     }
-    server.on('message', onReply);
-    server.send({ type: 'reset-password', password });
+    asked.on('message', onReply);
+    try { asked.postMessage({ type: 'reset-password', password }); } catch { clearTimeout(timer); resolve(null); }
   });
   if (username) {
     const all = readSignIns();
@@ -747,14 +828,26 @@ ipcMain.handle('signin:forget', e => {
   return true;
 });
 
-app.on('second-instance', (_e, argv) => { if (!argv.includes(BACKGROUND_FLAG)) showMain(); });
-app.on('activate', showMain);
-app.on('before-quit', () => { quitting = true; });
+// opening ShareSecure again (a sign-in start in the background doesn't count)
+app.on('second-instance', (_e, argv) => {
+  if (argv.includes(BACKGROUND_FLAG)) return;
+  if (BACKGROUND) openTheApp();
+  else showMain();
+});
+app.on('activate', () => (BACKGROUND ? openTheApp() : showMain()));
+app.on('before-quit', () => {
+  // quit some other way (⌘Q, the Dock) with links live: they stay up too,
+  // unless the computer is shutting down
+  if (!quitting && !BACKGROUND && liveKnown && !shuttingDown) keepLinksUp();
+  quitting = true;
+});
 // stay alive in the tray when every window is closed
 app.on('window-all-closed', () => {});
 
 app.whenReady().then(async () => {
   if (process.platform === 'win32') app.setAppUserModelId('app.sharesecure.desktop');
+  powerMonitor.on('shutdown', () => { shuttingDown = true; });
+  if (BACKGROUND) return runInBackground();
   // lets pages hide their "get the app" and "host it yourself" links in here
   app.userAgentFallback = `${app.userAgentFallback} ShareSecureDesktop/${app.getVersion()}`;
   // Electron says yes to every permission a page asks for unless told otherwise.
@@ -765,13 +858,6 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionCheckHandler((_contents, permission) => ALLOWED_PERMISSIONS.has(permission));
   forgetAccountMode();
   await start();
-  if (process.argv.includes(BACKGROUND_FLAG)) {
-    // started at sign-in: leave the server sharing on its own, and say if
-    // ShareSecure updated itself since you last used it
-    if (announceUpdate()) await sleep(4000);
-    app.exit(0);
-    return;
-  }
   createTray();
   showMain();
   announceUpdate();

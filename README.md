@@ -207,6 +207,7 @@ The installers set up Node.js if needed and start ShareSecure at `http://localho
 |---|---|---|
 | `PORT` | `3000` | Port the server listens on. |
 | `BASE_URL` | localhost, or the relay's address | Address used in share links. |
+| `ALLOWED_HOSTS` | none | Other names the server answers to, comma-separated (`.example.com` allows every name under it). It already answers to localhost, its IP addresses, names only your network has (`nas`, `*.local`, `*.lan`) and `BASE_URL`; anything else gets refused, so a web page can't use DNS rebinding to read it. |
 | `USE_RELAY` | `true` | Make links that work from anywhere, through ShareSecure's relay. |
 | `ENCRYPTION_KEY` | generated | Encrypts every file. Changing it makes existing files unreadable. |
 | `DATA_DIR` | app-data folder | Where the database and encrypted files are stored. |
