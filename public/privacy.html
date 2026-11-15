@@ -29,7 +29,7 @@
     <header>
       <h1 class="page-title">Privacy policy</h1>
       <div class="page-meta">
-        <span>Last updated October 28, 2026</span>
+        <span>Last updated November 14, 2026</span>
         <span>· <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/privacy.html" target="_blank" rel="noopener noreferrer">Every change, on GitHub</a></span>
       </div>
     </header>
@@ -40,7 +40,7 @@
         <li>We ask for a username and password. No email, no phone number, no real name.</li>
         <li>Files are end-to-end encrypted by default: we store them, but we can't read them, their names or their notes.</li>
         <li>Shares go up with anonymous tokens, so we can't tell which account shared what.</li>
-        <li>No analytics, no ads, no tracking cookies. Our code doesn't log IP addresses.</li>
+        <li>No analytics, no ads, no tracking cookies. Our code doesn't log IP addresses; to stop password guessing it keeps only a scrambled form of one, for about 15 minutes.</li>
         <li>Everything is erased when it expires, and you can delete your account and files at any time.</li>
         <li>ShareSecure is free. There's nothing to pay for, so we never ask for payment details.</li>
       </ul>
@@ -76,6 +76,8 @@
       <p>If you turn on a watermark or “discourage screenshots” for a share, that setting is sealed inside the file's encrypted name, so we can't see or change it. The watermark itself is drawn in the viewer's browser; we never learn who looked at a file.</p>
       <h3>Who uploaded what</h3>
       <p>Everything shared from the website, the desktop app or the assistant on your own computer is end-to-end encrypted and goes up with anonymous tokens, never your sign-in, so nothing ties it to your account. Deleting a share uses its delete key, not your sign-in, so that doesn't tie it to you either. Files shared by an assistant connected through our servers are tagged with a code derived from your account with a secret key, not your username or account number. Your list of shares (“Your shares”) is kept on our servers sealed to your own key, so it follows you between devices and we can't read it.</p>
+      <h3>Stopping password guessing and abuse</h3>
+      <p>To slow down password guessing, and stop anyone hammering the site to hunt for links, we count sign-in attempts and some requests anyone can make (looking up and opening links, resharing, file requests) per IP address, in 15-minute windows. The address is stored only as a keyed hash, never as the address itself, and old counts are cleared once their 15 minutes are up.</p>
       <h3>Daily limits</h3>
       <p>To enforce daily limits, we count how many anonymous tokens each account picks up a day (under a keyed code) and the files tagged to an account in the last 24 hours. Spent tokens are remembered for two days so none can be used twice.</p>
       <h3>Files sent to you, and file requests</h3>
@@ -86,12 +88,16 @@
 
     <section id="not-collected">
       <h2>2. What we don't collect</h2>
-      <p>No email address, phone number or real name. No analytics, advertising or tracking scripts, and no cookies. Our own code doesn't record IP addresses, browser details or who viewed a file. We don't sell, rent or share your data, and we never use files, or anything else on ShareSecure, to train AI.</p>
+      <p>No email address, phone number or real name. No analytics, advertising or tracking scripts, and no cookies. Our own code doesn't record IP addresses (apart from the scrambled counts in section 1), browser details or who viewed a file. We don't sell, rent or share your data, and we never use files, or anything else on ShareSecure, to train AI.</p>
     </section>
 
     <section id="use">
       <h2>3. How we use it</h2>
       <p>Only to run ShareSecure: to store and serve your files until they expire, deliver what you send, enforce the limits, keep accounts secure. We don't build profiles, and we don't look through files (we can't open end-to-end encrypted ones). We may act on a specific file or account if it's reported as breaking the <a href="/terms">terms</a> or the law requires it.</p>
+      <h3>Legal bases (GDPR and UK GDPR)</h3>
+      <p>We use your account, files and what you send to provide the service you signed up for (performing our contract with you). We use the scrambled request counts and reports about files to keep ShareSecure secure and free of abuse (our legitimate interests). We keep or hand over something only if the law requires it (a legal obligation). A username and password are needed to have an account; nothing else is.</p>
+      <h3>Where your data is processed</h3>
+      <p>The database is in the United States (Turso), and Cloudflare runs the site from data centres around the world. When data goes from the EEA, the UK or Switzerland to these providers, it relies on the safeguards they offer for that, such as the European Commission's Standard Contractual Clauses.</p>
     </section>
 
     <section id="others">
@@ -103,7 +109,7 @@
           <tbody>
             <tr><td><a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Cloudflare</a></td><td>Hosts the site and runs its server code</td><td>Every request, including your IP address, like any web host. Encrypted files pass through it.</td></tr>
             <tr><td><a href="https://turso.tech/privacy-policy" target="_blank" rel="noopener noreferrer">Turso</a></td><td>The database (in the United States)</td><td>Everything in section 1, as stored: encrypted files and the rest.</td></tr>
-            <tr><td><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub</a></td><td>Hosts the code and desktop app downloads</td><td>Downloads and update checks from the desktop app.</td></tr>
+            <tr><td><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener noreferrer">GitHub</a></td><td>Hosts the code and desktop app downloads</td><td>Downloads and update checks from the desktop app, and the converter download (FFmpeg) if you use it.</td></tr>
             <tr><td>AI assistants you connect</td><td>Claude, ChatGPT and others, only if you connect them</td><td>The links, names and details they handle for you, under their own policies. The assistant on your own computer keeps links out of the chat.</td></tr>
           </tbody>
         </table>
@@ -138,6 +144,7 @@
         <li><strong>See and delete your data.</strong> Your shares, inbox and requests are in the app; delete any of them, or your whole account, at any time.</li>
         <li><strong>Turn things off.</strong> Disconnect AI assistants, turn off notifications and change what new shares start with in Settings.</li>
         <li><strong>Ask us.</strong> To ask what we hold about you, or to exercise rights you have where you live (such as access, correction, deletion or objection under the GDPR or US state laws), email <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a> with your username. We'll answer within 30 days. Since we don't have your email address unless you write to us, we can't verify you any other way than by you proving you can sign in.</li>
+        <li><strong>Complain.</strong> If you're in the EEA or the UK and think we've handled your data wrongly, you can complain to your local data protection authority. We'd like the chance to fix it first, so please write to us too.</li>
       </ul>
     </section>
 
@@ -148,13 +155,15 @@
         <li>The desktop app makes or links a ShareSecure account with your username when you set it up or sign in, unless you link another or unlink it. Each file you send to a username is uploaded as an encrypted copy under that account, and this policy covers it. Files sent to your username are fetched from the website and kept on your computer once you accept them; the account's private key is kept on your computer, encrypted, to open them.</li>
         <li>To make links work from anywhere, the app keeps a connection open to ShareSecure's relay (a Cloudflare Worker), and people opening a link reach your computer through it, so they never learn its address. Shares are locked end to end before they leave the app, so the relay only carries locked bytes it can't read, and it keeps no log, addresses or files. The relay does see your computer's address while it's connected, and the addresses of people opening links, as any website does. You can turn it off with the <code>USE_RELAY</code> setting if you have your own domain.</li>
         <li>The app checks GitHub for updates.</li>
+        <li>Converting a file happens on your computer, and the file never leaves it. The first time a conversion needs FFmpeg (most videos and audio), the app asks, then downloads it once from GitHub.</li>
+        <li>Nothing else: no analytics, no crash reports, and no spelling dictionaries fetched from Google (on Linux, the app turns spell checking off rather than download them).</li>
       </ul>
       <p>The desktop app can hide windows showing view-only files from screenshots and screen recordings (Windows and macOS). That setting stays on your computer.</p>
     </section>
 
     <section id="children">
       <h2>10. Children</h2>
-      <p>ShareSecure isn't meant for children under 13, and we don't knowingly let them use it. If you think a child has an account, email us and we'll delete it.</p>
+      <p>ShareSecure isn't meant for children under 13, or under the age where you live at which you can use online services without a parent's consent, if that's higher. We don't knowingly let them use it. If you think a child has an account, email us and we'll delete it.</p>
     </section>
 
     <section id="faq">
@@ -183,6 +192,7 @@
       <a href="/guides">Guides</a>
       <a href="/privacy">Privacy</a>
       <a href="/terms">Terms</a>
+      <a href="/licenses">Licenses</a>
       <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
     <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>

@@ -352,12 +352,19 @@ router.post('/delete/:shortId', (req, res) => {
 });
 
 // ── POST /api/reshare/:shortId ────────────────────────────────────────────────
+// Anyone holding a link can branch it (every viewer gets a link of their own),
+// and through the relay nothing says who's asking, so one leaked link can't be
+// made to pile rows up on this computer without end.
+const MAX_BRANCHES = 1000;
+
 router.post('/reshare/:shortId', (req, res) => {
   const file = db.prepare(
     'SELECT * FROM files WHERE short_id = ? AND is_active = 1'
   ).get(req.params.shortId);
 
   if (goneIfExpired(file, res)) return;
+  const branches = db.prepare('SELECT COUNT(*) AS n FROM files WHERE cluster_id = ? AND is_active = 1').get(file.cluster_id || file.short_id).n;
+  if (branches >= MAX_BRANCHES) return res.status(429).json({ error: 'This link has been shared onward too many times.' });
 
   const newShortId      = generateId(LINK_ID_LENGTH);
   const newDeleteToken  = generateId(24);

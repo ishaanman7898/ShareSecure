@@ -10,7 +10,7 @@ set -euo pipefail
 REPO_URL="${SHARESECURE_REPO:-https://github.com/ishaanman7898/ShareSecure}"
 INSTALL_DIR="${SHARESECURE_DIR:-$HOME/sharesecure}"
 PORT="${SHARESECURE_PORT:-3000}"
-MIN_NODE=20
+MIN_NODE=22   # 22+ has the WebSocket the relay (public links) needs; 20 is past its end of life
 
 # ── colours ──────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
@@ -75,15 +75,15 @@ else
     mac)
       if command -v brew &>/dev/null; then
         step "Using Homebrew..."
-        brew install node@20
-        brew link --overwrite node@20
+        brew install node@22
+        brew link --overwrite node@22
         ok "Node.js $(node -v) installed via Homebrew"
       else
         install_node_nvm
       fi ;;
     debian)
       step "Using apt..."
-      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+      curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
       sudo apt-get install -y nodejs
       ok "Node.js $(node -v) installed" ;;
     fedora)

@@ -593,12 +593,17 @@ convertBtn?.addEventListener('click', async () => {
   const out = await converter.run(file, convertSelect.value).catch(() => null);
   converting = null;
   if (selectedFile !== file) return;   // cleared or replaced meanwhile
-  const failed = message => {
-    showToast(message, 'error', 6000);
+  const ready = () => {
     convertBtn.disabled = false;
     convertBtn.textContent = 'Convert';
     uploadBtn.disabled = !selectedType;
   };
+  const failed = message => {
+    showToast(message, 'error', 6000);
+    ready();
+  };
+  // the converter needed downloading, and you said not now
+  if (out?.cancelled) return ready();
   const converted = out?.bytes && new File([out.bytes], out.name);
   const type = converted && detectType(out.bytes, out.name, '');
   if (!type || type === NOT_UTF8) return failed('Couldn’t convert that file. Try another format.');
@@ -1731,6 +1736,9 @@ function showSignedIn(username) {
       characters: ' =+xX0S8#@',
       cellSize: 17,
       density: 0.78,
+      // it's on screen for as long as the app is open, often behind other windows
+      maxFps: 24,
+      pauseWhenUnfocused: true,
     });
   }
 }

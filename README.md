@@ -21,7 +21,7 @@
 
 ---
 
-Upload almost any file (documents, spreadsheets, images, video, ZIPs), several files or a whole folder at once, choose how long the link lasts (1 hour to 10 days), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, links and the app are never indexed, and when the link expires the file is erased.
+Upload almost any file (documents, spreadsheets, images, video, ZIPs), several files or a whole folder at once, choose how long the link lasts (1 hour to 10 days on the website; anything up to “never” in the desktop app), and send it to someone's username, or share the link or its QR code. Files are encrypted at rest, links and the app are never indexed, and when the link expires the file is erased.
 
 ## Ways to use it
 
@@ -39,7 +39,7 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 
 - **Files:** PDF, Word, Excel, PowerPoint and OpenDocument files, PNG, JPG, GIF, WebP, MP4, MOV, WebM, MP3, M4A, WAV, ZIP, 7z, gzip, RAR, tar, plain text, Markdown and CSV, up to 10 MB on the website and 100 MB on your own computer. Types are checked from the file's contents, and the name people see always ends in the real type, so a PDF can't arrive looking like an `.exe`. Programs and scripts can't be shared on their own.
 - **Several files or a folder** go as one share: they're packed into a ZIP in your browser, and the viewer lists them and opens each one in place. Video and audio play in the viewer; spreadsheets, presentations and archives are offered to save.
-- **Links that expire** after 1 hour to 10 days, or at a date and time you pick. Expired files are erased.
+- **Links that expire** after 1 hour to 10 days, or at a date and time you pick (in the desktop app, from a minute to never). Expired files are erased.
 - **Links that work once.** Turn on *Works once* and the file is erased the moment it's opened. If anyone tries the link after that, you're told: it was probably passed on.
 - **Passcodes.** Add one and the link alone isn't enough to open the file.
 - **View-only by default.** Choose per file whether people can download it or draw on it (pen, highlighter, eraser), and whether only people signed in to ShareSecure can open it.
@@ -77,7 +77,8 @@ Your ShareSecure account is the website; the desktop app is ShareSecure running 
 **Apps and hosting**
 
 - **Website**, on phones too, in light and dark mode. Add it to your home screen and, on Android, ShareSecure appears in the Share menu, so you can share straight from any app. What you share waits on the phone until you choose to send it.
-- **Desktop app** for Windows, macOS and Linux: your files stay on your computer only. It runs in the tray and updates itself.
+- **Desktop app** for Windows, macOS and Linux: your files stay on your computer only. It runs in the tray, lets go of its window's memory while it's tucked away there, and updates itself.
+- **Converting, in the desktop app.** A file ShareSecure can't take as it is (an iPhone HEIC photo, an MKV video, a FLAC song) or one that's too big can be converted on your computer first, with its metadata left out. iPhone photos convert straight away; video and audio use FFmpeg, which the app downloads once, after asking, instead of making every installer 30 MB bigger.
 - **Self-hosted** with one command or Docker. Only you can upload, and files are erased within 30 seconds of expiring.
 
 ## AI assistants (MCP)
@@ -167,7 +168,7 @@ Replacing the token cuts off the old one, and **Turn off** disconnects every ass
 - On top of that, stored files are encrypted again at rest with AES-256-GCM.
   - **Website:** files from older versions that weren't end to end, and files shared by an assistant connected through ShareSecure's servers, have a key derived from a server master key.
   - **Self-hosted and desktop:** each file gets a random key, wrapped by the master key and stored only in the file's database row. Deleting the row (with SQLite `secure_delete`) destroys the key, and the stored file is overwritten and removed.
-- File types are checked from the file's contents, not its name. The self-hosted server also strips author and editing metadata from PDF and DOCX files.
+- File types are checked from the file's contents, not its name. Files an assistant shares through the desktop app or a self-hosted server have author and editing metadata stripped from PDF and Office files before they're locked. Files you share from the page are locked in your browser first, so nothing can strip them: check a document's properties before you share it.
 - Pages are sent with `noindex`, `no-store` and `frame-ancestors 'none'`, except the public guides and comparisons (`/guides`, `/compare`), which search engines may index.
 
 Files shared by an assistant connected through ShareSecure's servers are seen by the server while it encrypts them. Anyone with the whole link (and passcode) can open a file until it expires. See [SECURITY.md](docs/SECURITY.md), the [privacy policy](https://sharesecure-du8.pages.dev/privacy) and the [terms](https://sharesecure-du8.pages.dev/terms).
@@ -210,27 +211,27 @@ The installers set up Node.js if needed and start ShareSecure at `http://localho
 | `ENCRYPTION_KEY` | generated | Encrypts every file. Changing it makes existing files unreadable. |
 | `DATA_DIR` | app-data folder | Where the database and encrypted files are stored. |
 
-To install by hand: `git clone https://github.com/ishaanman7898/ShareSecure.git`, then `npm install --omit=dev` and `npm start` (Node.js 20+).
+To install by hand: `git clone https://github.com/ishaanman7898/ShareSecure.git`, then `npm install --omit=dev` and `npm start` (Node.js 22+).
 
 ## Architecture
 
 [![Architecture diagram of ishaanman7898/sharesecure](https://gitdiagram.com/ishaanman7898/sharesecure/diagram.png)](https://gitdiagram.com/ishaanman7898/sharesecure?utm_source=readme&utm_medium=picture)
 
-There are two backends for the same browser code. The website's API runs on Cloudflare Pages Functions with a Turso database; the desktop app and self-hosted installs run an Express server with SQLite. The encryption, sign-in, token, key-log and file-type code lives once in `public/` and is shared by the browser, both backends and the local MCP package, and so is what the three MCP servers have in common (`public/mcp-common.js`).
+The full map (what runs where, how a share travels, the desktop process model, releasing and gotchas) is [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). In short: there are two backends for the same browser code. The website's API runs on Cloudflare Pages Functions with a Turso database; the desktop app and self-hosted installs run an Express server with SQLite. The encryption, sign-in, token, key-log and file-type code lives once in `public/` and is shared by the browser, both backends and the local MCP package, and so is what the three MCP servers have in common (`public/mcp-common.js`).
 
 ```
 public/       website and app UI (served by both backends), plus the shared
               encryption, sign-in, token, key-log, file-type and MCP modules
 functions/    Cloudflare Pages Functions: the website's API, including /mcp
 server/       Express server for the desktop app and self-hosted installs
-desktop/      Electron app, icons, the logo and the update page
+desktop/      Electron app, the converter (FFmpeg is fetched on first use), icons and the update page
 relay/        ShareSecure's relay for links to a computer (Cloudflare Worker: npx wrangler deploy --config relay/wrangler.toml)
 packages/     sharesecure-mcp, the local MCP server (npm)
 scripts/      verify-site (live site = this code) and kt-monitor (key log audit)
-tests/        security tests for the website, the self-hosted server and the
-              desktop app's sending, and the RFC test vectors they check against
+tests/        security tests for the website, the self-hosted server, the
+              desktop app's sending and converting, the RFC test vectors they
+              check against, and the website's base table
 docs/         ARCHITECTURE.md (how it all fits together), security and signing
-db/           the database tables, for reference (the API creates them itself)
 ```
 
 ## Development
@@ -241,7 +242,8 @@ npm start           # self-hosted server at http://localhost:3000
 npm run desktop     # the desktop app (rebuilds the SQLite driver for Electron, then back)
 npm run dist        # desktop installer for this platform, in dist/
 npm test            # security tests (website, self-hosted, local MCP), including attempts to break in
-npm run icons       # re-render the app icons from desktop/logo.js
+                    # (set FFMPEG_PATH to an ffmpeg binary to run the conversion tests too)
+npm run icons       # rebuild the app and web icons from desktop/icon-source.png
 npm run rosette     # re-draw the rosette logo from desktop/rosette.js
 ```
 
@@ -262,4 +264,4 @@ Everything is free; there are no paid plans.
 
 ## License
 
-[MIT](LICENSE)
+ShareSecure's code is [MIT](LICENSE). It's built on other open source projects, each under its own license: pdf.js, mammoth, QRCode.js and the fonts in every version; Electron, Chromium, SQLite and the npm packages in the desktop app and self-hosted server; libheif (LGPL) for iPhone photos. FFmpeg (GPL) isn't included: the desktop app downloads it the first time a conversion needs it. They're all listed at [/licenses](https://sharesecure-du8.pages.dev/licenses) ([`public/licenses.html`](public/licenses.html)).

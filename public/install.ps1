@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $RepoUrl    = if ($env:SHARESECURE_REPO) { $env:SHARESECURE_REPO } else { "https://github.com/ishaanman7898/ShareSecure" }
 $InstallDir = if ($env:SHARESECURE_DIR)  { $env:SHARESECURE_DIR  } else { "$env:USERPROFILE\sharesecure" }
 $Port       = if ($env:SHARESECURE_PORT) { $env:SHARESECURE_PORT } else { "3000" }
-$MinNode    = 20
+$MinNode    = 22   # 22+ has the WebSocket the relay (public links) needs; 20 is past its end of life
 
 # -- helpers -------------------------------------------------------------------
 function Write-Step  { param($msg) Write-Host "  " -NoNewline; Write-Host $msg -ForegroundColor Cyan }
@@ -38,9 +38,14 @@ function Install-Node {
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
     Write-Ok "Node.js installed via winget"
   } else {
-    # Fallback: download the official Node.js MSI installer
-    Write-Step "Downloading Node.js 20 LTS installer..."
-    $msiUrl  = "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi"
+    # Fallback: the official installer of the newest Node.js 22, for this processor
+    Write-Step "Downloading the Node.js 22 LTS installer..."
+    # stored first: Windows PowerShell passes a downloaded JSON list down a pipe as one item
+    $releases = Invoke-RestMethod -Uri "https://nodejs.org/dist/index.json" -UseBasicParsing
+    $release  = $releases | Where-Object { $_.version -like "v22.*" } | Select-Object -First 1
+    if (-not $release) { Write-Fail "Couldn't find a Node.js 22 installer. Please install it from https://nodejs.org and re-run this script." }
+    $arch    = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+    $msiUrl  = "https://nodejs.org/dist/$($release.version)/node-$($release.version)-$arch.msi"
     $msiPath = "$env:TEMP\node-installer.msi"
     Invoke-WebRequest -Uri $msiUrl -OutFile $msiPath -UseBasicParsing
     Write-Step "Running installer (this may take a moment)..."

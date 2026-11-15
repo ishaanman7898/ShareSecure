@@ -71,13 +71,17 @@ Please don't open a public issue for security problems. Email **ishaanmanoor1@gm
 
 - It listens on loopback only, so nobody on your network can reach it; links come in through the relay. It also refuses any request whose Host isn't this computer (or the relay), so a web page can't point a domain at 127.0.0.1 (DNS rebinding) to read this computer's relay id and tie you to your links.
 - The app's windows can't use the camera, microphone, location or screen capture (Electron allows them unless told not to), and only ever show the app's own pages.
+- What a page can ask the app itself is limited by page: only the sign-in page can read or save your saved sign-in, and only the home page can convert files. So even a file that somehow ran code in the viewer couldn't reach your password.
+- **An assistant can't share your keys or ShareSecure's own data by path.** An assistant on this computer can share a file by its path, and a web page or email it read could tell it which. So the desktop app and self-hosted server refuse anything in ShareSecure's data folder (its database, the key that encrypts every file, the linked account's sign-in), the app's own folder, `.env`, and key folders (`~/.ssh`, `~/.aws`, `~/.gnupg` and similar), judged by where the file really is, so a link or junction pointing into one doesn't get past. The local MCP server does the same.
+- **One leaked link can't fill your disk.** Anyone holding a link can branch it (each viewer gets their own), and through the relay nothing says who's asking, so a link stops branching after 1,000 live copies.
+- **FFmpeg is checked before it runs.** The converter is downloaded only after you say yes, from one fixed release, and refused unless its SHA-256 matches the one in the app's code.
 - An assistant connector URL (`/connect/<token>`) carries the token in its path, so it passes through Cloudflare and the relay on the way to your computer. The relay keeps no logs, but treat the URL like a password, and replace the token if it leaks.
 
 **Everything else**
 
-- Links expire after 1 minute to 10 days. Expired files are erased.
+- Links on the website expire after 1 minute to 10 days; on your own computer they can last until you delete them. Expired files are erased.
 - Files that aren't end to end (from older versions, or shared by an assistant through ShareSecure's servers) are still encrypted on the server, each with its own key.
-- The self-hosted server checks file types by their contents and strips author and editing metadata from PDF and DOCX files.
+- The self-hosted server checks file types by their contents. Files an assistant shares through it have author and editing metadata stripped from PDF and Office files before they're locked; files you share from the page are locked in your browser first, so the server can't strip (or read) them.
 - Pages send `noindex`, `no-store` and `frame-ancestors 'none'`; only the public guides and comparisons (`/guides`, `/compare`) can be indexed, and they hold nothing private. There are no analytics.
 - Sessions are signed and expire after 30 days. Sign-in attempts are limited per username and per IP address, and IP addresses are only stored as a keyed hash.
 
@@ -105,7 +109,9 @@ These deter casual copying. The watermark is what makes a leak traceable.
 - **A link that works once** gives the file out once even to simultaneous requests, and leaves no copy of the bytes behind.
 - **A file request** refuses anything not sealed in the browser, posts from other sites, and uploads past its limit or expiry, and only the owner can list or close it.
 - **A swapped key is caught by the key log**: a key that isn't in the log is refused, a second key for someone shows up in the log, and a log rewritten after someone looked fails their check.
-- **A tricked assistant** can't send a file to someone off your list without your approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in.
+- **A tricked assistant** can't send a file to someone off your list without your approval, can't approve its own sends or change its rules, and through the local MCP server never sees a link's key, can't share from key folders, and can't seal a file to a key the server swapped in. On the desktop app and a self-hosted server it can't share the data folder, `.env` or key folders by path either, even through a link or junction.
+- **A leaked link** can't be branched more than 1,000 times on your own computer.
+- **A tampered FFmpeg download** is refused, and nothing is downloaded until you agree.
 - **Nothing links you to what you share through the local MCP server**: its uploads and sends carry anonymous tokens and no account, the files and copies it makes have no account or sender tag, and the server keeps only boxes it can't open (your rules, your waiting sends, your list of shares).
 
 ## What's left
@@ -118,6 +124,8 @@ These deter casual copying. The watermark is what makes a leak traceable.
 - **Desktop links share an address.** Every link from one computer goes through `/l/<computer id>/`, so anyone holding two of your desktop links can tell they came from the same computer, and the relay sees that computer's IP address while it's connected. Website links don't have this.
 - **Timing and IP addresses.** With little traffic, a token picked up shortly before an upload (a new browser, or after using up the wallet) could hint at who uploaded. Your IP address does the same for anyone who sees it.
 - **Your IP address** is visible to the hosting provider and your network. Use Tor or a VPN if that matters.
+- **Someone who can already run programs as you on your computer** can get at what the desktop app keeps: its server is started with Electron's run-as-Node mode (so it can outlive the app), which also lets any local program run code as ShareSecure, and the saved sign-in is only as safe as your operating system's key store. Like any desktop app, it can't protect you from malware already on the computer.
+- **The installers aren't code-signed yet** (see [SIGNING.md](SIGNING.md)), so a download is only as trustworthy as GitHub and its HTTPS. Updates come from the same releases, checked against the SHA-512 listed in the release's `latest.yml`, which guards against a broken download but not against someone who controls the release.
 
 ## Removed
 

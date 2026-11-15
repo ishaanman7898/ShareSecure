@@ -3,7 +3,7 @@
 // server runs in a process of its own, which outlives the app: share links keep
 // working after you quit, until the last one expires. Your ShareSecure account
 // is the website; the app only links to it to send files to usernames.
-const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, nativeImage, Notification, dialog, ipcMain, safeStorage, session, net: electronNet } = require('electron');
 const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -216,7 +216,14 @@ function openWindow(url, { maximize = false, ...size }) {
     backgroundColor: '#000000',
     autoHideMenuBar: true,
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.js') },
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
+      // Windows and macOS check spelling themselves; on Linux Chromium would
+      // download its dictionaries from Google
+      spellcheck: process.platform !== 'linux',
+    },
   });
   wireLinks(w.webContents);
   // a page has to ask again (protection:viewing): leaving a file un-hides the window
@@ -229,6 +236,19 @@ function openWindow(url, { maximize = false, ...size }) {
   return w;
 }
 
+// A window hidden in the tray still holds a whole page in memory. Links don't
+// need it (the server process serves them), so after a while it's let go, and
+// opening ShareSecure again makes a fresh one, signed in from the saved
+// sign-in. Without one (Linux with no keyring), it's kept, so you're never
+// asked for your password just for having closed the window.
+const FREE_HIDDEN_AFTER = 2 * 60 * 1000;
+const comesBackSignedIn = () => canEncrypt() && Boolean(readSignIns()[origin]);
+let freeTimer = null;
+function stopFreeTimer() {
+  clearTimeout(freeTimer);
+  freeTimer = null;
+}
+
 function createMain(url) {
   // fills the screen at launch; un-maximizing goes back to this size
   win = openWindow(url, { width: 1240, height: 820, maximize: true });
@@ -237,14 +257,25 @@ function createMain(url) {
     if (quitting) return;
     e.preventDefault();
     win.hide();
+    stopFreeTimer();
+    const hidden = win;
+    freeTimer = setTimeout(() => {
+      freeTimer = null;
+      // not while it's converting a file or showing an update
+      if (hidden.isDestroyed() || hidden.isVisible() || convertingNow || !comesBackSignedIn()) return;
+      if (hidden.webContents.getURL().startsWith('file:')) return;
+      hidden.destroy();
+    }, FREE_HIDDEN_AFTER);
     onceOnly('toldAboutTray', () => notify('ShareSecure is still running',
       'Your links keep working, even after you quit, until they expire. To stop them, choose Stop sharing and quit from the tray icon.'));
   });
+  win.on('show', stopFreeTimer);
   // "Back to ShareSecure" on the update page, when an update didn't finish
   win.webContents.on('did-navigate-in-page', (_e, url) => {
     if (url.startsWith('file:') && url.endsWith('#back')) win.loadURL(backFromUpdate || origin);
   });
   win.on('closed', () => {
+    stopFreeTimer();
     win = null;
   });
 }
@@ -285,6 +316,7 @@ function buildTrayMenu() {
     { type: 'separator' },
     { label: 'Privacy policy', click: () => openWindow(`${origin}/privacy`, { width: 900, height: 820 }) },
     { label: 'Terms', click: () => openWindow(`${origin}/terms`, { width: 900, height: 820 }) },
+    { label: 'Licenses', click: () => openWindow(`${origin}/licenses`, { width: 900, height: 820 }) },
     { type: 'separator' },
     { label: 'Quit ShareSecure', click: quit },
     { label: 'Stop sharing and quit', click: () => { stopServer(); quit(); } },
@@ -459,14 +491,20 @@ function initUpdates() {
   setInterval(checkForUpdates, 6 * 60 * 60 * 1000);
 }
 
-// Only the app's own pages, in the top frame, may ask.
-function fromApp(event) {
+// Only the app's own pages, in the top frame, may ask; with pages, only those
+// (so a file shown in the viewer could never reach your saved sign-in).
+function fromApp(event, pages) {
   const frame = event.senderFrame;
   if (!frame || frame.parent) return false;
   try {
-    return origin !== '' && new URL(frame.url).origin === new URL(origin).origin;
+    const url = new URL(frame.url);
+    if (origin === '' || url.origin !== new URL(origin).origin) return false;
+    return !pages || pages.includes(url.pathname.replace(/\.html$/, '').replace(/^\/index$/, '/'));
   } catch { return false; }
 }
+// the home page (sharing, Settings) and the sign-in page
+const HOME = ['/'];
+const SIGN_IN = ['/signin'];
 
 ipcMain.handle('updates:status', e => (fromApp(e) ? updateState() : null));
 ipcMain.handle('updates:check', async e => {
@@ -524,14 +562,38 @@ ipcMain.handle('protection:viewing', (e, { viewOnly, discourage } = {}) => {
 // (desktop/convert.js), and a file ShareSecure can't take into one it can.
 // It all happens here, on this computer. The page only ever names a file the
 // person picked or dropped (preload.js reads its path), or hands over bytes.
+// FFmpeg isn't in the installer: it's fetched (and checked) the first time
+// it's needed, after you say yes (desktop/ffmpeg.js).
 const converter = require('./convert');
+let convertingNow = 0;
+
+converter.setup({
+  dir: path.join(USER_DIR, 'ffmpeg'),
+  // Chromium's network stack, so it goes through the computer's proxy settings
+  fetchImpl: (url, init) => electronNet.fetch(url, init),
+  confirm: async size => {
+    const parent = BrowserWindow.getFocusedWindow() || (win && !win.isDestroyed() ? win : null);
+    const options = {
+      type: 'question',
+      title: 'ShareSecure',
+      buttons: ['Download', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      message: 'Download the converter first?',
+      detail: `Converting this uses FFmpeg, a free converter. ShareSecure downloads it once from GitHub (about ${Math.ceil(size / 1e6)} MB) and keeps it on this computer. Your files never leave this computer.\n\nFFmpeg is free software under the GNU GPL and isn’t part of ShareSecure. Its license is under Licenses in the tray menu.`,
+    };
+    const { response } = await (parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
+    return response === 0;
+  },
+});
 
 ipcMain.handle('convert:options', (e, head) => {
-  if (!fromApp(e) || !(head instanceof Uint8Array)) return null;
+  if (!fromApp(e, HOME) || !(head instanceof Uint8Array)) return null;
   return converter.optionsFor(head.subarray(0, 4096));
 });
 ipcMain.handle('convert:run', async (e, { filePath, bytes, name, to } = {}) => {
-  if (!fromApp(e)) return null;
+  if (!fromApp(e, HOME)) return null;
+  convertingNow++;
   try {
     return await converter.convert({
       filePath: typeof filePath === 'string' && filePath ? filePath : null,
@@ -540,8 +602,11 @@ ipcMain.handle('convert:run', async (e, { filePath, bytes, name, to } = {}) => {
       to: String(to),
     });
   } catch (err) {
+    if (err.code === 'cancelled') return { cancelled: true };
     console.error('convert failed:', err.message);
     return null;
+  } finally {
+    convertingNow--;
   }
 });
 
@@ -625,7 +690,7 @@ function writeSignIns(all) {
 const siteOf = event => new URL(event.senderFrame.url).origin;
 
 ipcMain.handle('signin:load', e => {
-  if (!fromApp(e) || !canEncrypt()) return null;
+  if (!fromApp(e, SIGN_IN) || !canEncrypt()) return null;
   const saved = readSignIns()[siteOf(e)];
   if (!saved) return null;
   try {
@@ -634,7 +699,7 @@ ipcMain.handle('signin:load', e => {
   } catch { return null; }
 });
 ipcMain.handle('signin:save', (e, username, password) => {
-  if (!fromApp(e) || !canEncrypt() || typeof username !== 'string' || typeof password !== 'string') return false;
+  if (!fromApp(e, SIGN_IN) || !canEncrypt() || typeof username !== 'string' || typeof password !== 'string') return false;
   const all = readSignIns();
   all[siteOf(e)] = safeStorage.encryptString(JSON.stringify({ username, password })).toString('base64');
   writeSignIns(all);
@@ -644,7 +709,7 @@ ipcMain.handle('signin:save', (e, username, password) => {
 // after you confirm it here. Being at this computer is the proof: it's your
 // ShareSecure, and the files don't depend on the password. → username or null
 ipcMain.handle('signin:reset', async (e, password) => {
-  if (!fromApp(e) || typeof password !== 'string' || password.length < 8 || !server?.connected) return null;
+  if (!fromApp(e, SIGN_IN) || typeof password !== 'string' || password.length < 8 || !server?.connected) return null;
   const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender) || undefined, {
     type: 'question',
     title: 'ShareSecure',

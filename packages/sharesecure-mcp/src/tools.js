@@ -30,11 +30,16 @@ const VAULT_FIELDS = ['short_id', 'short_url', 'original_filename', 'mime_type',
 
 // Folders an assistant may never share from, whatever it's told: keys,
 // cloud credentials, and this server's own identity.
-function blockedFolders(storeDir) {
+// Each is listed as written and as its real path, in case the folder is
+// itself a link (macOS's /var, a moved home folder).
+async function blockedFolders(storeDir) {
   const home = os.homedir();
-  return [storeDir, ...['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.password-store'].map(d => path.join(home, d))]
-    .map(d => path.resolve(d).toLowerCase());
+  const folders = [storeDir, ...['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.password-store'].map(d => path.join(home, d))]
+    .map(d => path.resolve(d));
+  const real = await Promise.all(folders.map(d => fs.realpath(d).catch(() => d)));
+  return [...new Set([...folders, ...real].map(d => d.toLowerCase()))];
 }
+const inside = (folders, p) => folders.some(d => p.toLowerCase() === d || p.toLowerCase().startsWith(d + path.sep));
 
 const lower = s => String(s || '').toLowerCase();
 const live = s => !s.expires_at || new Date(s.expires_at) > new Date();
@@ -285,14 +290,19 @@ export function makeTools({ api, store, copy, reveal = false, allowAnyPath = fal
   async function shareFile(args) {
     const target = path.resolve(String(args.path || ''));
     if (!args.path) throw new Error('path is required: the file to share.');
-    if (!allowAnyPath && blockedFolders(store.dir).some(d => target.toLowerCase() === d || target.toLowerCase().startsWith(d + path.sep))) {
-      throw new Error('Files in that folder hold keys or credentials, so this server never shares them.');
-    }
+    const refused = new Error('Files in that folder hold keys or credentials, so this server never shares them.');
+    const folders = allowAnyPath ? [] : await blockedFolders(store.dir);
+    if (inside(folders, target)) throw refused;
+    // and where it really is, so a link (or a Windows junction) to a key
+    // folder doesn't get past the check
+    let real;
+    try { real = await fs.realpath(target); } catch { throw new Error(`There’s no file at ${target}.`); }
+    if (inside(folders, real)) throw refused;
     let stat;
-    try { stat = await fs.stat(target); } catch { throw new Error(`There’s no file at ${target}.`); }
+    try { stat = await fs.stat(real); } catch { throw new Error(`There’s no file at ${target}.`); }
     if (!stat.isFile()) throw new Error(`${target} isn’t a file.`);
     if (stat.size > MAX_BYTES) throw new Error('That file is over 10 MB.');
-    return share(new Uint8Array(await fs.readFile(target)), path.basename(target), args);
+    return share(new Uint8Array(await fs.readFile(real)), path.basename(target), args);
   }
 
   async function shareText(args) {

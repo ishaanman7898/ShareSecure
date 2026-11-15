@@ -443,7 +443,13 @@ const readSettings = ({
   intro = true,
   lightMode = false,
   fontFamily = DEFAULT_FONT,
-  dpr
+  dpr,
+  // Frames a second at most. The field drifts slowly, so 30 looks the same as
+  // a 120 Hz screen's every frame and costs a quarter of the GPU.
+  maxFps = 30,
+  // Stand still while the window isn't the one in use (the desktop app sits
+  // on screen behind other windows for hours).
+  pauseWhenUnfocused = false
 }) => {
   const palette = (Array.isArray(colors) && colors.length ? colors : DEFAULT_COLORS).slice(0, MAX_COLORS);
   return {
@@ -469,7 +475,9 @@ const readSettings = ({
     intro,
     lightMode,
     fontFamily: fontFamily || DEFAULT_FONT,
-    dpr
+    dpr,
+    frameMs: 1000 / clamp(maxFps, 1, 240),
+    pauseWhenUnfocused
   };
 };
 
@@ -532,9 +540,11 @@ export function mountGradientASCII(container, options = {}) {
   let frameSeed = 0;
   let grainClock = 0;
   let raf = 0;
+  let timer = 0;   // waiting out the rest of a frame (maxFps)
   let last = 0;
   let visible = true;
   let disposed = false;
+  const paused = () => disposed || !visible || document.hidden || (settings.pauseWhenUnfocused && !document.hasFocus());
 
   // the atlas is drawn before the font may have loaded; redraw it once it has
   document.fonts?.load?.(`300 64px ${settings.fontFamily}`, settings.characters).then(
@@ -695,9 +705,19 @@ export function mountGradientASCII(container, options = {}) {
     }
   };
 
+  // the next frame, no sooner than maxFps allows
+  const next = now => {
+    const wait = settings.frameMs - (performance.now() - now);
+    if (wait < 4) { raf = requestAnimationFrame(frame); return; }
+    timer = setTimeout(() => {
+      timer = 0;
+      if (!paused()) raf = requestAnimationFrame(frame);
+    }, wait);
+  };
+
   const frame = now => {
     raf = 0;
-    if (disposed || !visible || document.hidden) return;
+    if (paused()) return;
     const s = settings;
     const dt = last ? clamp((now - last) / 1000, 0.001, 0.05) : 1 / 60;
     last = now;
@@ -714,12 +734,12 @@ export function mountGradientASCII(container, options = {}) {
     updateInput(dt);
     draw();
     const busy = !reduce || introClock < 1 || clicks.length > 0 || trail.length > 0;
-    if (busy) raf = requestAnimationFrame(frame);
+    if (busy) next(now);
     else last = 0;
   };
 
   function wake() {
-    if (!raf && !disposed && visible && !document.hidden) raf = requestAnimationFrame(frame);
+    if (!raf && !timer && !paused()) raf = requestAnimationFrame(frame);
   }
 
   const locate = event => {
@@ -777,16 +797,19 @@ export function mountGradientASCII(container, options = {}) {
   window.addEventListener('pointermove', onPointerMove, { passive: true });
   window.addEventListener('pointerdown', onPointerDown, { passive: true });
   document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('focus', onVisibility);
   resize();
 
   return () => {
     disposed = true;
     cancelAnimationFrame(raf);
+    clearTimeout(timer);
     resizeObserver.disconnect();
     intersection.disconnect();
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerdown', onPointerDown);
     document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('focus', onVisibility);
     [fieldTarget, haloA, haloB].forEach(target => {
       target.textures.forEach(texture => gl.deleteTexture(texture));
       gl.deleteFramebuffer(target.framebuffer);

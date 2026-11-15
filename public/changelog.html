@@ -33,12 +33,54 @@
 
     <div class="timeline">
 
-      <!-- v1.25.0 -->
+      <!-- v1.27.0 -->
       <section class="release latest">
+        <div class="release-header">
+          <span class="release-version">v1.27.0</span>
+          <span class="release-date">November 2026</span>
+          <span class="status-badge">Latest</span>
+        </div>
+        <div class="release-body">
+          <div class="change-group">
+            <h3>Desktop app</h3>
+            <ul class="change-list">
+              <li><strong>A much smaller download</strong> The installer leaves out FFmpeg, the SQLite driver’s build leftovers and Chromium’s 50-odd other languages, so it’s roughly a quarter to a third smaller, depending on your system.</li>
+              <li><strong>FFmpeg when you need it</strong> The first time you convert a video or audio file, the app asks, then downloads FFmpeg once (about 20–30 MB) and checks it’s exactly the expected file. iPhone photos turn into JPEG or PNG without it.</li>
+              <li><strong>Lighter while it runs</strong> Closed to the tray, the app lets go of its window after two minutes, freeing the memory the window was using while your links stay up. The background animation runs at 24 frames a second and stops while the window isn’t in use.</li>
+            </ul>
+          </div>
+          <div class="change-group">
+            <h3>Security</h3>
+            <ul class="change-list">
+              <li><strong>Assistants can’t share your keys</strong> An assistant on your computer can no longer share ShareSecure’s own data folder (which holds the key that encrypts your files), <code>.env</code>, or key folders like <code>~/.ssh</code> by path, even through a link or junction. The local MCP server now checks links too.</li>
+              <li><strong>Your saved sign-in stays on the sign-in page</strong> Only the sign-in page can read the desktop app’s saved password, and only the home page can convert files.</li>
+              <li><strong>One leaked link can’t fill your disk</strong> A link on your computer stops branching after 1,000 live copies.</li>
+              <li><strong>Tighter page rules</strong> Pages no longer allow Google’s font servers, which nothing used.</li>
+            </ul>
+          </div>
+          <div class="change-group">
+            <h3>Privacy</h3>
+            <ul class="change-list">
+              <li><strong>No dictionary downloads</strong> On Linux, the desktop app no longer fetches spelling dictionaries from Google.</li>
+              <li><strong>Clearer policy</strong> The <a href="/privacy">privacy policy</a> now says how sign-in attempts are counted (a scrambled form of your IP address, for 15 minutes), the legal bases and where data is processed, your right to complain, and what the converter downloads.</li>
+            </ul>
+          </div>
+          <div class="change-group">
+            <h3>Changed</h3>
+            <ul class="change-list">
+              <li><strong>Licenses page</strong> Every open source project ShareSecure is built on is now listed, with its license, at <a href="/licenses">/licenses</a> (and in the desktop app’s tray menu). Mac apps now include Chromium’s license notices, and the fonts and QR code library ship with theirs.</li>
+              <li><strong>Terms</strong> The <a href="/terms">terms</a> now cover what desktop links send through ShareSecure’s relay, and say how to report a file or a copyright problem.</li>
+              <li><strong>Self-hosting needs Node.js 22</strong> The install scripts and Docker image use Node.js 22 (20 has reached its end of life), which also means links through the relay now work in Docker.</li>
+              <li><strong>Comparisons</strong> The WeTransfer page no longer mentions a Pro plan: everything’s free.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="release">
         <div class="release-header">
           <span class="release-version">v1.26.1</span>
           <span class="release-date">October 2026</span>
-          <span class="status-badge">Latest</span>
         </div>
         <div class="release-body">
           <div class="change-group">
@@ -1034,6 +1076,7 @@
       <a href="/guides">Guides</a>
       <a href="/privacy">Privacy</a>
       <a href="/terms">Terms</a>
+      <a href="/licenses">Licenses</a>
       <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
     </nav>
     <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>

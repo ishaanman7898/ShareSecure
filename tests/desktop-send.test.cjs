@@ -34,7 +34,7 @@ const load = file => import(pathToFileURL(path.join(temp, 'functions', file)).hr
 
 // the website's database (Turso, faked with SQLite in memory)
 const web = new DatabaseSync(':memory:');
-web.exec(fs.readFileSync(path.join(root, 'db/schema.sql'), 'utf8'));
+web.exec(fs.readFileSync(path.join(__dirname, 'website-schema.sql'), 'utf8'));
 web.exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, access_code TEXT)');
 web.exec("INSERT INTO users (id, username, access_code) VALUES (1, 'alice', 'test'), (2, 'bob', 'test')");
 const issuerKey = require('node:crypto').generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');

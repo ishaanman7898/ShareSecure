@@ -1,13 +1,14 @@
 'use strict';
-// Rebuild every app and web icon from the supplied ShareSecure.png.
-// Run with: npx electron desktop/update-icons.js
+// Rebuilds every app and web icon from desktop/icon-source.png (the master
+// artwork, kept out of the installer).
+// Run with: npm run icons
 const { app, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const source = nativeImage.createFromPath(path.join(root, 'ShareSecure.png'));
-if (source.isEmpty()) throw new Error('Could not open ShareSecure.png');
+const source = nativeImage.createFromPath(path.join(__dirname, 'icon-source.png'));
+if (source.isEmpty()) throw new Error('Could not open desktop/icon-source.png');
 
 function asPng(size) {
   return source.resize({ width: size, height: size, quality: 'best' }).toPNG();

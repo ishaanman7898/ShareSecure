@@ -18,7 +18,8 @@ Every feature is shaped by that:
 - Notifications, logs and lists never name a file or a person unless they
   have to.
 - No third-party scripts or fonts (fonts are in `public/fonts/`), no analytics. pdf.js and
-  mammoth are vendored in `public/vendor/`.
+  mammoth are vendored in `public/vendor/`. The desktop app fetches nothing it
+  doesn't need (no spelling dictionaries on Linux, FFmpeg only after asking).
 
 If a change would let the server (or the relay, or Cloudflare) learn more,
 it needs a very good reason.
@@ -67,6 +68,8 @@ public/        the browser app (all editions) + shared crypto/format modules
   drop.*         an assistant's upload page /drop/<ticket>
   expired.html, burned.html, 404.html   where gone links land ("Back to home")
   changelog.html every release, newest first (the latest has class "latest")
+  privacy.html, terms.html, licenses.html   the legal pages (licenses = third-party notices)
+  vendor/, fonts/  pdf.js, mammoth and their licenses; the fonts and OFL.txt
 functions/     website API (Cloudflare Pages Functions). _*.js are shared helpers
   _middleware.js CSP and headers for every response
   _turso.js      DB client over fetch, sessions, encryption helpers, link rules
@@ -96,12 +99,14 @@ desktop/       Electron
   server-process.js  the Express server, forked as its own process (outlives the app)
   preload.js     window.shareSecureDesktop: updates, protection, notifications, signIn, convert
   convert.js     converting a file before it's shared (FFmpeg + HEIC), on this computer only
+  ffmpeg.js      fetching FFmpeg the first time it's needed, pinned by sha256
+  update-icons.js  every app and web icon from icon-source.png (`npm run icons`)
 relay/         Cloudflare Worker + Durable Object that carries desktop links
 packages/sharesecure-mcp/   local stdio MCP server (npm package)
 scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log)
 tests/         node:test suites: hosted-security (website), self-hosted,
-               desktop-send (the desktop's sends against the website's handlers)
-db/            reference schemas (the code creates tables itself)
+               desktop-send (the desktop's sends against the website's handlers),
+               desktop-convert; website-schema.sql is the base table they load
 docs/          this file, SECURITY.md, SIGNING.md
 ```
 
@@ -198,11 +203,28 @@ phone ──> sharesecure-du8.pages.dev/l/<computer>/r/<id>   (viewer.html, from
 - **Converting** (`desktop/convert.js`): picking a file ShareSecure can't take
   (HEIC, MKV, FLAC, TIFF…) or one that's too big offers to convert it first;
   any other image, video or audio file gets an optional "Convert it first?".
-  FFmpeg (`ffmpeg-static`) and `heic-convert` run in the main process, with
-  metadata stripped. They're `optionalDependencies`, so self-hosted installs
-  (`--omit=optional`) skip the 80 MB binary. `scripts/ffmpeg-arch.cjs`
-  (afterPack) swaps in the right FFmpeg when a build targets another
-  processor (Intel Macs); add a pinned sha256 there for any new one.
+  It runs in the main process, with metadata stripped. HEIC → JPEG/PNG uses
+  `heic-convert` alone (an `optionalDependency`, so self-hosted installs skip
+  it). Everything else needs FFmpeg, which is **not in the installer**:
+  `desktop/ffmpeg.js` downloads ffmpeg-static's build for this computer from
+  GitHub the first time, after a dialog, checks its pinned sha256, and keeps
+  it in `userData/ffmpeg/<release>/` with its LICENSE and README (it's GPL, so
+  it stays a separate program we don't ship). To move to a newer FFmpeg,
+  change `RELEASE` and every hash in `BUILDS` there. A declined download comes
+  back to the page as `{ cancelled: true }`.
+- **Staying light**: the installer leaves out FFmpeg, better-sqlite3's build
+  leftovers, libheif-js's unused builds and every Chromium language but
+  English (`build.files` and `electronLanguages` in package.json). A window
+  closed to the tray is destroyed after 2 minutes hidden (`FREE_HIDDEN_AFTER`
+  in main.js), if there's a saved sign-in to come back with, and made again
+  when opened (sessionStorage is per window, so it signs in afresh); the
+  server process keeps the links up meanwhile. The signed-in background animation runs at 24 fps at most and
+  stops while the window isn't focused (`maxFps`, `pauseWhenUnfocused` in
+  `public/gradient-ascii.js`).
+- **What a page may ask the main process**: `fromApp()` in main.js checks the
+  frame is the app's own top frame, and for the saved sign-in only `/signin`,
+  for converting only `/`. A file in the viewer can never reach the saved
+  password.
 - Data folder: `%APPDATA%\ShareSecure` (dev runs use `ShareSecure-dev`).
   Server log: `server.log` there.
 
@@ -215,6 +237,8 @@ When the user says **"push"**, do the whole release:
    features, patch for fixes.
 3. Add a `<section class="release latest">` entry at the top of
    `public/changelog.html` and remove `latest` + the badge from the previous one.
+   If `packages/sharesecure-mcp` changed, bump its version too; it's published
+   to npm by hand (`cd packages/sharesecure-mcp && npm publish`).
 4. Commit (one-line message, no AI attribution), push `main`, push tag
    `vX.Y.Z`, `gh release create vX.Y.Z --title vX.Y.Z --notes "…"`.
 5. Pushing `main` deploys the website (Cloudflare Pages git integration).
@@ -223,12 +247,25 @@ When the user says **"push"**, do the whole release:
 6. If `relay/` changed, deploy it by hand (see above).
 
 `verify-site` (CI on every push) checks the live site serves exactly this
-repo's `public/`, so never hand-edit production.
+repo's `public/`, so never hand-edit production (there's deliberately no
+`wrangler pages deploy` script).
+
+## Licenses and legal pages
+
+- Adding a dependency, a vendored file or a font means adding it to
+  `public/licenses.html` (with its license; ship the license text next to
+  vendored files). Avoid GPL code in what we ship: FFmpeg stays a download.
+- Electron's own notices: Windows and Linux builds keep `LICENSES.chromium.html`
+  and `LICENSE.electron.txt`; electron-builder deletes them from Mac apps, so
+  `mac.extraResources` puts them back in `Contents/Resources`.
+- A change in what data is kept, who processes it, or what the desktop app
+  fetches must change `public/privacy.html` (and its date) in the same
+  release. New limits go in `public/terms.html`.
 
 ## Testing and running
 
 ```bash
-npm test                 # all suites; tests/*.test.cjs
+npm test                 # all suites; tests/*.test.cjs (FFMPEG_PATH=… adds the conversion tests)
 npm start                # Express server on :3000 (from a copy without .git! see below)
 npm run desktop          # dev Electron (data in ShareSecure-dev)
 ```
@@ -238,7 +275,13 @@ Gotchas:
 - Don't run the self-hosted server from the repo itself on a real data dir:
   its updater treats a git checkout as an install. Use a copy or tests.
 - better-sqlite3 has to be rebuilt for Electron (`npm run desktop` does it,
-  `postdesktop` rebuilds it back for Node). Electron is pinned to 43.
+  `postdesktop` rebuilds it back for Node with `npm run sqlite-for-node`, which
+  also deletes electron-builder's `.forge-meta` marker, or the next run would
+  skip the Electron rebuild and crash). Electron is pinned to 43.
+- After a local `npm run dist`, don't test `dist/*-unpacked`: electron-builder
+  hard-links node_modules into it, so `postdist` rebuilding better-sqlite3 for
+  Node changes the copy there too. The installer was made before that and is
+  fine (CI never runs `postdist`).
 - Windows builds need `ELECTRON_BUILDER_7Z_FILTER=BCJ` (the user's PC is
   Windows on ARM64; the installer is x64+arm64 in one).
 - Cloudflare Functions get ~10 ms CPU per request: no per-byte JS loops in

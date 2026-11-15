@@ -5,21 +5,29 @@
 // viewer plays as MP4, a WAV that's smaller as MP3). The kind of file is
 // worked out from its bytes, like public/filetypes.js, never from its name.
 //
-// FFmpeg does almost all of it (ffmpeg-static, the same engine FileConverter
-// uses); HEIC photos go through heic-convert, as FFmpeg can't read them.
-// Nothing leaves this computer, and metadata (camera, place, dates) is left
-// out of every converted file.
+// FFmpeg does almost all of it. It isn't in the installer: desktop/ffmpeg.js
+// fetches it the first time it's needed, once the person agrees. HEIC photos
+// go through heic-convert (FFmpeg can't read them), so an iPhone photo becomes
+// a JPEG or PNG without FFmpeg at all. Nothing leaves this computer, and
+// metadata (camera, place, dates) is left out of every converted file.
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const ffmpeg = require('./ffmpeg');
 
-// The packaged app runs ffmpeg from app.asar.unpacked: a program inside the
-// asar archive can't be started.
-// It's an optional dependency (self-hosted installs leave it out), so a
-// missing one just means nothing is offered.
-let FFMPEG = '';
-try { FFMPEG = (require('ffmpeg-static') || '').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`); } catch {}
+// heic-convert is an optional dependency (self-hosted installs leave it out)
+let HEIC = false;
+try { require.resolve('heic-convert'); HEIC = true; } catch {}
+
+// Where FFmpeg is kept, how to ask before fetching it and what to fetch it
+// with (set by main.js), or a binary to use as it is (the tests).
+const config = { dir: null, ffmpegPath: null, confirm: async () => false, fetchImpl: undefined };
+function setup(options) { Object.assign(config, options); }
+
+const canUseFfmpeg = () => Boolean(config.ffmpegPath || (config.dir && ffmpeg.buildFor()));
+// what a HEIC photo becomes without FFmpeg, in heic-convert's words
+const HEIC_DIRECT = { jpg: 'JPEG', png: 'PNG' };
 
 // What each format is called, and how FFmpeg makes it
 const TARGETS = {
@@ -95,15 +103,37 @@ function identify(head) {
 // What a file can be turned into → { kind, format, label, targets: [{ ext, label }] } or null
 function optionsFor(head) {
   const found = identify(head);
-  if (!found || !FFMPEG) return null;
-  const kind = found.kind === 'heic' ? 'image' : found.kind;
-  const targets = FOR_KIND[kind].filter(ext => ext !== found.format).map(ext => ({ ext, label: TARGETS[ext].label }));
-  return { ...found, kind, targets };
+  if (!found) return null;
+  const heic = found.kind === 'heic';
+  if (heic && !HEIC) return null;
+  const kind = heic ? 'image' : found.kind;
+  const targets = FOR_KIND[kind]
+    .filter(ext => ext !== found.format)
+    .filter(ext => canUseFfmpeg() || (heic && HEIC_DIRECT[ext]))
+    .map(ext => ({ ext, label: TARGETS[ext].label }));
+  return targets.length ? { ...found, kind, targets } : null;
 }
 
-function run(args) {
+// ── getting FFmpeg ──────────────────────────────────────────────────────────
+// Asked for (and downloaded) once; everyone converting meanwhile waits on the
+// same download.
+let fetching = null;
+const cancelled = () => Object.assign(new Error('cancelled'), { code: 'cancelled' });
+
+async function ffmpegPath() {
+  if (config.ffmpegPath) return config.ffmpegPath;
+  if (!config.dir || !ffmpeg.buildFor()) throw new Error('FFmpeg isn’t available for this computer.');
+  if (ffmpeg.installed(config.dir)) return ffmpeg.locate(config.dir);
+  fetching ||= (async () => {
+    if (!(await config.confirm(ffmpeg.downloadSize()))) throw cancelled();
+    return ffmpeg.install(config.dir, { fetchImpl: config.fetchImpl });
+  })().finally(() => { fetching = null; });
+  return fetching;
+}
+
+function run(bin, args) {
   return new Promise((resolve, reject) => {
-    execFile(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...args], { windowsHide: true, maxBuffer: 1 << 20 }, err => (err ? reject(err) : resolve()));
+    execFile(bin, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...args], { windowsHide: true, maxBuffer: 1 << 20 }, err => (err ? reject(err) : resolve()));
   });
 }
 
@@ -111,6 +141,7 @@ function run(args) {
 let busy = Promise.resolve();
 
 // Converts a file (by its path, or its bytes when it has none) → { bytes, name }.
+// Rejects with code 'cancelled' if FFmpeg was needed and the person said no.
 // The working copies live in a private temporary folder that's always emptied.
 function convert({ filePath, bytes, name, to }) {
   const target = TARGETS[to];
@@ -128,17 +159,21 @@ function convert({ filePath, bytes, name, to }) {
       try { await fd.read(head, 0, head.length, 0); } finally { await fd.close(); }
       const found = identify(head);
       if (!found) throw new Error('unknown file');
-      if (found.kind === 'heic') {
-        // decoded to a lossless PNG first, which FFmpeg can make anything from
-        const heic = require('heic-convert');
-        const png = await heic({ buffer: await fs.promises.readFile(input), format: 'PNG' });
-        input = path.join(dir, 'decoded.png');
-        await fs.promises.writeFile(input, Buffer.from(png));
-      }
-      const output = path.join(dir, `out.${to}`);
-      await run(['-i', input, '-map_metadata', '-1', ...target.args, output]);
       const base = String(name || 'file').replace(/\.[^.]{1,10}$/, '') || 'file';
-      return { bytes: new Uint8Array(await fs.promises.readFile(output)), name: `${base}.${to}` };
+      const output = { name: `${base}.${to}` };
+      if (found.kind === 'heic') {
+        if (!HEIC) throw new Error('HEIC isn’t available');
+        const heic = require('heic-convert');
+        const buffer = await fs.promises.readFile(input);
+        // straight to JPEG or PNG: decoded pixels carry no metadata
+        if (HEIC_DIRECT[to]) return { ...output, bytes: new Uint8Array(await heic({ buffer, format: HEIC_DIRECT[to], quality: 0.92 })) };
+        // anything else goes through a lossless PNG, which FFmpeg can make it from
+        input = path.join(dir, 'decoded.png');
+        await fs.promises.writeFile(input, Buffer.from(await heic({ buffer, format: 'PNG' })));
+      }
+      const out = path.join(dir, `out.${to}`);
+      await run(await ffmpegPath(), ['-i', input, '-map_metadata', '-1', ...target.args, out]);
+      return { ...output, bytes: new Uint8Array(await fs.promises.readFile(out)) };
     } finally {
       await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => {});
     }
@@ -147,4 +182,4 @@ function convert({ filePath, bytes, name, to }) {
   return job;
 }
 
-module.exports = { identify, optionsFor, convert, TARGETS };
+module.exports = { identify, optionsFor, convert, setup, TARGETS };

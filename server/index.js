@@ -96,8 +96,8 @@ app.use((_req, res, next) => {
 const PAGE_CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "connect-src 'self'",
@@ -204,6 +204,8 @@ app.get('/privacy', (req, res) => {
 app.get('/security', (req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, 'security.html'));
 });
+// the open source ShareSecure is built on, and its licenses
+app.get('/licenses', (req, res) => res.sendFile(path.join(PUBLIC_DIR, 'licenses.html')));
 
 // ── changelog ─────────────────────────────────────────────────────────────────
 app.get('/changelog', (req, res) => {

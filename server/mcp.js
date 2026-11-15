@@ -12,6 +12,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const dns = require('dns');
 const https = require('https');
@@ -484,6 +485,27 @@ const NO_FILE = 'No file was given, so nothing was shared. Share it yourself: pa
 
 const NOT_HERE = 'This request came through the public link, not from the computer ShareSecure runs on, so path can’t be used. Share it another way: content_base64 + filename if you can read the file (for example in your code sandbox), source_url if it’s at a public https link, begin_upload for bigger files, or share_text for text you wrote or have in the conversation.';
 
+// Folders an assistant may never share from, whatever it's told (a web page
+// or email it read can tell it to): keys and cloud credentials, the local MCP
+// server's key, and this ShareSecure's own data, which holds the key that
+// encrypts every file and the linked account's sign-in.
+const KEY_FOLDERS = ['.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.config/gcloud', '.password-store', '.sharesecure'];
+const BLOCKED = 'Files there hold keys, credentials or ShareSecure’s own data, so they’re never shared.';
+let blockedList = null;
+function blockedPaths() {
+  if (blockedList) return blockedList;
+  const { DATA_DIR } = require('./db');
+  const list = [DATA_DIR, ...KEY_FOLDERS.map(d => path.join(os.homedir(), d))];
+  // the desktop app's own folder (saved sign-in, settings) holds DATA_DIR
+  if (process.env.SHARESECURE_DESKTOP === '1') list.push(path.dirname(DATA_DIR));
+  list.push(process.env.ENV_FILE ? path.resolve(process.env.ENV_FILE) : path.join(__dirname, '../.env'));
+  // as written and as their real paths, in case a folder is itself a link
+  const real = list.map(p => { try { return fs.realpathSync.native(p); } catch { return p; } });
+  blockedList = [...new Set([...list, ...real].map(p => path.resolve(p).toLowerCase()))];
+  return blockedList;
+}
+const isBlocked = p => blockedPaths().some(d => p.toLowerCase() === d || p.toLowerCase().startsWith(d + path.sep));
+
 async function callTool(name, args, req) {
   // words for the model, and the same result as data for code that reads it
   const shared = result => result.error ? result : { text: resultText(result), data: result };
@@ -506,11 +528,17 @@ async function callTool(name, args, req) {
     if (!fromThisComputer(req)) return { error: NOT_HERE };
 
     const filePath = path.resolve(String(args.path));
+    if (isBlocked(filePath)) return { error: BLOCKED };
+    // where it really is, so a link (or a Windows junction) to one of those
+    // folders doesn't get past the check
+    let real;
+    try { real = fs.realpathSync.native(filePath); } catch { return { error: `No file at ${filePath}` }; }
+    if (isBlocked(real)) return { error: BLOCKED };
     let stat;
-    try { stat = fs.statSync(filePath); } catch { return { error: `No file at ${filePath}` }; }
+    try { stat = fs.statSync(real); } catch { return { error: `No file at ${filePath}` }; }
     if (!stat.isFile()) return { error: `${filePath} isn't a file.` };
     if (stat.size > common.MAX_BYTES) return { error: 'That file is over 10 MB.' };
-    return shared(await share(fileFor(fs.readFileSync(filePath), path.basename(filePath)), opts));
+    return shared(await share(fileFor(fs.readFileSync(real), path.basename(filePath)), opts));
   }
 
   if (name === 'begin_upload') return beginUpload(args);

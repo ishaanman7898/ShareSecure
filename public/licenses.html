@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Licenses | ShareSecure</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="preload" href="/fonts/schibsted-grotesk.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/docs.css" />
+</head>
+
+<body>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="ShareSecure home">
+      <img src="/rosette.svg" alt="" width="28" height="28" />
+      <span>ShareSecure</span>
+    </a>
+    <a class="btn btn-ghost" href="/">Open the app</a>
+  </header>
+
+  <main class="wrapper legal">
+
+    <header>
+      <h1 class="page-title">Licenses</h1>
+      <div class="page-meta">
+        <span>Last updated November 14, 2026</span>
+        <span>· <a href="https://github.com/ishaanman7898/ShareSecure/commits/main/public/licenses.html" target="_blank" rel="noopener noreferrer">Every change, on GitHub</a></span>
+      </div>
+    </header>
+
+    <div class="summary">
+      <h2>The short version</h2>
+      <ul>
+        <li>ShareSecure's own code is open source under the MIT License.</li>
+        <li>It's built on other people's open source work, listed here with their licenses. Thank you to all of them.</li>
+        <li>The desktop app doesn't include FFmpeg. If you convert a video or audio file, it downloads FFmpeg once, after asking, and FFmpeg stays under its own license (the GNU GPL).</li>
+      </ul>
+    </div>
+
+    <nav class="toc" aria-label="Contents">
+      <ol>
+        <li><a href="#sharesecure">ShareSecure</a></li>
+        <li><a href="#everywhere">In every version</a></li>
+        <li><a href="#desktop">In the desktop app and self-hosted server</a></li>
+        <li><a href="#heic">For iPhone photos (desktop app)</a></li>
+        <li><a href="#ffmpeg">FFmpeg, downloaded when you convert</a></li>
+        <li><a href="#trademarks">Trademarks</a></li>
+      </ol>
+    </nav>
+
+    <section id="sharesecure">
+      <h2>1. ShareSecure</h2>
+      <p>Copyright © 2025 Ishaan. ShareSecure's code is licensed under the <a href="https://github.com/ishaanman7898/ShareSecure/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>: you can use, copy, change and share it, as long as the copyright and license notice stay with it. It comes with no warranty. The parts below keep their own licenses.</p>
+    </section>
+
+    <section id="everywhere">
+      <h2>2. In every version</h2>
+      <p>The website, the desktop app and a self-hosted server all serve these from their own copy, never from anyone else's site.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What</th><th>Used for</th><th>License</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://mozilla.github.io/pdf.js/" target="_blank" rel="noopener noreferrer">PDF.js</a> 4.10, by Mozilla</td><td>Showing PDFs in the viewer</td><td><a href="/vendor/pdfjs-LICENSE.txt">Apache 2.0</a></td></tr>
+            <tr><td><a href="https://github.com/mwilliamson/mammoth.js" target="_blank" rel="noopener noreferrer">Mammoth</a>, by Michael Williamson</td><td>Showing Word documents in the viewer</td><td><a href="/vendor/mammoth-LICENSE.txt">BSD 2-Clause</a></td></tr>
+            <tr><td><a href="https://github.com/davidshimjs/qrcodejs" target="_blank" rel="noopener noreferrer">QRCode.js</a>, by davidshimjs, after Kazuhiko Arase's generator</td><td>The QR code for every link</td><td><a href="/vendor/qrcodejs-LICENSE.txt">MIT</a></td></tr>
+            <tr><td><a href="https://github.com/schibsted/schibsted-grotesk" target="_blank" rel="noopener noreferrer">Schibsted Grotesk</a> and <a href="https://github.com/IBM/plex" target="_blank" rel="noopener noreferrer">IBM Plex Mono</a></td><td>The fonts</td><td><a href="/fonts/OFL.txt">SIL Open Font License 1.1</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="desktop">
+      <h2>3. In the desktop app and self-hosted server</h2>
+      <ul>
+        <li><a href="https://www.electronjs.org/" target="_blank" rel="noopener noreferrer">Electron</a> (MIT), which includes <a href="https://www.chromium.org/" target="_blank" rel="noopener noreferrer">Chromium</a> and <a href="https://nodejs.org/" target="_blank" rel="noopener noreferrer">Node.js</a>. Chromium is under a BSD-style license and includes many other projects; their notices are in <code>LICENSES.chromium.html</code>, installed with the app (next to <code>ShareSecure.exe</code> on Windows and Linux, in <code>ShareSecure.app/Contents/Resources</code> on a Mac).</li>
+        <li><a href="https://www.sqlite.org/" target="_blank" rel="noopener noreferrer">SQLite</a> (public domain), through <a href="https://github.com/WiseLibs/better-sqlite3" target="_blank" rel="noopener noreferrer">better-sqlite3</a> (MIT).</li>
+        <li><a href="https://expressjs.com/" target="_blank" rel="noopener noreferrer">Express</a>, multer, cors and electron-updater (MIT), and dotenv (BSD 2-Clause).</li>
+        <li>About 120 smaller packages they depend on, under the MIT, ISC, BSD, Apache 2.0, Python 2.0 and Blue Oak licenses. Each package's license comes with it, inside the app's program files and in a self-hosted install's <code>node_modules</code> folder.</li>
+      </ul>
+    </section>
+
+    <section id="heic">
+      <h2>4. For iPhone photos (desktop app)</h2>
+      <p>Turning a HEIC photo into a JPEG or PNG uses <a href="https://github.com/catdad-experiments/heic-convert" target="_blank" rel="noopener noreferrer">heic-convert</a> and heic-decode (ISC), jpeg-js (BSD 3-Clause), pngjs (MIT) and <a href="https://github.com/catdad-experiments/libheif-js" target="_blank" rel="noopener noreferrer">libheif-js</a>, a build of struktur AG's <a href="https://github.com/strukturag/libheif" target="_blank" rel="noopener noreferrer">libheif</a> and <a href="https://github.com/strukturag/libde265" target="_blank" rel="noopener noreferrer">libde265</a>.</p>
+      <p>libheif-js is under the <a href="https://www.gnu.org/licenses/lgpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU Lesser General Public License 3.0</a>. ShareSecure uses it unchanged, as a separate file (<code>node_modules/libheif-js</code> inside the app's resources), so you can replace it with your own build. Its source code is at the links above; if you can't get it there, email us and we'll send it.</p>
+    </section>
+
+    <section id="ffmpeg">
+      <h2>5. FFmpeg, downloaded when you convert</h2>
+      <p>Converting videos, audio and some images in the desktop app uses <a href="https://ffmpeg.org/" target="_blank" rel="noopener noreferrer">FFmpeg</a>. It isn't part of ShareSecure and isn't in its installer: the first time you convert something that needs it, the app asks, then downloads the build published by the <a href="https://github.com/eugeneware/ffmpeg-static" target="_blank" rel="noopener noreferrer">ffmpeg-static</a> project (release b6.1.1) from GitHub, checks it against a fingerprint fixed in ShareSecure's code, and keeps it on your computer. It runs as a separate program, and only ever on your own files.</p>
+      <p>Those builds (by gyan.dev for Windows, evermeet.cx and osxexperts.net for macOS, and John Van Sickle for Linux) are licensed under the <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener noreferrer">GNU General Public License 3.0</a>. Their license, and notes on how each was built and where its source code is, are saved next to it as <code>ffmpeg.LICENSE</code> and <code>ffmpeg.README</code>, in the <code>ffmpeg</code> folder of ShareSecure's app data (<code>%APPDATA%\ShareSecure</code> on Windows, <code>~/Library/Application Support/ShareSecure</code> on a Mac, <code>~/.config/ShareSecure</code> on Linux). FFmpeg's source code is at <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">ffmpeg.org</a>.</p>
+      <p>Some formats FFmpeg and libheif handle, such as H.264, HEVC and AAC, may be covered by patents in some countries. ShareSecure gives no patent license for them. Converting is always optional.</p>
+    </section>
+
+    <section id="trademarks">
+      <h2>6. Trademarks</h2>
+      <p>“QR Code” is a registered trademark of DENSO WAVE INCORPORATED. FFmpeg is a trademark of Fabrice Bellard. Electron, Chromium, Node.js, SQLite, iPhone and every other name on this site belong to their owners, who don't endorse ShareSecure. Questions about any of this: <a href="mailto:ishaanmanoor1@gmail.com">ishaanmanoor1@gmail.com</a>.</p>
+    </section>
+
+  </main>
+
+  <footer class="app-footer web-only">
+    <nav class="footer-links" aria-label="Site">
+      <a href="/guides">Guides</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="/licenses">Licenses</a>
+      <a href="https://github.com/ishaanman7898/ShareSecure" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </nav>
+    <p class="footer-note">ShareSecure <span data-version hidden></span> · MIT License</p>
+  </footer>
+  <script src="/footer.js" defer></script>
+  <script type="module" src="/brackets.js"></script>
+</body>
+
+</html>

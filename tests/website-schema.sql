@@ -1,4 +1,5 @@
--- Run this on your Turso database to set up the files table.
+-- The website's files table, as the tests set it up. The API creates and migrates
+-- its tables itself (functions/_turso.js), so this is never run by hand.
 -- All sensitive fields (file_data, original_filename, mime_type, annotations)
 -- are AES-256-GCM encrypted at the application layer before storage.
 

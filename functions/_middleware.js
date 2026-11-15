@@ -2,8 +2,8 @@
 const PAGE_CSP = [
   "default-src 'self'",
   "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "connect-src 'self'",
@@ -39,7 +39,7 @@ export async function onRequest(context) {
     h.set('Pragma', 'no-cache');
   }
 
-  // don't leak referrer to any third-party (qr api sees no referrer)
+  // no page or file ever tells another site where it was opened from
   h.set('Referrer-Policy', 'no-referrer');
 
   // Search engines never index or cache a link or the app. The only pages

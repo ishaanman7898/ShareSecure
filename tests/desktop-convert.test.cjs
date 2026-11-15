@@ -10,11 +10,21 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
+const zlib = require('node:zlib');
+const crypto = require('node:crypto');
+
 const root = path.resolve(__dirname, '..');
 const converter = require(path.join(root, 'desktop', 'convert.js'));
-let ffmpeg = null;
-try { ffmpeg = require('ffmpeg-static'); } catch {}
-const skip = !ffmpeg && 'ffmpeg-static is not installed';
+const ffmpegDownload = require(path.join(root, 'desktop', 'ffmpeg.js'));
+
+// The app downloads FFmpeg the first time it's needed. The tests use one
+// already on this computer: FFMPEG_PATH, or ffmpeg on the PATH.
+let ffmpeg = process.env.FFMPEG_PATH || null;
+if (!ffmpeg) {
+  try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); ffmpeg = 'ffmpeg'; } catch {}
+}
+const skip = !ffmpeg && 'no FFmpeg here (set FFMPEG_PATH to run these)';
+if (ffmpeg) converter.setup({ ffmpegPath: ffmpeg });
 
 let detectType;
 before(async () => {
@@ -76,6 +86,66 @@ test('converted files are ones ShareSecure takes, with no metadata left in', { s
       }
     }
   } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── FFmpeg's download (desktop/ffmpeg.js) ─────────────────────────────────────
+const fakeFetch = files => async url => {
+  const name = url.split('/').pop();
+  return name in files
+    ? { ok: true, status: 200, arrayBuffer: async () => files[name] }
+    : { ok: false, status: 404, arrayBuffer: async () => new ArrayBuffer(0) };
+};
+
+test('FFmpeg is only used once its download matches the pinned hash', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sharesecure-ffmpeg-'));
+  try {
+    const program = Buffer.from('#!/bin/sh\necho pretend ffmpeg\n');
+    const gz = zlib.gzipSync(program);
+    const good = { name: 'test-x64', sha256: crypto.createHash('sha256').update(gz).digest('hex'), size: gz.length };
+    const files = { 'ffmpeg-test-x64.gz': gz, 'test-x64.LICENSE': Buffer.from('GPL') };
+
+    // a changed file is refused, and nothing is left where it would run from
+    const tampered = { ...good, sha256: '0'.repeat(64) };
+    await assert.rejects(ffmpegDownload.install(dir, { fetchImpl: fakeFetch(files), build: tampered }), /wasn’t the expected file/);
+    assert.equal(ffmpegDownload.installed(dir), false);
+    await assert.rejects(ffmpegDownload.install(dir, { fetchImpl: fakeFetch({}), build: good }), /HTTP 404/);
+
+    const at = await ffmpegDownload.install(dir, { fetchImpl: fakeFetch(files), build: good });
+    assert.equal(at, ffmpegDownload.locate(dir));
+    assert.deepEqual(fs.readFileSync(at), program);
+    assert.equal(fs.readFileSync(path.join(path.dirname(at), 'ffmpeg.LICENSE'), 'utf8'), 'GPL');
+    assert.equal(ffmpegDownload.installed(dir), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('every computer the app is built for has a pinned FFmpeg', () => {
+  for (const [platform, arch] of [['win32', 'x64'], ['win32', 'arm64'], ['darwin', 'x64'], ['darwin', 'arm64'], ['linux', 'x64']]) {
+    const build = ffmpegDownload.buildFor(platform, arch);
+    assert.ok(build, `${platform}-${arch}`);
+    assert.match(build.sha256, /^[0-9a-f]{64}$/);
+  }
+  // Windows on ARM runs the x64 build
+  assert.equal(ffmpegDownload.buildFor('win32', 'arm64').name, 'win32-x64');
+});
+
+test('nothing is downloaded unless the person agrees', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sharesecure-ffmpeg-'));
+  const fresh = require(path.join(root, 'desktop', 'convert.js'));
+  let asked = 0, fetched = 0;
+  fresh.setup({ ffmpegPath: null, dir, confirm: async () => { asked++; return false; }, fetchImpl: async () => { fetched++; throw new Error('no'); } });
+  try {
+    const flac = Buffer.alloc(512);
+    flac.write('fLaC');
+    const result = fresh.convert({ bytes: flac, name: 'song.flac', to: 'mp3' });
+    await assert.rejects(result, err => err.code === 'cancelled');
+    assert.equal(asked, 1);
+    assert.equal(fetched, 0);
+  } finally {
+    fresh.setup({ ffmpegPath: ffmpeg, dir: null, confirm: async () => false, fetchImpl: undefined });
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

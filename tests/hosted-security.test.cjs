@@ -28,7 +28,7 @@ const load = file => import(pathToFileURL(path.join(temp, 'functions', file)).hr
 const sealedLib = () => import(pathToFileURL(path.join(temp, 'public', 'sealed.js')).href);
 const publicLib = file => import(pathToFileURL(path.join(temp, 'public', file)).href);
 const db = new DatabaseSync(':memory:');
-db.exec(fs.readFileSync(path.join(root, 'db/schema.sql'), 'utf8'));
+db.exec(fs.readFileSync(path.join(__dirname, 'website-schema.sql'), 'utf8'));
 db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, access_code TEXT)');
 db.exec("INSERT INTO users (id, username, access_code) VALUES (1, 'alice', 'test'), (2, 'bob', 'test'), (3, 'mallory', 'test'), (4, 'zoe', 'test')");
 // a throwaway RSA key for the anonymous-token tests
