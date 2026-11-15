@@ -103,7 +103,8 @@ desktop/       Electron
   update-icons.js  every app and web icon from icon-source.png (`npm run icons`)
 relay/         Cloudflare Worker + Durable Object that carries desktop links
 packages/sharesecure-mcp/   local stdio MCP server (npm package)
-scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log)
+scripts/       verify-site.mjs (live site == this repo), kt-monitor.mjs (audit key log),
+               refresh-update-info.mjs (signed Windows installer), mac-licenses.cjs (afterPack)
 tests/         node:test suites: hosted-security (website), self-hosted,
                desktop-send (the desktop's sends against the website's handlers),
                desktop-convert; website-schema.sql is the base table they load
@@ -257,7 +258,8 @@ repo's `public/`, so never hand-edit production (there's deliberately no
   vendored files). Avoid GPL code in what we ship: FFmpeg stays a download.
 - Electron's own notices: Windows and Linux builds keep `LICENSES.chromium.html`
   and `LICENSE.electron.txt`; electron-builder deletes them from Mac apps, so
-  `mac.extraResources` puts them back in `Contents/Resources`.
+  `scripts/mac-licenses.cjs` (afterPack) puts them back in `Contents/Resources`
+  (from Electron's npm package, or its checked download when that has none).
 - A change in what data is kept, who processes it, or what the desktop app
   fetches must change `public/privacy.html` (and its date) in the same
   release. New limits go in `public/terms.html`.
